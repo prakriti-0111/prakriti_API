@@ -1,0 +1,34 @@
+{
+  "development": {
+    "username": "root",
+    "password": "",
+    "database": "prakriti", 
+    "host": "127.0.0.1",
+    "dialect": "mysql",
+    "timezone": "+05:30",
+    "port": 3306,
+    "logging": false,
+    "pool": {
+      "max": 20,
+      "min": 0,
+      "acquire": 60000,
+      "idle": 10000
+    }
+  },
+  "production": {
+    "username": "mysql",
+    "password": "prakriti",
+    "database": "prakriti",
+    "host": "prod-prakriti-9yam3p",
+    "port": 3306,
+    "dialect": "mysql",
+    "timezone": "+05:30",
+    "logging": false,
+    "pool": {
+      "max": 20,
+      "min": 0,
+      "acquire": 60000,
+      "idle": 10000
+    }
+  }
+}
