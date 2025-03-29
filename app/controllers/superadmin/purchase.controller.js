@@ -331,6 +331,7 @@ exports.store = async (req, res) => {
       }*/
 
       //insert into purchase product materials
+
       let batch_id = null;
       for (let x = 0; x < thisItem.materials.length; x++) {
         let thisMObj = {
