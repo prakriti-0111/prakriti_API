@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon server.js",
+    "start": "npx nodemon server.js",
     "heroku-postbuild": "npm install",
     "dev": "nodemon server.js"
   },
@@ -55,7 +55,8 @@
     "swagger-ui-express": "^4.5.0",
     "validatorjs": "^3.22.1"
   },
-  "devDependencies": {},
+  "devDependencies": {
+  },
   "_moduleAliases": {
     "@controllers": "app/controllers",
     "@helpers": "app/helpers",
