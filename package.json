@@ -54,11 +54,9 @@
     "swagger-jsdoc": "^6.2.1",
     "swagger-ui-express": "^4.5.0",
     "validatorjs": "^3.22.1",
-    "nodemon": "^3.1.4"
   },
   "devDependencies": {
   },
-  "devDependencies": {},
   "_moduleAliases": {
     "@controllers": "app/controllers",
     "@helpers": "app/helpers",
