@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon server.js",
+    "start": "npx nodemon server.js",
     "heroku-postbuild": "npm install",
     "dev": "nodemon server.js"
   },
@@ -53,7 +53,7 @@
     "striptags": "^3.2.0",
     "swagger-jsdoc": "^6.2.1",
     "swagger-ui-express": "^4.5.0",
-    "validatorjs": "^3.22.1",
+    "validatorjs": "^3.22.1"
   },
   "devDependencies": {
   },
