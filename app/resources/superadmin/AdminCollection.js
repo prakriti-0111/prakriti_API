@@ -1,5 +1,5 @@
 const { isObject, getFileAbsulatePath, isEmpty, isArray, displayAmount, priceFormat } = require("@helpers/helper");
-const {getAdvanceAmount, getSuperAdminId} = require("@library/common");
+const {getAdvanceAmount, getSuperAdminId, getTotalStockByUser,getTotalStockPriceByUser,getWalletBalance} = require("@library/common");
 const db = require("@models");
 const { Op } = require("sequelize");
 const SaleModel = db.sales;
@@ -33,6 +33,10 @@ const getModelObject = async(data) => {
     let total_sale_paid = await SaleModel.sum('paid_amount', { where: { user_id: data.id, is_approved: {[Op.ne]: 2 },  is_assigned: false, is_approval: false  } });
     let total_return = await SaleModel.sum('return_amount', { where: { user_id: data.id, is_approved: {[Op.ne]: 2 },  is_assigned: false, is_approval: false  } });
 
+  	let totalStock = await getTotalStockByUser(data.id);
+    let totalStockPrice = await getTotalStockPriceByUser(null, data.id);
+    let walletBalance = await getWalletBalance(data.id);
+  
     let superAdminId = await getSuperAdminId();
     let advance_amount = await getAdvanceAmount(data.id, superAdminId);
 
@@ -86,6 +90,9 @@ const getModelObject = async(data) => {
         total_amount_display: displayAmount(total_sale),
         total_payable_amount_display: displayAmount(total_payable_amount),
         total_return_display: displayAmount(total_return),
+      	total_stock: totalStock,
+      	total_stock_price: totalStockPrice,
+      	wallet_balance: walletBalance
     }
 }
 

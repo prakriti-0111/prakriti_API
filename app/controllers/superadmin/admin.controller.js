@@ -4,7 +4,7 @@ const { base64FileUpload, removeFile, filterFilesFromRemove } = require('@helper
 const { isEmpty, isArray, priceFormat } = require("@helpers/helper");
 const db = require("@models");
 const { Op } = require("sequelize");
-const { getRoleId, getNextUserName, getSuperAdminId } = require("@library/common");
+const { getRoleId, getNextUserName, getSuperAdminId, isDistributor, getUserColumnValue } = require("@library/common");
 const {AdminCollection} = require("@resources/superadmin/AdminCollection");
 const userModel = db.users;
 const stateModel = db.states;
@@ -24,11 +24,20 @@ exports.index = async (req, res) => {
   let { page, limit, all, own } = req.query;
   let adminRoleId = getRoleId('admin');
 
-  if(all == 1){
+  if(all == '1'){
     let condition = {role_id: adminRoleId}
-    if(own == 1){
-      condition.own = true;
+
+    if(isDistributor(req)){
+      let admin_id = await getUserColumnValue(req.userId, "parent_id");
+      condition.id = admin_id;
+    } else {
+      if(own == '1'){
+        condition.own = true;
+      } else if(own == '0'){
+        condition.own = false;
+      }
     }
+
     userModel.findAll({ 
       where: condition,
       order:[['company_name', 'ASC']]

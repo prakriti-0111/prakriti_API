@@ -1,8 +1,8 @@
 {
   "development": {
     "username": "root",
-    "password": "",
-    "database": "prakriti", 
+    "password": "root",
+    "database": "prakriti",
     "host": "127.0.0.1",
     "dialect": "mysql",
     "timezone": "+05:30",
@@ -17,9 +17,9 @@
   },
   "production": {
     "username": "mysql",
-    "password": "prakriti-dev",
-    "database": "prakriti-dev",
-    "host": "dev-prakriti-dev-5mvhme",
+    "password": "prakriti",
+    "database": "prakriti",
+    "host": "prod-prakriti-9yam3p",
     "port": 3306,
     "dialect": "mysql",
     "timezone": "+05:30",
