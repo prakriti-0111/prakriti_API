@@ -345,12 +345,15 @@ exports.index = async (req, res) => {
         where: { role_id: customerRoleId, state_id: user.state_id },
       });
 
+      let parentIds = [];
+      parentIds.push(userID);
       //total distributor stocks
       let distributors = await UserModel.findAll({
         attributes: ["id"],
         where: { role_id: distributorRoleId, own: true, state_id: state_id, parent_id: userID},
       });
       let distributorIds = arrayColumn(distributors, "id");
+      parentIds = parentIds.concat(distributorIds);
       totalDistributor = distributors.length;
       totalDistributorStock = await getTotalStockByUser(distributorIds);
       totalDistributorStockPrice = await getTotalStockPriceByUser(
@@ -397,7 +400,15 @@ exports.index = async (req, res) => {
       totalsales_executive += await UserModel.count({ where: _cond_own });
 
       total_own_sales_executive += await UserModel.count({ where: _cond_own });
-      let seIds = arrayColumn(total_own_sales_executive, "id");
+
+      let totalsales_executiveArr = await UserModel.findAll({
+        where: { role_id: sales_executiveRoleId, parent_id: {[Op.in]: parentIds} },
+      });
+      let seIds = [];
+      for (let item of totalsales_executiveArr) {
+        seIds.push(item.id);
+      }
+     
       totalOwnSeStock = await getTotalStockByUser(seIds);
       totalOwnSeStockPrice = await getTotalStockPriceByUser(null, seIds);
 
@@ -473,21 +484,25 @@ exports.index = async (req, res) => {
       });
 
       /* total SE (admin-distributer) */
+      let parentIds = [];
       // admin own created SE
       let admin_id = await getUserColumnValue(req.userId, "parent_id");
       totalsales_executive += await UserModel.count({
         where: { role_id: sales_executiveRoleId, parent_id: admin_id },
       });
+      parentIds.push(admin_id);
       // distributers SE
       let distributors = await UserModel.findAll({
         attributes: ["id"],
         where: { role_id: distributorRoleId, own: true, state_id: state_id, parent_id: admin_id },
       });
+      let adminDistributors = arrayColumn(distributors, "id");
+      parentIds = parentIds.concat(adminDistributors);
       let _cond_se_in_chain = await getAdminSEWhereCondition(distributors);
       totalsales_executive += await UserModel.count({ where: _cond_se_in_chain });
       
       let totalsales_executiveArr = await UserModel.findAll({
-        where: { role_id: sales_executiveRoleId, parent_id: req.userId },
+        where: { role_id: sales_executiveRoleId, parent_id: {[Op.in]: parentIds} },
       });
       let seIds = [];
       for (let item of totalsales_executiveArr) {
@@ -515,7 +530,8 @@ exports.index = async (req, res) => {
       totalOwnSeStock = await getTotalStockByUser(seIds);
       totalOwnSeStockPrice = await getTotalStockPriceByUser(null, seIds);
 
-      avl_stockUser_ids = await avlStockUserIdsNew(req, distributorRoleId);
+      //avl_stockUser_ids = await avlStockUserIdsNew(req, distributorRoleId);
+      avl_stockUser_ids = await avlStockUserIdsNew({userId: admin_id, role: adminRoleId}, adminRoleId);
       let stockUserIds = avl_stockUser_ids;
       //stockUserIds.push(userID);
       totalAvlStock = await getTotalStockByUser(stockUserIds);
@@ -594,19 +610,21 @@ exports.index = async (req, res) => {
       saleDueAmount = await saleModel.sum("sales.due_amount", whereObj);
 
       //my retailer due
-      whereObj.include = includes = [
-        {
+      whereObj.include = [
+        /*{
           model: UserModel,
           as: "user",
           where: { id: { [Op.in]: myRetailerIds } },
-        },
+        },*/
       ];
-      whereObj.group = ['user.id'],  // Add the group option here
+      whereObj.group = [];
+      //whereObj.group = ['user.id'],  // Add the group option here
       myRetailerDueAmunt = await saleModel.sum("sales.due_amount", whereObj);
       returnStock = await getTotalStockByUser(userID, "return");
       returnStockPrice = await getTotalStockPriceByUser(null, userID, "return");
 
-      avl_stockUser_ids = await avlStockUserIdsNew(req, sales_executiveRoleId);
+      //avl_stockUser_ids = await avlStockUserIdsNew(req, sales_executiveRoleId);
+      avl_stockUser_ids = await avlStockUserIdsNew({userId: admin_id, role: adminRoleId}, adminRoleId);
       let stockUserIds = avl_stockUser_ids;
       //stockUserIds.push(userID);
       totalAvlStock = await getTotalStockByUser(stockUserIds);
@@ -614,9 +632,9 @@ exports.index = async (req, res) => {
 
       // total avaliable stocks 
       total_avl_stockUser_ids = await avlStockUserIdsNew(null, superAdminRoleId);
-      let tatolStockUserIds = total_avl_stockUser_ids;
-      superAdminTotalAvlStock = await getTotalStockByUser(tatolStockUserIds);
-      superAdminTotalAvlStockPrice = await getTotalStockPriceByUser(null, tatolStockUserIds);
+      let totalStockUserIds = total_avl_stockUser_ids;
+      superAdminTotalAvlStock = await getTotalStockByUser(totalStockUserIds);
+      superAdminTotalAvlStockPrice = await getTotalStockPriceByUser(null, totalStockUserIds);
     }
 
     //common
