@@ -19,8 +19,13 @@
     "username": "mysql",
     "password": "prakriti-dev",
     "database": "prakriti-dev",
+<<<<<<< HEAD
     "host": "194.238.18.233",
     "port": 3309,
+=======
+    "host": "dev-prakriti-dev-5mvhme",
+    "port": 3306,
+>>>>>>> dbbd98e (Update config.json)
     "dialect": "mysql",
     "timezone": "+05:30",
     "logging": false,
