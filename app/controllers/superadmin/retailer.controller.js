@@ -107,6 +107,7 @@ exports.index = async (req, res) => {
       });
   } else {
     let userIds = await getMyRetailerIds(req.userId);
+    userIds = [...new Set(userIds)];
     let conditions = await getCommonCondition(req, my_retailer, userIds);
     if (!isEmpty(search)) {
       search = search.trim();
@@ -164,6 +165,7 @@ exports.index = async (req, res) => {
         if (!isSuperAdmin(req)) {
           if (isAdmin(req)) {
             let allDstIds = await getAdminDistributorIds(req.userId);
+            allDstIds = [...new Set(allDstIds)];
             let _cond = await getAdminSEWhereCondition(allDstIds, null, true);
             let se = await userModel.findAll({
               attributes: ["id"],
@@ -194,14 +196,16 @@ exports.index = async (req, res) => {
           }
         }
         let includes = [
-          {
+          /* {
             model: userModel,
             as: "user",
             where: userWhere,
-          },
+          }, */
         ];
-
-        let whereObj = { where: conditions, include: includes, group: ['user.id'] };
+        
+        let whereObj = { where: conditions, include: includes/*, group: ['user_id']*/ };
+        //console.log("userWhere : ", userWhere);
+        //console.log("whereObj : ", whereObj);
         let total_sale = await SaleModel.sum("bill_amount", whereObj);
         let total_sale_due = await SaleModel.sum("sales.due_amount", whereObj);
         let total_sale_paid = await SaleModel.sum("paid_amount", whereObj);

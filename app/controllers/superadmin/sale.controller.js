@@ -37,6 +37,7 @@ const {
   isAdmin,
   getWalletBalance,
   getOwnUserSaleProducts,
+  getUserColumnValue,
 } = require("@library/common");
 const { getPaginationOptions } = require("@helpers/paginator");
 const { SaleCollection } = require("@resources/superadmin/SaleCollection");
@@ -1939,6 +1940,8 @@ const formatStockMaterials = (stockMaterials) => {
  * @param {*} res
  */
 exports.returnSaleNew = async (req, res) => {
+  let retailerRoleId = getRoleId("retailer");
+
   let sale = await SaleModel.findOne({
     where: { id: req.params.id },
     include: [
@@ -1974,105 +1977,113 @@ exports.returnSaleNew = async (req, res) => {
   let return_data = req.body.return_data;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
 
-  /* --------------- check if product stock is assigned to the buyerId ---------------- */
-  for (let i = 0; i < return_products.length; i++) {
-    if (!return_products[i].is_return) {
-      continue;
-    }
+  let saleToUserId = sale.user_id;
+  let saleToUserRole = await getUserColumnValue(saleToUserId, "role_id");
 
-    stockPurchse = null;
-    if (return_data.products[i].product_type == "material") {
-      if (!isEmpty(return_data.products[i].product_id)) {
-        /* check for purchase record in stock */
+  /* if sold to retailer then the system stock checking will not needed */
+  if(retailerRoleId != saleToUserRole){
+    /* --------------- check if product stock is assigned to the buyerId ---------------- */
+    for (let i = 0; i < return_products.length; i++) {
+      if (!return_products[i].is_return) {
+        continue;
+      }
+
+      stockPurchse = null;
+      if (return_data.products[i].product_type == "material") {
+        if (!isEmpty(return_data.products[i].product_id)) {
+          /* check for purchase record in stock */
+          stockPurchse = await StockModel.findOne({
+            where: {
+              product_id: return_data.products[i].product_id,
+              user_id: sale.user_id,
+            },
+          });
+        } else {
+          /* check for purchase record in stock */
+          stockPurchse = await StockModel.findOne({
+            where: {
+              material_id: return_data.products[i].materials[0].material_id,
+              user_id: sale.user_id,
+            },
+          });
+        }
+
+        if(!stockPurchse){
+          return res
+          .status(errorCodes.default)
+          .send(formatErrorResponse(`Material with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`));
+        } else {
+          /* for each return materials */
+          for (let mItem of return_data.products[i].materials) {
+            let stockMPurchase = await StockMaterialModel.findOne({
+              where: { stock_id: stockPurchse.id, material_id: mItem.material_id },
+            });
+
+            if(!stockMPurchase){
+              return res
+                .status(errorCodes.default)
+                .send(formatErrorResponse(`Material ${mItem.material_name} with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`));
+            }
+          }
+        }
+      } else {
         stockPurchse = await StockModel.findOne({
           where: {
             product_id: return_data.products[i].product_id,
             user_id: sale.user_id,
+            certificate_no: return_data.products[i].certificate_no,
+            size_id: return_data.products[i].size_id,
           },
+          include: [
+            {
+              model: StockMaterialModel,
+              as: "stockMaterials",
+              required: true,
+              separate: true,
+            },
+          ],
         });
-      } else {
-        /* check for purchase record in stock */
-        stockPurchse = await StockModel.findOne({
-          where: {
-            material_id: return_data.products[i].materials[0].material_id,
-            user_id: sale.user_id,
-          },
-        });
-      }
 
-      if(!stockPurchse){
-        return res
-        .status(errorCodes.default)
-        .send(formatErrorResponse(`Material with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`));
-      } else {
-        /* for each return materials */
-        for (let mItem of return_data.products[i].materials) {
-          let stockMPurchase = await StockMaterialModel.findOne({
-            where: { stock_id: stockPurchse.id, material_id: mItem.material_id },
-          });
-
-          if(!stockMPurchase){
-            return res
-              .status(errorCodes.default)
-              .send(formatErrorResponse(`Material ${mItem.material_name} with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`));
-          }
-        }
-      }
-    } else {
-      stockPurchse = await StockModel.findOne({
-        where: {
-          product_id: return_data.products[i].product_id,
-          user_id: sale.user_id,
-          certificate_no: return_data.products[i].certificate_no,
-          size_id: return_data.products[i].size_id,
-        },
-        include: [
-          {
-            model: StockMaterialModel,
-            as: "stockMaterials",
-            required: true,
-            separate: true,
-          },
-        ],
-      });
-
-      if (stockPurchse) {
-        let numMatched = 0;
-        let stockMaterials = formatStockMaterials(stockPurchse.stockMaterials);
-        for (
-          let x = 0;
-          x < return_data.products[i].materials.length;
-          x++
-        ) {
-          let item = return_data.products[i].materials[x];
-          let thisM = _.filter(stockMaterials, {
-            material_id: item.material_id,
-          });
-          if (
-            thisM.length &&
-            thisM[0].material_id == item.material_id &&
-            thisM[0].purity_id == item.purity_id &&
-            thisM[0].unit_id == item.unit_id
+        if (stockPurchse) {
+          let numMatched = 0;
+          let stockMaterials = formatStockMaterials(stockPurchse.stockMaterials);
+          for (
+            let x = 0;
+            x < return_data.products[i].materials.length;
+            x++
           ) {
-            numMatched++;
+            let item = return_data.products[i].materials[x];
+            let thisM = _.filter(stockMaterials, {
+              material_id: item.material_id,
+            });
+            if (
+              thisM.length &&
+              thisM[0].material_id == item.material_id &&
+              thisM[0].purity_id == item.purity_id &&
+              thisM[0].unit_id == item.unit_id
+            ) {
+              numMatched++;
+            }
           }
-        }
-        console.log("---------------------- num of materials Matched in stock for existing checking ----------------------");
-        console.log(numMatched);
-        console.log(return_data.products[i].materials.length);
-        if (numMatched !== return_data.products[i].materials.length) {
+          console.log("---------------------- num of materials Matched in stock for existing checking ----------------------");
+          console.log(numMatched);
+          console.log(return_data.products[i].materials.length);
+          if (numMatched !== return_data.products[i].materials.length) {
+            return res
+            .status(errorCodes.default)
+            .send(formatErrorResponse(`Product with certificate no. ${return_data.products[i].certificate_no} does not have all the materials mentioned in return with this user.`));
+          }
+        } else {
           return res
           .status(errorCodes.default)
-          .send(formatErrorResponse(`Product with certificate no. ${return_data.products[i].certificate_no} does not have all the materials mentioned in return with this user.`));
+          .send(formatErrorResponse(`Product with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`));
         }
-      } else {
-        return res
-        .status(errorCodes.default)
-        .send(formatErrorResponse(`Product with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`));
       }
     }
+    /* --------------- check if product stock is assigned to the buyerId ---------------- */
   }
-  /* --------------- check if product stock is assigned to the buyerId ---------------- */
+
+  
 
   let is_return_stock = false;
   for (let i = 0; i < return_products.length; i++) {
