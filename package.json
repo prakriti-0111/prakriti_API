@@ -5,9 +5,10 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon server.js",
-    "heroku-postbuild": "npm install",
-    "dev": "nodemon server.js"
+    "start": "npx nodemon server.js",
+   "heroku-postbuild": "node node_modules/puppeteer/install.js",
+    "dev": "nodemon server.js",
+    "postinstall": "npm install puppeteer --unsafe-perm=true"
   },
   "keywords": [
     "nodejs",
@@ -17,7 +18,6 @@
     "node": "18.x",
     "npm": "9.x"
   },
-  "postinstall": "puppeteer/install.js || echo 'Skipping Puppeteer installation'",
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -42,7 +42,8 @@
     "mysql": "^2.18.1",
     "mysql2": "^3.11.0",
     "nodemailer": "^6.8.0",
-    "puppeteer": "^19.3.0",
+    "nodemon": "^3.1.4",
+    "puppeteer": "^19.11.1",
     "pusher": "^5.1.1-beta",
     "request": "^2.88.2",
     "request-country": "^0.1.2",
@@ -53,9 +54,6 @@
     "swagger-jsdoc": "^6.2.1",
     "swagger-ui-express": "^4.5.0",
     "validatorjs": "^3.22.1"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.4"
   },
   "_moduleAliases": {
     "@controllers": "app/controllers",

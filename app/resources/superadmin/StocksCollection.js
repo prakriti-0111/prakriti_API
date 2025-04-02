@@ -63,9 +63,9 @@ const getModelObject = async (data, user_id) => {
     let productDetails = StockProductCollection(data.product);
     let total_weight_display = '';
     if(materialItem.length == 1){
-        total_weight_display = weightFormat(materialItem[0].weight) + ' , ' + materialItem[0].unit_name;
+        total_weight_display = weightFormat(materialItem[0].weight) + ' ' + materialItem[0].unit_name;
     }else{
-        total_weight_display = weightFormat(data.total_weight) + ', gm';
+        total_weight_display = weightFormat(data.total_weight) + ' gm';
     }
 
     let can_add_cart = await canStockAddCart(data.id, data.product.type, user_id);
