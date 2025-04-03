@@ -25,10 +25,10 @@ module.exports = {
 	        "https://test.prakriti.one",
 	        "http://test.prakriti.one",
             "https://super.test.prakriti.one",
-	"https://super.test.prakriti.one/",
-            "https://test.super.prakriti.one",
-            "https://test.admin.prakriti.one",
-            "https://test.team.prakriti.one",
+		    "https://super.test.prakriti.one/",
+            "https://super.test.prakriti.one",
+            "https://admin.test.prakriti.one",
+            "https://team.test.prakriti.one",
         ]
     }
 };
