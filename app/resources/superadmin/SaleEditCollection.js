@@ -66,10 +66,12 @@ const getModelObject = async(data) => {
 
         let total_weight = '';
         if(materials.length == 1){
-            total_weight = weightFormat(materials[0].weight).toFixed(3) + ' ' + materials[0].unit_name;
+            total_weight = weightFormat(materials[0].weight).toFixed(3);
         }else{
-            total_weight = weightFormat(p_item.total_weight).toFixed(3) + materials[0].unit_name;
+            total_weight = weightFormat(p_item.total_weight).toFixed(3);
         }
+
+        let total_weight_display = total_weight + ' ' + materials[0].unit_name;
 
         let thisObj = {
             id: p_item.id,
@@ -85,6 +87,7 @@ const getModelObject = async(data) => {
             category_id: p_item.product.category_id,
             sub_category_id: p_item.product.sub_category_id,
             total_weight: total_weight,
+            total_weight_display: total_weight_display,
             sub_price: p_item.sub_price,
             rep: p_item.rep,
             cgst_tax: p_item.cgst_tax,
