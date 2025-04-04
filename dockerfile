@@ -35,14 +35,8 @@ RUN npm install
 # Copy the rest of the app
 COPY . .
 
-# Copy the backup_and_transfer.sh script into the container
-COPY backup_and_transfer.sh /app/backup_and_transfer.sh
-
-# Make the script executable
-RUN chmod +x /app/backup_and_transfer.sh
-
 # Expose the app's port
 EXPOSE 3000
 
-# Start the server using nodemon
+# Start the server after running the backup_and_transfer.sh script
 CMD ["/bin/bash", "-c", "/app/backup_and_transfer.sh && npx nodemon server.js"]
