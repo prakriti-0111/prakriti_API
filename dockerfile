@@ -38,6 +38,9 @@ COPY --chown=node:node ./public /app/public || true
 # Back up the existing public folder if it exists
 RUN if [ -d "./public" ]; then mv ./public ./public_backup; fi
 
+# Ensure the public folder exists in the container
+RUN mkdir -p ./public
+
 # Copy the rest of the app
 COPY . ./
 
