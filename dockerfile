@@ -32,8 +32,12 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
-# Copy the rest of the app
-COPY . .
+# Copy the existing public folder from the host system if it exists
+COPY --chown=node:node ./public /app/public
+
+# Copy the rest of the app, excluding the public folder
+COPY . ./
+RUN rm -rf ./public && mv /app/public ./public
 
 # Expose the app's port
 EXPOSE 3000
