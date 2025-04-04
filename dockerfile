@@ -39,9 +39,9 @@ COPY --chown=node:node ./public /app/public || true
 COPY . ./
 
 # Ensure the public folder is preserved or created in the root directory
-RUN mkdir -p ./public && \
-    if [ -d "/public" ]; then \
-      mv /public ./public; \
+RUN mkdir -p /public && \
+    if [ -d "/app/public" ]; then \
+      mv /app/public ./public; \
     fi
 
 # Expose the app's port
