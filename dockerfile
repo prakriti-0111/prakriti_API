@@ -32,10 +32,7 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
-# Copy the existing public folder from the host system if it exists
-COPY --chown=node:node ./public /app/public || true
-
-# Back up the existing public folder if it exists
+# Remove the existing public folder if it exists and back it up
 RUN if [ -d "./public" ]; then mv ./public ./public_backup; fi
 
 # Ensure the public folder exists in the container
