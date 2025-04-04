@@ -134,3 +134,4 @@ adminer.php
 *.zip
 public/invoices/*
 config/config.json
+public/
