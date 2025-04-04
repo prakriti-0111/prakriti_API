@@ -1,6 +1,9 @@
 # Use Node.js official image
 FROM node:18
 
+# Backup the code/public directory as public_backup before cleanup
+RUN mkdir -p /public_backup && [ -d /code/public ] && cp -r /code/public/* /public_backup || true
+
 # Install dependencies required by Puppeteer
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -25,6 +28,9 @@ RUN apt-get update && apt-get install -y \
 
 # Set the working directory
 WORKDIR /app
+
+# Print the working directory
+RUN pwd
 
 # Copy package.json and package-lock.json
 COPY package*.json ./
