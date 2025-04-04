@@ -25,7 +25,6 @@ module.exports = {
 	        "https://test.prakriti.one",
 	        "http://test.prakriti.one",
             "https://super.test.prakriti.one",
-
 		    "https://super.test.prakriti.one/",
             "https://super.test.prakriti.one",
             "https://admin.test.prakriti.one",
@@ -33,7 +32,7 @@ module.exports = {
 		"https://dev.super.prakriti.one/",
 		"https://dev.admin.prakriti.one/",
 		"https://dev.team.prakriti.one/",
-		"https://dev.prakriti.one/",
+		"https://dev.prakriti.one",
 		"https://dev.super.prakriti.one",
 		"https://dev.admin.prakriti.one",
 		"https://dev.team.prakriti.one",
