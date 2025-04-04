@@ -33,11 +33,13 @@ COPY package*.json ./
 RUN npm install
 
 # Copy the existing public folder from the host system if it exists
-COPY --chown=node:node ./public /app/public
+COPY --chown=node:node ./public /app/public || true
 
-# Copy the rest of the app, excluding the public folder
+# Copy the rest of the app
 COPY . ./
-RUN rm -rf ./public && mv /app/public ./public
+
+# Ensure the public folder is preserved if it exists
+RUN if [ -d "/app/public" ]; then rm -rf ./public && mv /app/public ./public; fi
 
 # Expose the app's port
 EXPOSE 3000
