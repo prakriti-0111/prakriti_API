@@ -15,11 +15,11 @@ fi
 cp -r "$CODE_PUBLIC_PATH/"* "$PUBLIC_BACKUP_PATH/"
 echo "Copied files from $CODE_PUBLIC_PATH to $PUBLIC_BACKUP_PATH"
 
-# Step 3: Transfer new pull code into the old public folder
-if [ -d "$PUBLIC_PATH" ]; then
-  rm -rf "$PUBLIC_PATH"
-  echo "Removed old public folder: $PUBLIC_PATH"
+# Step 3: Copy new files into the existing public folder without removing it
+if [ ! -d "$PUBLIC_PATH" ]; then
+  mkdir -p "$PUBLIC_PATH"
+  echo "Created public folder: $PUBLIC_PATH"
 fi
 
-cp -r "$CODE_PUBLIC_PATH" "$PUBLIC_PATH"
-echo "Transferred new code to $PUBLIC_PATH"
+cp -r "$CODE_PUBLIC_PATH/"* "$PUBLIC_PATH/"
+echo "Copied new files to $PUBLIC_PATH"
