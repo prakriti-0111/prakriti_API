@@ -15,6 +15,9 @@ const PurityModel = db.purities;
 const UnitModel = db.units;
 const PurchaseModel = db.purchases;
 const AddressModel = db.addresses;
+const {
+  SaleListCollection,
+} = require("@resources/superadmin/SaleListCollection");
 const { getActivityLog } = require("@library/activityLog");
 const {
   isEmpty,
@@ -592,7 +595,7 @@ const calculateProductPrice = async (
     total_mrp_price = 0,
     total_sale_price = 0;
 
-    //console.log("materials : ", materials);
+  //console.log("materials : ", materials);
 
   for (let i = 0; i < materials.length; i++) {
     /* let materialPriceObj = await MaterialPriceModel.findOne({
@@ -620,10 +623,18 @@ const calculateProductPrice = async (
     //console.log("materials[i].material : ", materials[i].material);
     //console.log("materials[i].material.material_price.materialPricePurities : ", materials[i].material.material_price.materialPricePurities);
     //console.log(materials[i].material.material_price.materialPricePurities.filter((mpp) => mpp.purity_id == materials[i].purity_id).pop());
-    let materialPricePurity = (materials[i].material && materials[i].material.material_price && materials[i].material.material_price.materialPricePurities && materials[i].material.material_price.materialPricePurities.length)?materials[i].material.material_price.materialPricePurities.filter((mpp) => mpp.purity_id == materials[i].purity_id).pop():null;
+    let materialPricePurity =
+      materials[i].material &&
+      materials[i].material.material_price &&
+      materials[i].material.material_price.materialPricePurities &&
+      materials[i].material.material_price.materialPricePurities.length
+        ? materials[i].material.material_price.materialPricePurities
+            .filter((mpp) => mpp.purity_id == materials[i].purity_id)
+            .pop()
+        : null;
     //console.log("materialPricePurity : ", materialPricePurity);
     //if (materialPriceObj && materialPriceObj.materialPricePurities.length) {
-    if(materialPricePurity){
+    if (materialPricePurity) {
       //let materialPrice = materialPriceObj.materialPricePurities[0];
       //console.log("materials[i].material.material_price.materialPricePurities : ", materials[i].material.material_price.materialPricePurities);
       let materialPrice = materialPricePurity;
@@ -1050,11 +1061,11 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
               include: [
                 {
                   model: MaterialPricePurityModel,
-                  as: "materialPricePurities"
-                }
-              ]
-            }
-          ]
+                  as: "materialPricePurities",
+                },
+              ],
+            },
+          ],
         },
         {
           model: UnitModel,
@@ -1063,7 +1074,7 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
         {
           model: PurityModel,
           as: "purity",
-        }
+        },
       ],
     },
   ];
@@ -1103,10 +1114,10 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
           include: [
             {
               model: MaterialPricePurityModel,
-              as: "materialPricePurities"
-            }
-          ]
-        }
+              as: "materialPricePurities",
+            },
+          ],
+        },
       ],
     });
   }
@@ -1116,7 +1127,7 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
     include: _include,
   });
 
-  // console.log("This is stock value :- " + JSON.stringify( stocks));
+  // console.log("This is stock value :- " ,stocks);
 
   let total_price = 0,
     categories = [];
@@ -2082,6 +2093,8 @@ const getProductSizeMaterials = async (
 };
 
 const getTotalStockByUser = async (userId, type) => {
+  console.log("userId is the getTotalStockByUser ===", userId);
+
   type = type !== undefined ? type : "product";
   let conditions = { type: type };
   if (isArray(userId)) {
@@ -2090,11 +2103,81 @@ const getTotalStockByUser = async (userId, type) => {
     conditions.user_id = userId;
   }
   let qty = 0;
+  // console.log(" stocks common condition is the  upper  === ", conditions);
   let stocks = await StockModel.findAll({ where: conditions });
   for (let i = 0; i < stocks.length; i++) {
     qty += stocks[i].quantity ? parseInt(stocks[i].quantity) : 1;
   }
+
   return qty;
+};
+
+const getTransferSale = async (userId, type) => {
+
+  console.log("this is the userId ====", userId||"this is not defiend userId");
+  
+  const getModelObject_data = async (data, userId) => {
+    // console.log(" call in the getModelObject_data");
+
+    let no_of_products = await SaleProductModel.count({
+      where: { sale_id: data.id },
+    });
+
+    // console.log(no_of_products, "no_of_products is the count");
+    
+
+    return await {
+      no_of_products: no_of_products,
+      total_amount: data.total_amount,
+    };
+  };
+
+
+  let TransferData = await SaleModel.findAndCountAll({
+    order: [["id", "DESC"]],
+    where: {
+      is_assigned: true,
+      is_approval: false,
+      is_approved: "0",
+      sale_by: userId,
+    },
+    include: [
+      {
+        model: UserModel,
+        as: "user",
+      },
+      {
+        model: UserModel,
+        as: "saleBy",
+      },
+    ],
+    distinct: true,
+  })
+    .then(async (data) => {
+      console.log(
+        "this is call the SaleListCollection ========",
+        data.rows.length
+      );
+      let arr = [];
+      for (let i = 0; i < data.rows.length; i++) {
+        arr.push(await getModelObject_data(data.rows[i], userId));
+      }
+
+      return arr;
+    })
+    .catch((err) => {
+      console.log("Error in getTransferSale: ", err);
+    });
+
+  let totalStock = 0,totalPrice=0
+
+  TransferData.map((item) => {
+    console.log("this is the item ========", item);
+    totalStock += item.no_of_products;
+    totalPrice += item.total_amount;
+  });
+  // console.log("this is the total stock ========", totalStock);
+  return {totalStock,totalPrice};
 };
 
 const getMyRetailerIds = async (userId) => {
@@ -2882,7 +2965,7 @@ const getPurchaseProducts = async (params) => {
     where: { role_id: getRoleId("manager") },
   });
   let managerIds = arrayColumn(mansgers, "id");
-  let superadminId = await getSuperAdminId();
+  let superadminId = await getSuperAdminId();f
   managerIds.push(superadminId);*/
 
   let managerIds = await avlStockUserIdsNew(null, getRoleId("superadmin"));
@@ -2940,7 +3023,14 @@ const getPurchaseProducts = async (params) => {
       },
     ],
   });
-  let total_purchase_return = await PurchaseModel.sum('return_amount', { where: { user_id: { [Op.in]: managerIds }, is_approved: {[Op.ne]: 2 },  is_assigned: false, is_approval: false } });
+  let total_purchase_return = await PurchaseModel.sum("return_amount", {
+    where: {
+      user_id: { [Op.in]: managerIds },
+      is_approved: { [Op.ne]: 2 },
+      is_assigned: false,
+      is_approval: false,
+    },
+  });
 
   let items = [],
     total_amount = 0,
@@ -2954,7 +3044,6 @@ const getPurchaseProducts = async (params) => {
     for (let x = 0; x < p.purchaseProducts.length; x++) {
       let pp = p.purchaseProducts[x];
       let product = pp.product;
-      
 
       if (pp.is_return) {
         //total_return_amount += parseFloat(p.return_amount);
@@ -3035,7 +3124,10 @@ const getPurchaseProducts = async (params) => {
       let item = {
         purchase_id: p.id,
         image: image,
-        current_image:(pp.current_image==null?null:getFileAbsulatePath(pp.current_image)),
+        current_image:
+          pp.current_image == null
+            ? null
+            : getFileAbsulatePath(pp.current_image),
         name: product ? product.name : "",
         certificate_no: pp.certificate_no ?? "",
         total_weight_display: total_weight_display,
@@ -3053,7 +3145,9 @@ const getPurchaseProducts = async (params) => {
       }
       if (product && product.type == "material") {
         total_product += materialItem.length ? materialItem[0].quantity : 0;
-        total_return_product += materialItem.length ? materialItem[0].return_qty : 0;
+        total_return_product += materialItem.length
+          ? materialItem[0].return_qty
+          : 0;
       } else {
         total_product++;
         //total_return_product++;
@@ -3152,7 +3246,14 @@ const getPurchaseProductsUser = async (req, params) => {
       },
     ],
   });
-  let total_purchase_return = await PurchaseModel.sum('return_amount', { where: { user_id: userID, is_approved: {[Op.ne]: 2 },  is_assigned: false, is_approval: false } });
+  let total_purchase_return = await PurchaseModel.sum("return_amount", {
+    where: {
+      user_id: userID,
+      is_approved: { [Op.ne]: 2 },
+      is_assigned: false,
+      is_approval: false,
+    },
+  });
   let items = [],
     total_amount = 0,
     total_product = 0,
@@ -3166,7 +3267,7 @@ const getPurchaseProductsUser = async (req, params) => {
       let pp = p.purchaseProducts[x];
       let product = pp.product;
       //total_return_amount += parseFloat(p.return_amount);
-      
+
       if (pp.is_return) {
         //total_return_amount += parseFloat(p.return_amount);
         total_return_product++;
@@ -3247,7 +3348,10 @@ const getPurchaseProductsUser = async (req, params) => {
       let item = {
         purchase_id: p.id,
         image: image,
-        current_image:(pp.current_image==null?null:getFileAbsulatePath(pp.current_image)),
+        current_image:
+          pp.current_image == null
+            ? null
+            : getFileAbsulatePath(pp.current_image),
         name: product ? product.name : "",
         certificate_no: pp.certificate_no ?? "",
         total_weight_display: total_weight_display,
@@ -3266,7 +3370,9 @@ const getPurchaseProductsUser = async (req, params) => {
 
       if (product && product.type == "material") {
         total_product += materialItem.length ? materialItem[0].quantity : 0;
-        total_return_product += materialItem.length ? materialItem[0].return_qty : 0;
+        total_return_product += materialItem.length
+          ? materialItem[0].return_qty
+          : 0;
       } else {
         total_product++;
         //total_return_product++;
@@ -3371,11 +3477,11 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
       },
       {
         model: UserModel,
-        as: "saleBy"
-      }
+        as: "saleBy",
+      },
     ],
   });
-  console.log(sales.length);
+  console.log("sales length -----", sales.length);
   let items = [],
     total_amount = 0,
     total_product = 0,
@@ -3395,15 +3501,15 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
           if (!product || product.category_id != params.category_id) {
             pushItem = false;
           }
-        } 
-        
-        if(!isEmpty(params.sub_category_id)){
+        }
+
+        if (!isEmpty(params.sub_category_id)) {
           if (!product || product.sub_category_id != params.sub_category_id) {
             pushItem = false;
           }
-        } 
-        
-        if(!isEmpty(params.sale_by)){
+        }
+
+        if (!isEmpty(params.sale_by)) {
           if (!p || p.sale_by != params.sale_by) {
             pushItem = false;
           }
@@ -3479,7 +3585,7 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
         size_name: pp.size ? pp.size.name : "",
         mrp_display: displayAmount(pp.total),
         sale_by: p.sale_by,
-        sale_by_name: p.saleBy?p.saleBy.name:""
+        sale_by_name: p.saleBy ? p.saleBy.name : "",
       };
       if (pushItem) {
         items.push(item);
@@ -3518,6 +3624,8 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
       }
     }
   }
+  console.log("items of length is ----------", items.length);
+
   return {
     items: items,
     total_amount: priceFormat(total_amount),
@@ -3535,26 +3643,26 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
     ownUsers = [];
 
   let userID = 0;
-  if(roleId == getRoleId("superadmin")){
+  if (roleId == getRoleId("superadmin")) {
     userID = await getSuperAdminId(); // super admin (should be the first user always)
   } else {
     userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   }
 
-  if(roleId == getRoleId("superadmin")){
+  if (roleId == getRoleId("superadmin")) {
     ownUsers = await UserModel.findAll({
       attributes: ["id", "role_id"],
-      where: { own: true, parent_id:userID }
+      where: { own: true, parent_id: userID },
     });
-  } else if(roleId == getRoleId("admin")) {
+  } else if (roleId == getRoleId("admin")) {
     ownUsers = await UserModel.findAll({
       attributes: ["id", "role_id"],
-      where: { own: true, parent_id:userID  },
+      where: { own: true, parent_id: userID },
     });
   } else {
     ownUsers = await UserModel.findAll({
       attributes: ["id", "role_id"],
-      where: { parent_id:userID  },
+      where: { parent_id: userID },
     });
   }
 
@@ -3563,10 +3671,10 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
     where: { own: true, parent_id:userID  },
   }); */
 
-  if(roleId == getRoleId("superadmin")){
+  if (roleId == getRoleId("superadmin")) {
     let mansgers = await UserModel.findAll({
       attributes: ["id"],
-      where: { role_id: getRoleId("manager"), parent_id:userID },
+      where: { role_id: getRoleId("manager"), parent_id: userID },
     });
     let managerIds = arrayColumn(mansgers, "id");
     ownUserIds = ownUserIds.concat(managerIds);
@@ -3580,7 +3688,7 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
         distrIds.push(ownUsers[i].id);
       }
     }
-	
+
     let admin_distr = await UserModel.findAll({
       attributes: ["id"],
       where: {
@@ -3590,7 +3698,7 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
       },
     });
     let admin_distrIds = arrayColumn(admin_distr, "id");
-    
+
     ownUserIds = ownUserIds.concat(admin_distrIds);
     distrIds = distrIds.concat(admin_distrIds);
 
@@ -3606,7 +3714,7 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
 
     ownUserIds.push(userID);
   }
-	
+
   let se = await UserModel.findAll({
     attributes: ["id"],
     where: {
@@ -3615,19 +3723,19 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
     },
   });
   let seIds = arrayColumn(se, "id");
-  
+
   return ownUserIds.concat(seIds);
-}
+};
 
 const avlStockUserIds = async (req, roleId = null) => {
   let ownUserIds = [],
     distributor_role = getRoleId("distributor"),
     distrIds = [],
     ownUsers = [];
-    
+
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
 
-  if(roleId == getRoleId("superadmin")){
+  if (roleId == getRoleId("superadmin")) {
     ownUsers = await UserModel.findAll({
       attributes: ["id", "role_id"],
       //where: { own: true },
@@ -3635,10 +3743,10 @@ const avlStockUserIds = async (req, roleId = null) => {
   } else {
     ownUsers = await UserModel.findAll({
       attributes: ["id", "role_id"],
-      where: { own: true, parent_id:userID  },
+      where: { own: true, parent_id: userID },
     });
   }
-  
+
   for (let i = 0; i < ownUsers.length; i++) {
     ownUserIds.push(ownUsers[i].id);
     if (ownUsers[i].role_id == distributor_role) {
@@ -3646,7 +3754,7 @@ const avlStockUserIds = async (req, roleId = null) => {
     }
   }
 
-  if(roleId == getRoleId("superadmin")){
+  if (roleId == getRoleId("superadmin")) {
     let mansgers = await UserModel.findAll({
       attributes: ["id"],
       where: { role_id: getRoleId("manager") },
@@ -3655,8 +3763,8 @@ const avlStockUserIds = async (req, roleId = null) => {
     ownUserIds = ownUserIds.concat(managerIds);
     let superadminId = await getSuperAdminId(); //isManager(req) ? req.userId : await getSuperAdminId();
     ownUserIds.push(superadminId);
-  } 
-  
+  }
+
   let se = await UserModel.findAll({
     attributes: ["id"],
     where: {
@@ -3665,7 +3773,7 @@ const avlStockUserIds = async (req, roleId = null) => {
     },
   });
   let seIds = arrayColumn(se, "id");
-  
+
   return ownUserIds.concat(seIds);
 };
 
@@ -3713,6 +3821,7 @@ module.exports = {
   getProductSizeMaterials,
   getTotalStockByUser,
   getMyRetailerIds,
+  getTransferSale,
   insertLoanEMI,
   updateRetailerAvgReview,
   insertVisit,
