@@ -32,6 +32,15 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
+# Copy the backup_and_transfer.sh script into the container
+COPY backup_and_transfer.sh /app/backup_and_transfer.sh
+
+# Ensure the script has execution permissions
+RUN chmod +x /app/backup_and_transfer.sh
+
+# Run the script before copying the rest of the app
+RUN /bin/bash /app/backup_and_transfer.sh
+
 # Copy the rest of the app
 COPY . .
 
@@ -39,4 +48,4 @@ COPY . .
 EXPOSE 3000
 
 # Start the server after running the backup_and_transfer.sh script
-CMD ["/bin/bash", "-c", "/app/backup_and_transfer.sh && npx nodemon server.js"]
+CMD ["npx nodemon server.js"]
