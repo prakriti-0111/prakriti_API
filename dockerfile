@@ -35,14 +35,19 @@ RUN npm install
 # Copy the existing public folder from the host system if it exists
 COPY --chown=node:node ./public /app/public || true
 
+# Back up the existing public folder if it exists
+RUN if [ -d "./public" ]; then mv ./public ./public_backup; fi
+
 # Copy the rest of the app
 COPY . ./
 
-# Ensure the public folder is preserved or created in the root directory
-RUN mkdir -p /public && \
-    if [ -d "/app/public" ]; then \
-      mv /app/public ./public; \
+# Restore the public folder from the backup if it exists
+RUN if [ -d "./public_backup" ]; then \
+      rm -rf ./public && mv ./public_backup ./public; \
     fi
+
+# Ensure the public folder exists
+RUN mkdir -p ./public
 
 # Expose the app's port
 EXPOSE 3000
