@@ -32,27 +32,11 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
-# Remove the existing public folder if it exists and back it up
-RUN if [ -d "./public" ]; then mv ./public ./public_backup; fi
-
-# Ensure the public folder exists in the container
-RUN mkdir -p ./public
-
 # Copy the rest of the app
-COPY . ./
-
-# Restore the public folder from the backup if it exists
-RUN if [ -d "./public_backup" ]; then \
-      rm -rf ./public && mv ./public_backup ./public; \
-    fi
-
-# Ensure the public folder exists
-RUN mkdir -p ./public
+COPY . .
 
 # Expose the app's port
 EXPOSE 3000
 
 # Start the server using nodemon
 CMD ["npx", "nodemon", "server.js"]
-
-
