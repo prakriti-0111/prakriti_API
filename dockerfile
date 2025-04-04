@@ -38,8 +38,12 @@ COPY --chown=node:node ./public /app/public || true
 # Copy the rest of the app
 COPY . ./
 
-# Ensure the public folder is preserved if it exists
-RUN if [ -d "/app/public" ]; then rm -rf ./public && mv /app/public ./public; fi
+# Ensure the public folder is preserved or created if it does not exist
+RUN if [ -d "/app/public" ]; then \
+      rm -rf ./public && mv /app/public ./public; \
+    else \
+      mkdir -p ./public; \
+    fi
 
 # Expose the app's port
 EXPOSE 3000
