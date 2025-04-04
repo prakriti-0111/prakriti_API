@@ -54,3 +54,5 @@ EXPOSE 3000
 
 # Start the server using nodemon
 CMD ["npx", "nodemon", "server.js"]
+
+
