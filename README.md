@@ -127,3 +127,7 @@ how to start the issue : -
 ### Flow of Branch are connected to the  deployments
 
 ![flow of brach ](https://d3qqickwjqrt0fw2.public.blob.vercel-storage.com/Untitled-gqpYIzIoWkjwOWVguRyLhPzxoH9vOq.png)
+
+ignore file list : -
+- public file 
+- config/config.js
