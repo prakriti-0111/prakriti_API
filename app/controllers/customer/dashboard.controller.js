@@ -8,6 +8,7 @@ const dbSequelize = db.sequelize;
 const UserModel = db.users;
 const BannerModel = db.banners;
 const PromocodeModel = db.promocodes;
+const NewArrivalModel = db.new_arrivals;
 const ProductModel = db.products;
 const SubscriberModel = db.subscribers;
 const stateModel = db.states;
@@ -15,6 +16,7 @@ const CategoryModel = db.categories;
 const SubCategoryModel = db.sub_categories;
 const {BannerCollection} = require("@resources/superadmin/BannerCollection");
 const {PromocodeCollection} = require("@resources/customer/PromocodeCollection");
+const {NewArrivalCollection} = require("@resources/superadmin/NewArrivalCollection");
 
 /**
  * Customer Dashboard
@@ -85,6 +87,27 @@ exports.banners = async (req, res) => {
         res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
     });
 
+}
+
+/**
+ * New Arrivals
+ *
+ * @param req
+ * @param res
+ */
+exports.new_arrivals = async (req, res) => {
+    NewArrivalModel.findAll({
+        order:[['id', 'DESC']]
+    }).then(async (data) => {
+        let result = {
+            items: NewArrivalCollection(data),
+            total: data.length
+        }
+        res.send(formatResponse(result));
+    })
+    .catch(err => {
+        res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
 }
 
 /**
