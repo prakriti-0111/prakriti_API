@@ -90,6 +90,11 @@ const notificationController = require("@controllers/superadmin/notification.con
 const retailerVisitController = require("@controllers/superadmin/retailerVisit.controller");
 const bannerController = require("@controllers/superadmin/banner.controller");
 const promocodeController = require("@controllers/superadmin/promocode.controller");
+<<<<<<< Updated upstream
+=======
+const newArrivalController = require("@controllers/superadmin/new-arrival.controller");
+const festiveOffersController = require("@controllers/superadmin/festiveOffer.controller");
+>>>>>>> Stashed changes
 const myPerformanceController = require("@controllers/superadmin/myPerformance.controller");
 const searchController = require("@controllers/superadmin/search.controller");
 const returnOrderController = require("@controllers/superadmin/returnOrder.controller");
@@ -1321,6 +1326,63 @@ module.exports = (app, express, io) => {
     promocodeController.delete
   );
 
+<<<<<<< Updated upstream
+=======
+  //new arrival
+  router.get(
+    "/new-arrivals",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    newArrivalController.index
+  );
+  router.post(
+    "/new-arrivals/store",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    newArrivalController.store
+  );
+  router.post(
+    "/new-arrivals/update/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    newArrivalController.update
+  );
+  router.get(
+    "/new-arrivals/fetch/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    newArrivalController.fetch
+  );
+  router.delete(
+    "/new-arrivals/delete/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    newArrivalController.delete
+  );
+
+  //festive offers
+  router.get(
+    "/festiveoffers",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    festiveOffersController.index
+  );
+  router.post(
+    "/festiveoffers/store",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    festiveOffersController.store
+  );
+  router.post(
+    "/festiveoffers/update/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    festiveOffersController.update
+  );
+  router.get(
+    "/festiveoffers/fetch/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    festiveOffersController.fetch
+  );
+  router.delete(
+    "/festiveoffers/delete/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    festiveOffersController.delete
+  );
+
+>>>>>>> Stashed changes
   //my performance
   router.get(
     "/my-performance",

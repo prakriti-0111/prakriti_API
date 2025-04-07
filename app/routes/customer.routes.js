@@ -31,6 +31,11 @@ module.exports = (app, express, io) => {
     router.get("/dashboard", [], dashboardController.index);
     router.get("/banners", [], dashboardController.banners);
     router.get("/promocodes", [], dashboardController.promocodes);
+<<<<<<< Updated upstream
+=======
+    router.get("/new-arrivals", [], dashboardController.new_arrivals);
+    router.get("/festive-offers", [], dashboardController.festive_offers);
+>>>>>>> Stashed changes
     router.get("/best-retailers", [], dashboardController.bestRetailers);
     router.get("/counts", [], dashboardController.counts);
     router.get("/next-user-name", [], dashboardController.nextUserName);

@@ -8,6 +8,11 @@ const dbSequelize = db.sequelize;
 const UserModel = db.users;
 const BannerModel = db.banners;
 const PromocodeModel = db.promocodes;
+<<<<<<< Updated upstream
+=======
+const NewArrivalModel = db.new_arrivals;
+const FestiveOfferModel = db.festive_offers;
+>>>>>>> Stashed changes
 const ProductModel = db.products;
 const SubscriberModel = db.subscribers;
 const stateModel = db.states;
@@ -15,6 +20,11 @@ const CategoryModel = db.categories;
 const SubCategoryModel = db.sub_categories;
 const {BannerCollection} = require("@resources/superadmin/BannerCollection");
 const {PromocodeCollection} = require("@resources/customer/PromocodeCollection");
+<<<<<<< Updated upstream
+=======
+const {NewArrivalCollection} = require("@resources/superadmin/NewArrivalCollection");
+const {FestiveOfferCollection} = require("@resources/customer/FestiveOfferCollection");
+>>>>>>> Stashed changes
 
 /**
  * Customer Dashboard
@@ -88,6 +98,64 @@ exports.banners = async (req, res) => {
 }
 
 /**
+<<<<<<< Updated upstream
+=======
+ * New Arrivals
+ *
+ * @param req
+ * @param res
+ */
+exports.new_arrivals = async (req, res) => {
+    NewArrivalModel.findAll({
+        order:[['id', 'DESC']]
+    }).then(async (data) => {
+        let result = {
+            items: NewArrivalCollection(data),
+            total: data.length
+        }
+        res.send(formatResponse(result));
+    })
+    .catch(err => {
+        res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
+}
+
+/**
+ * Festive Offers
+ *
+ * @param req
+ * @param res
+ */
+exports.festive_offers = async (req, res) => {
+    FestiveOfferModel.findAll({
+        order:[['id', 'DESC']],
+        include: [
+            {
+              model: CategoryModel,
+              as: 'category',
+              required: true
+            },
+            {
+              model: SubCategoryModel,
+              as: 'sub_category'
+            }
+        ]
+    }).then(async (data) => {
+        //console.log(data);
+        let result = {
+            items: FestiveOfferCollection(data),
+            total: data.length
+        }
+        
+        res.send(formatResponse(result));
+    })
+    .catch(err => {
+        res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
+}
+
+/**
+>>>>>>> Stashed changes
  * Best Retailers
  *
  * @param req
