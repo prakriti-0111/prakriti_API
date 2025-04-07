@@ -8,11 +8,8 @@ const dbSequelize = db.sequelize;
 const UserModel = db.users;
 const BannerModel = db.banners;
 const PromocodeModel = db.promocodes;
-<<<<<<< Updated upstream
-=======
 const NewArrivalModel = db.new_arrivals;
 const FestiveOfferModel = db.festive_offers;
->>>>>>> Stashed changes
 const ProductModel = db.products;
 const SubscriberModel = db.subscribers;
 const stateModel = db.states;
@@ -20,11 +17,8 @@ const CategoryModel = db.categories;
 const SubCategoryModel = db.sub_categories;
 const {BannerCollection} = require("@resources/superadmin/BannerCollection");
 const {PromocodeCollection} = require("@resources/customer/PromocodeCollection");
-<<<<<<< Updated upstream
-=======
 const {NewArrivalCollection} = require("@resources/superadmin/NewArrivalCollection");
 const {FestiveOfferCollection} = require("@resources/customer/FestiveOfferCollection");
->>>>>>> Stashed changes
 
 /**
  * Customer Dashboard
@@ -98,8 +92,6 @@ exports.banners = async (req, res) => {
 }
 
 /**
-<<<<<<< Updated upstream
-=======
  * New Arrivals
  *
  * @param req
@@ -155,7 +147,6 @@ exports.festive_offers = async (req, res) => {
 }
 
 /**
->>>>>>> Stashed changes
  * Best Retailers
  *
  * @param req
