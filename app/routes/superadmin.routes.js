@@ -90,11 +90,8 @@ const notificationController = require("@controllers/superadmin/notification.con
 const retailerVisitController = require("@controllers/superadmin/retailerVisit.controller");
 const bannerController = require("@controllers/superadmin/banner.controller");
 const promocodeController = require("@controllers/superadmin/promocode.controller");
-<<<<<<< Updated upstream
-=======
 const newArrivalController = require("@controllers/superadmin/new-arrival.controller");
 const festiveOffersController = require("@controllers/superadmin/festiveOffer.controller");
->>>>>>> Stashed changes
 const myPerformanceController = require("@controllers/superadmin/myPerformance.controller");
 const searchController = require("@controllers/superadmin/search.controller");
 const returnOrderController = require("@controllers/superadmin/returnOrder.controller");
@@ -1325,9 +1322,6 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     promocodeController.delete
   );
-
-<<<<<<< Updated upstream
-=======
   //new arrival
   router.get(
     "/new-arrivals",
@@ -1381,8 +1375,6 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     festiveOffersController.delete
   );
-
->>>>>>> Stashed changes
   //my performance
   router.get(
     "/my-performance",
