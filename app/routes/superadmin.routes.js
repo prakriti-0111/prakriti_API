@@ -1322,7 +1322,7 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     promocodeController.delete
   );
-
+  
   //new arrival
   router.get(
     "/new-arrivals",
