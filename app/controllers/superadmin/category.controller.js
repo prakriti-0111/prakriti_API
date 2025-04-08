@@ -74,21 +74,21 @@ exports.store = async (req, res) => {
 
   //upload banner
   let Mobile = null;
-  let result0 = base64FileUpload(data.Mobile, "categories");
+  let result0 = await base64FileUpload(data.Mobile, "categories");
   if (result0) {
     Mobile = result0.path;
   }
 
   //upload banner
   let banner = null;
-  let result = base64FileUpload(data.banner, "categories");
+  let result = await base64FileUpload(data.banner, "categories");
   if (result) {
     banner = result.path;
   }
 
   //upload icon
   let icon = null;
-  let result2 = base64FileUpload(data.icon, "categories");
+  let result2 = await base64FileUpload(data.icon, "categories");
   if (result2) {
     icon = result2.path;
   }
@@ -113,7 +113,6 @@ exports.store = async (req, res) => {
           "Category created successfully!"
         )
       );
-
     })
     .catch((error) => {
       return res
@@ -172,7 +171,7 @@ exports.update = async (req, res) => {
 
   if (!isEmpty(data.Mobile)) {
     removeFile(category.Mobile);
-    let result2 = base64FileUpload(data.Mobile, "categories");
+    let result2 = await base64FileUpload(data.Mobile, "categories");
     if (result2) {
       postData.Mobile = result2.path;
     }
@@ -180,7 +179,7 @@ exports.update = async (req, res) => {
 
   if (!isEmpty(data.banner)) {
     removeFile(category.banner);
-    let result2 = base64FileUpload(data.banner, "categories");
+    let result2 = await base64FileUpload(data.banner, "categories");
     if (result2) {
       postData.banner = result2.path;
     }
@@ -188,7 +187,7 @@ exports.update = async (req, res) => {
 
   if (!isEmpty(data.icon)) {
     removeFile(category.icon);
-    let result2 = base64FileUpload(data.icon, "categories");
+    let result2 = await base64FileUpload(data.icon, "categories");
     if (result2) {
       postData.icon = result2.path;
     }

@@ -1,11 +1,15 @@
-const { errorCodes, formatErrorResponse, formatResponse } = require("@utils/response.config");
-const { getPaginationOptions } = require('@helpers/paginator');
-const { base64FileUpload, removeFile } = require('@helpers/upload');
+const {
+  errorCodes,
+  formatErrorResponse,
+  formatResponse,
+} = require("@utils/response.config");
+const { getPaginationOptions } = require("@helpers/paginator");
+const { base64FileUpload, removeFile } = require("@helpers/upload");
 const { isEmpty } = require("@helpers/helper");
 const db = require("@models");
 const { Op } = require("sequelize");
 const { getRoleId } = require("@library/common");
-const {WorkerCollection} = require("@resources/superadmin/WorkerCollection");
+const { WorkerCollection } = require("@resources/superadmin/WorkerCollection");
 const userModel = db.users;
 const stateModel = db.states;
 const districtModel = db.districts;
@@ -20,103 +24,115 @@ var bcrypt = require("bcryptjs");
  */
 exports.index = async (req, res) => {
   let { page, limit, all } = req.query;
-  let roleId = getRoleId('worker');
+  let roleId = getRoleId("worker");
 
-  if(all == 1){
-    userModel.findAll({ 
-      where: { role_id: roleId },
-      order:[['name', 'ASC']]
-    }).then(async (data) => {
-      let result = {
-        items: WorkerCollection(data),
-        total: data.length
-      }
-      res.send(formatResponse(result, 'All Worker'));
-    })
-    .catch(err => {
-      res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
-    });
-  }else{
+  if (all == 1) {
+    userModel
+      .findAll({
+        where: { role_id: roleId },
+        order: [["name", "ASC"]],
+      })
+      .then(async (data) => {
+        let result = {
+          items: WorkerCollection(data),
+          total: data.length,
+        };
+        res.send(formatResponse(result, "All Worker"));
+      })
+      .catch((err) => {
+        res
+          .status(errorCodes.default)
+          .send(formatErrorResponse(errorCodes.defaultErrorMsg));
+      });
+  } else {
     const paginatorOptions = getPaginationOptions(page, limit);
-    userModel.findAndCountAll({ 
-      where: { role_id: roleId },
-      order:[['id', 'DESC']],
-      offset: paginatorOptions.offset,
-      limit: paginatorOptions.limit,
-      include: [
-        {
-          model: districtModel,
-          as: 'district',
-        },
-        {
-          model: stateModel,
-          as: 'state',
-        },
-        {
-          model: countryModel,
-          as: 'country',
-        },
-        {
-          model: userModel,
-          as: 'parent',
-        }
-      ]
-    }).then(async (data) => {
-      let result = {
-        items: WorkerCollection(data.rows),
-        total: data.count,
-      }
-      res.send(formatResponse(result, 'All Worker'));
-    })
-    .catch(err => { 
-      res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
-    });
+    userModel
+      .findAndCountAll({
+        where: { role_id: roleId },
+        order: [["id", "DESC"]],
+        offset: paginatorOptions.offset,
+        limit: paginatorOptions.limit,
+        include: [
+          {
+            model: districtModel,
+            as: "district",
+          },
+          {
+            model: stateModel,
+            as: "state",
+          },
+          {
+            model: countryModel,
+            as: "country",
+          },
+          {
+            model: userModel,
+            as: "parent",
+          },
+        ],
+      })
+      .then(async (data) => {
+        let result = {
+          items: WorkerCollection(data.rows),
+          total: data.count,
+        };
+        res.send(formatResponse(result, "All Worker"));
+      })
+      .catch((err) => {
+        res
+          .status(errorCodes.default)
+          .send(formatErrorResponse(errorCodes.defaultErrorMsg));
+      });
   }
 };
 
 /**
  * Create Worker
- * 
- * @param {*} req 
- * @param {*} res 
+ *
+ * @param {*} req
+ * @param {*} res
  */
 exports.store = async (req, res) => {
   let data = req.body;
-  let roleId = getRoleId('worker');
+  let roleId = getRoleId("worker");
 
   /**
    * check if mobile is exist or not
    */
-  const existing_mobile = await userModel.findOne({where: { mobile: data.mobile, role_id: roleId} });
+  const existing_mobile = await userModel.findOne({
+    where: { mobile: data.mobile, role_id: roleId },
+  });
   if (existing_mobile) {
-    return res.status(errorCodes.default).send(formatErrorResponse('This mobile is already exists.'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("This mobile is already exists."));
   }
 
   //upload profile image
   let profile_image = null;
-  let result = base64FileUpload(data.profile_image, 'users');
-  if(result){
+  let result = await base64FileUpload(data.profile_image, "users");
+  if (result) {
     profile_image = result.path;
   }
 
   //upload pan image
   let pan_image = null;
-  result = base64FileUpload(data.pan_image, 'users');
-  if(result){
+  result = await base64FileUpload(data.pan_image, "users");
+  if (result) {
     pan_image = result.path;
   }
 
   //upload adhar image
   let adhar_image = null;
-  result = base64FileUpload(data.adhar_image, 'users');
-  if(result){
+  result = await base64FileUpload(data.adhar_image, "users");
+  if (result) {
     adhar_image = result.path;
   }
 
   //upload company logo
   let company_logo = null;
-  result = base64FileUpload(data.company_logo, 'users');
-  if(result){
+  result = await base64FileUpload(data.company_logo, "users");
+  if (result) {
     company_logo = result.path;
   }
 
@@ -153,49 +169,65 @@ exports.store = async (req, res) => {
     parent_id: !isEmpty(data.parent_id) ? data.parent_id : null,
   };
 
-  userModel.create(postData).then(result => {
-    res.send(formatResponse("", "Worker created successfully!"));
-  }).catch(error => { 
-    return res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
-  }); 
+  userModel
+    .create(postData)
+    .then((result) => {
+      res.send(formatResponse("", "Worker created successfully!"));
+    })
+    .catch((error) => {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
 };
-
 
 /**
  * Update Worker
- * 
- * @param {*} req 
- * @param {*} res 
+ *
+ * @param {*} req
+ * @param {*} res
  */
 exports.update = async (req, res) => {
   let data = req.body;
-  let roleId = getRoleId('worker');
-  let admin = await userModel.findOne({ where: { id: req.params.id, role_id: roleId } });
+  let roleId = getRoleId("worker");
+  let admin = await userModel.findOne({
+    where: { id: req.params.id, role_id: roleId },
+  });
   if (!admin) {
-    return res.status(errorCodes.default).send(formatErrorResponse('Worker not found'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Worker not found"));
   }
 
   /**
    * check if mobile is exist or not
    */
-  const existing_mobile = await userModel.findOne({where: { mobile: data.mobile, role_id: roleId, id: {[Op.ne]: req.params.id } } });
+  const existing_mobile = await userModel.findOne({
+    where: {
+      mobile: data.mobile,
+      role_id: roleId,
+      id: { [Op.ne]: req.params.id },
+    },
+  });
   if (existing_mobile) {
-    return res.status(errorCodes.default).send(formatErrorResponse('This mobile is already exists.'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("This mobile is already exists."));
   }
 
   //upload profile image
   let profile_image = admin.profile_image;
-  if(!isEmpty(data.profile_image) || data.remove_profile_image){
+  if (!isEmpty(data.profile_image) || data.remove_profile_image) {
     //remove old
     removeFile(admin.profile_image);
-    if(data.remove_profile_image){
+    if (data.remove_profile_image) {
       profile_image = null;
     }
 
     //upload new
-    if(!isEmpty(data.profile_image)){
-      let result = base64FileUpload(data.profile_image, 'users');
-      if(result){
+    if (!isEmpty(data.profile_image)) {
+      let result = await base64FileUpload(data.profile_image, "users");
+      if (result) {
         profile_image = result.path;
       }
     }
@@ -203,17 +235,17 @@ exports.update = async (req, res) => {
 
   //upload pan image
   let pan_image = admin.pan_image;
-  if(!isEmpty(data.pan_image) || data.remove_pan_image){
+  if (!isEmpty(data.pan_image) || data.remove_pan_image) {
     //remove old
     removeFile(admin.pan_image);
-    if(data.remove_pan_image){
+    if (data.remove_pan_image) {
       pan_image = null;
     }
 
     //upload new
-    if(!isEmpty(data.pan_image)){
-      let result = base64FileUpload(data.pan_image, 'users');
-      if(result){
+    if (!isEmpty(data.pan_image)) {
+      let result = await base64FileUpload(data.pan_image, "users");
+      if (result) {
         pan_image = result.path;
       }
     }
@@ -221,17 +253,17 @@ exports.update = async (req, res) => {
 
   //upload adhar image
   let adhar_image = admin.adhar_image;
-  if(!isEmpty(data.adhar_image) || data.remove_adhar_image){
+  if (!isEmpty(data.adhar_image) || data.remove_adhar_image) {
     //remove old
     removeFile(admin.adhar_image);
-    if(data.remove_adhar_image){
+    if (data.remove_adhar_image) {
       adhar_image = null;
     }
 
     //upload new
-    if(!isEmpty(data.adhar_image)){
-      let result = base64FileUpload(data.adhar_image, 'users');
-      if(result){
+    if (!isEmpty(data.adhar_image)) {
+      let result = await base64FileUpload(data.adhar_image, "users");
+      if (result) {
         adhar_image = result.path;
       }
     }
@@ -239,17 +271,17 @@ exports.update = async (req, res) => {
 
   //upload company logo
   let company_logo = admin.company_logo;
-  if(!isEmpty(data.company_logo) || data.remove_company_logo){
+  if (!isEmpty(data.company_logo) || data.remove_company_logo) {
     //remove old
     removeFile(admin.company_logo);
-    if(data.remove_company_logo){
+    if (data.remove_company_logo) {
       company_logo = null;
     }
 
     //upload new
-    if(!isEmpty(data.company_logo)){
-      let result = base64FileUpload(data.company_logo, 'users');
-      if(result){
+    if (!isEmpty(data.company_logo)) {
+      let result = await base64FileUpload(data.company_logo, "users");
+      if (result) {
         company_logo = result.path;
       }
     }
@@ -286,61 +318,75 @@ exports.update = async (req, res) => {
     parent_id: !isEmpty(data.parent_id) ? data.parent_id : null,
   };
 
-  userModel.update(postData, { where: { id: req.params.id} }).then(result => {
-    res.send(formatResponse("", "Worker updated successfully!"));
-  }).catch(error => { 
-    return res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
-  }); 
-
+  userModel
+    .update(postData, { where: { id: req.params.id } })
+    .then((result) => {
+      res.send(formatResponse("", "Worker updated successfully!"));
+    })
+    .catch((error) => {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
 };
-
 
 /**
  * View Worker
- * 
- * @param {*} req 
- * @param {*} res 
+ *
+ * @param {*} req
+ * @param {*} res
  */
 exports.fetch = async (req, res) => {
-  let roleId = getRoleId('worker');
-  let admin = await userModel.findOne({ where: { id: req.params.id, role_id: roleId}});
+  let roleId = getRoleId("worker");
+  let admin = await userModel.findOne({
+    where: { id: req.params.id, role_id: roleId },
+  });
   if (!admin) {
-    return res.status(errorCodes.default).send(formatErrorResponse('Worker not found'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Worker not found"));
   }
-  res.send(formatResponse(WorkerCollection(admin), "Worker fetched successfully!"));
+  res.send(
+    formatResponse(WorkerCollection(admin), "Worker fetched successfully!")
+  );
 };
 
-  
 /**
  * delete Worker
- * 
+ *
  * @param {*} req
- * @param {*} res 
+ * @param {*} res
  */
- exports.delete = async (req, res) => {
-  let roleId = getRoleId('worker');
-  let data = await userModel.findOne({ where: { id: req.params.id, role_id: roleId } });
+exports.delete = async (req, res) => {
+  let roleId = getRoleId("worker");
+  let data = await userModel.findOne({
+    where: { id: req.params.id, role_id: roleId },
+  });
 
-  if(!isEmpty(data.profile_image)){
+  if (!isEmpty(data.profile_image)) {
     removeFile(data.profile_image);
   }
 
-  if(!isEmpty(data.pan_image)){
+  if (!isEmpty(data.pan_image)) {
     removeFile(admin.pan_image);
   }
 
-  if(!isEmpty(data.adhar_image)){
+  if (!isEmpty(data.adhar_image)) {
     removeFile(admin.adhar_image);
   }
 
-  if(!isEmpty(data.company_logo)){
+  if (!isEmpty(data.company_logo)) {
     removeFile(data.company_logo);
   }
 
-
-  userModel.destroy({ where: { id: req.params.id} }).then(result => {
-    res.send(formatResponse("", 'Worker deleted Successfully!'));
-  }).catch(error => {
-    return res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
-  });
+  userModel
+    .destroy({ where: { id: req.params.id } })
+    .then((result) => {
+      res.send(formatResponse("", "Worker deleted Successfully!"));
+    })
+    .catch((error) => {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
 };

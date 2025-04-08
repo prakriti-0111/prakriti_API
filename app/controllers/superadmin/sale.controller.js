@@ -100,8 +100,6 @@ const env = process.env.NODE_ENV;
  * @param res
  */
 exports.index = async (req, res) => {
-
-  
   let {
     page,
     limit,
@@ -115,7 +113,6 @@ exports.index = async (req, res) => {
     own_sale,
   } = req.query;
 
-  
   is_assigned = is_assigned === undefined ? false : true;
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
@@ -147,14 +144,19 @@ exports.index = async (req, res) => {
     ownUserIds.push(userID);
     conditions.sale_by = { [Op.in]: ownUserIds };
   }
-  console.log("this the sales data in the cales controller111 =====",conditions);
+  console.log(
+    "this the sales data in the cales controller111 =====",
+    conditions
+  );
   conditions = {
     ...conditions,
     ...getDateFromToWhere(date_from, date_to, "invoice_date"),
   };
 
-  console.log("this the sales data in the cales controller222 =====",conditions);
-  
+  console.log(
+    "this the sales data in the cales controller222 =====",
+    conditions
+  );
 
   const paginatorOptions = getPaginationOptions(page, limit);
 
@@ -176,8 +178,11 @@ exports.index = async (req, res) => {
     distinct: true,
   })
     .then(async (data) => {
-      console.log("this the transfer 0 data in the cales controller =====",data.count);
-      
+      console.log(
+        "this the transfer 0 data in the cales controller =====",
+        data.count
+      );
+
       let result = {
         items: await SaleListCollection(data.rows, userID),
         total: data.count,
@@ -243,7 +248,7 @@ exports.store = async (req, res) => {
     //const trans = await sequelize.transaction(async (t) => {
     //upload banner
     let image = null;
-    let uploadResult = base64FileUpload(data.image_file, "sales");
+    let uploadResult = await base64FileUpload(data.image_file, "sales");
     if (uploadResult) {
       image = uploadResult.path;
     }
