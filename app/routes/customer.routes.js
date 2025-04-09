@@ -33,6 +33,7 @@ module.exports = (app, express, io) => {
     router.get("/promocodes", [], dashboardController.promocodes);
     router.get("/new-arrivals", [], dashboardController.new_arrivals);
     router.get("/festive-offers", [], dashboardController.festive_offers);
+    router.get("/stock-products-slider", [], dashboardController.stock_products_slider);
     router.get("/best-retailers", [], dashboardController.bestRetailers);
     router.get("/counts", [], dashboardController.counts);
     router.get("/next-user-name", [], dashboardController.nextUserName);
