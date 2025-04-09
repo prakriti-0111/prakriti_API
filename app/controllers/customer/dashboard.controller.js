@@ -10,6 +10,7 @@ const BannerModel = db.banners;
 const PromocodeModel = db.promocodes;
 const NewArrivalModel = db.new_arrivals;
 const FestiveOfferModel = db.festive_offers;
+const StockProductSliderModel = db.stock_products_slider;
 const ProductModel = db.products;
 const SubscriberModel = db.subscribers;
 const stateModel = db.states;
@@ -19,6 +20,7 @@ const {BannerCollection} = require("@resources/superadmin/BannerCollection");
 const {PromocodeCollection} = require("@resources/customer/PromocodeCollection");
 const {NewArrivalCollection} = require("@resources/superadmin/NewArrivalCollection");
 const {FestiveOfferCollection} = require("@resources/customer/FestiveOfferCollection");
+const {StockProductSliderCollection} = require("@resources/customer/StockProductSliderCollection");
 
 /**
  * Customer Dashboard
@@ -136,6 +138,40 @@ exports.festive_offers = async (req, res) => {
         //console.log(data);
         let result = {
             items: FestiveOfferCollection(data),
+            total: data.length
+        }
+        
+        res.send(formatResponse(result));
+    })
+    .catch(err => {
+        res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
+}
+
+/**
+ * Stock Product Banners
+ *
+ * @param req
+ * @param res
+ */
+exports.stock_products_slider = async (req, res) => {
+    StockProductSliderModel.findAll({
+        order:[['id', 'DESC']],
+        include: [
+            {
+              model: CategoryModel,
+              as: 'category',
+              required: true
+            },
+            {
+              model: SubCategoryModel,
+              as: 'sub_category'
+            }
+        ]
+    }).then(async (data) => {
+        //console.log(data);
+        let result = {
+            items: StockProductSliderCollection(data),
             total: data.length
         }
         
