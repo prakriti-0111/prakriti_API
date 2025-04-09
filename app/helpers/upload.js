@@ -158,9 +158,42 @@ const filterFilesFromRemove = async (files, removeFiles) => {
   }
 };
 
+const uploadPDF = async (
+  pathName = "invoices",
+  pdfBuffer,
+  fileName = `file-${Date.now()}.pdf`
+) => {
+  try {
+    const data = {
+      pdfBuffer, // Send the buffer directly
+      pathName,
+      fileName,
+    };
+    console.log("Uploading PDF with data:", data);
+
+    const config = {
+      method: "post",
+      maxBodyLength: Infinity,
+      url: process.env.BASE_URL + "upload-pdf",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      data: data,
+    };
+
+    const response = await axios.request(config);
+    console.log("PDF upload response:", response.data);
+    return response.data; // Return the server's response
+  } catch (error) {
+    console.error("Error uploading PDF:", error.message);
+    return { success: false, message: error.message }; // Return error details
+  }
+};
+
 module.exports = {
   base64FileUpload,
   removeFile,
   filterFilesFromRemove,
   base64VideoFileUpload,
+  uploadPDF, // Export the new function
 };
