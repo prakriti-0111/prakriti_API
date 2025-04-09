@@ -52,7 +52,7 @@ exports.store = async (req, res) => {
 
   //upload image
   let image = null;
-  let result = await base64FileUpload(data.image, "new_arrivals");
+  let result = await base64FileUpload(data.image, "banners");
   if (result) {
     image = result.path;
   }
@@ -112,7 +112,7 @@ exports.update = async (req, res) => {
 
   if (!isEmpty(data.image)) {
     removeFile(banner.image);
-    let result2 = await base64FileUpload(data.image, "new_arrivals");
+    let result2 = await base64FileUpload(data.image, "banners");
     if (result2) {
       postData.image = result2.path;
     }

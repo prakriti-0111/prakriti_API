@@ -10,15 +10,15 @@ const moment = require("moment");
 const { getPaginationOptions } = require("@helpers/paginator");
 const { isEmpty } = require("@helpers/helper");
 const {
-  FestiveOfferCollection,
-} = require("@resources/superadmin/FestiveOfferCollection");
-const FestiveOfferModel = db.festive_offers;
+  StockProductSliderCollection,
+} = require("@resources/superadmin/StockProductSliderCollection");
+const StockProductSliderModel = db.stock_products_slider;
 const CategoryModel = db.categories;
 const SubCategoryModel = db.sub_categories;
 const { base64FileUpload, removeFile } = require("@helpers/upload");
 
 /**
- * Retrieve all festiveoffers
+ * Retrieve all stockproducts
  * @param req
  * @param res
  */
@@ -26,7 +26,7 @@ exports.index = async (req, res) => {
   let { page, limit, all, search } = req.query;
   let conditions = {};
   const paginatorOptions = getPaginationOptions(page, limit);
-  FestiveOfferModel.findAndCountAll({
+  StockProductSliderModel.findAndCountAll({
     order: [["id", "DESC"]],
     offset: paginatorOptions.offset,
     limit: paginatorOptions.limit,
@@ -46,7 +46,7 @@ exports.index = async (req, res) => {
   })
     .then(async (data) => {
       let result = {
-        items: await FestiveOfferCollection(data.rows),
+        items: await StockProductSliderCollection(data.rows),
         total: data.count,
       };
       res.send(formatResponse(result));
@@ -57,25 +57,13 @@ exports.index = async (req, res) => {
 };
 
 /**
- * Create festiveoffer
+ * Create stockproduct
  *
  * @param {*} req
  * @param {*} res
  */
 exports.store = async (req, res) => {
   let data = req.body;
-
-  /**
-   * make unique code
-   */
-  const haveCode = await FestiveOfferModel.findOne({
-    where: { code: data.code },
-  });
-  if (haveCode) {
-    return res
-      .status(errorCodes.default)
-      .send(formatErrorResponse("This code is already exists."));
-  }
 
   //upload banner
   let banner = null;
@@ -90,18 +78,17 @@ exports.store = async (req, res) => {
     products: data.products.join(","),
     title: data.title,
     description: data.description,
+    price: data.price,
     discount: data.discount,
-    discount_type: data.discount_type,
-    code: data.code,
+    final_price: data.final_price,
+    button_txt: data.button_txt,
     status: data.status,
-    start_date: moment(data.start_date).format("YYYY-MM-DD"),
-    end_date: moment(data.end_date).format("YYYY-MM-DD"),
-    banner: banner,
+    banner: banner
   };
 
-  FestiveOfferModel.create(postData)
+  StockProductSliderModel.create(postData)
     .then((result) => {
-      res.send(formatResponse("", "festiveoffer created successfully!"));
+      res.send(formatResponse("", "stock product banner created successfully!"));
     })
     .catch((error) => {
       return res
@@ -111,13 +98,13 @@ exports.store = async (req, res) => {
 };
 
 /**
- * View festiveoffer
+ * View stockproduct
  *
  * @param {*} req
  * @param {*} res
  */
 exports.fetch = async (req, res) => {
-  let festiveoffer = await FestiveOfferModel.findOne({
+  let stockproduct = await StockProductSliderModel.findOne({
     where: { id: req.params.id },
     include: [
       {
@@ -132,41 +119,29 @@ exports.fetch = async (req, res) => {
       },
     ],
   });
-  if (!festiveoffer) {
+  if (!stockproduct) {
     return res
       .status(errorCodes.default)
-      .send(formatErrorResponse("festiveoffer not found"));
+      .send(formatErrorResponse("stock product banner not found"));
   }
-  res.send(formatResponse(await FestiveOfferCollection(festiveoffer)));
+  res.send(formatResponse(await StockProductSliderCollection(stockproduct)));
 };
 
 /**
- * Update festiveoffer
+ * Update stockproduct
  *
  * @param {*} req
  * @param {*} res
  */
 exports.update = async (req, res) => {
   let data = req.body;
-  let festiveoffer = await FestiveOfferModel.findOne({
+  let stockproduct = await StockProductSliderModel.findOne({
     where: { id: req.params.id },
   });
-  if (!festiveoffer) {
+  if (!stockproduct) {
     return res
       .status(errorCodes.default)
-      .send(formatErrorResponse("festiveoffer not found"));
-  }
-
-  /**
-   * make unique code
-   */
-  const haveCode = await FestiveOfferModel.findOne({
-    where: { code: data.code, id: { [Op.ne]: req.params.id } },
-  });
-  if (haveCode) {
-    return res
-      .status(errorCodes.default)
-      .send(formatErrorResponse("This code is already exists."));
+      .send(formatErrorResponse("stock product banner not found"));
   }
 
   const postData = {
@@ -175,25 +150,26 @@ exports.update = async (req, res) => {
     products: data.products.join(","),
     title: data.title,
     description: data.description,
+    price: data.price,
     discount: data.discount,
-    discount_type: data.discount_type,
-    code: data.code,
+    final_price: data.final_price,
+    button_txt: data.button_txt,
     status: data.status,
-    start_date: moment(data.start_date).format("YYYY-MM-DD"),
-    end_date: moment(data.end_date).format("YYYY-MM-DD"),
+    //banner: banner
   };
 
   if (!isEmpty(data.banner)) {
-    removeFile(festiveoffer.banner);
+    removeFile(stockproduct.banner);
     let result2 = await base64FileUpload(data.banner, "banners");
+    console.log("result2 : ", result2);
     if (result2) {
       postData.banner = result2.path;
     }
   }
 
-  FestiveOfferModel.update(postData, { where: { id: req.params.id } })
+  StockProductSliderModel.update(postData, { where: { id: req.params.id } })
     .then((result) => {
-      res.send(formatResponse("", "festiveoffer updated successfully!"));
+      res.send(formatResponse("", "stock product banner updated successfully!"));
     })
     .catch((error) => {
       return res
@@ -203,30 +179,30 @@ exports.update = async (req, res) => {
 };
 
 /**
- * delete festiveoffer
+ * delete stockproduct
  *
  * @param {*} req
  * @param {*} res
  */
 exports.delete = async (req, res) => {
-  let festiveoffer = await FestiveOfferModel.findOne({
+  let stockproduct = await StockProductSliderModel.findOne({
     where: { id: req.params.id },
   });
-  if (!festiveoffer) {
+  if (!stockproduct) {
     return res
       .status(errorCodes.default)
-      .send(formatErrorResponse("festiveoffer not found"));
+      .send(formatErrorResponse("stock product banner not found"));
   }
 
-  if (festiveoffer) {
-    if (!isEmpty(festiveoffer.banner)) {
-      removeFile(festiveoffer.banner);
+  if (stockproduct) {
+    if (!isEmpty(stockproduct.banner)) {
+      removeFile(stockproduct.banner);
     }
   }
 
-  FestiveOfferModel.destroy({ where: { id: req.params.id } })
+  StockProductSliderModel.destroy({ where: { id: req.params.id } })
     .then((result) => {
-      res.send(formatResponse("", "festiveoffer deleted successfully!"));
+      res.send(formatResponse("", "stock product banner deleted successfully!"));
     })
     .catch((error) => {
       return res

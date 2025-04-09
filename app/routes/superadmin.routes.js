@@ -92,6 +92,7 @@ const bannerController = require("@controllers/superadmin/banner.controller");
 const promocodeController = require("@controllers/superadmin/promocode.controller");
 const newArrivalController = require("@controllers/superadmin/new-arrival.controller");
 const festiveOffersController = require("@controllers/superadmin/festiveOffer.controller");
+const stockProductController = require("@controllers/superadmin/stockProduct.controller");
 const myPerformanceController = require("@controllers/superadmin/myPerformance.controller");
 const searchController = require("@controllers/superadmin/search.controller");
 const returnOrderController = require("@controllers/superadmin/returnOrder.controller");
@@ -1376,6 +1377,34 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     festiveOffersController.delete
   );
+
+  //stock products
+  router.get(
+    "/stockproducts",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockProductController.index
+  );
+  router.post(
+    "/stockproducts/store",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockProductController.store
+  );
+  router.post(
+    "/stockproducts/update/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockProductController.update
+  );
+  router.get(
+    "/stockproducts/fetch/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockProductController.fetch
+  );
+  router.delete(
+    "/stockproducts/delete/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockProductController.delete
+  );
+  
   //my performance
   router.get(
     "/my-performance",
