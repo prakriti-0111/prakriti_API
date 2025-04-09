@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "npx nodemon server.js",
-   "heroku-postbuild": "node node_modules/puppeteer/install.js",
+    "heroku-postbuild": "node node_modules/puppeteer/install.js",
     "dev": "nodemon server.js",
     "postinstall": "npm install puppeteer --unsafe-perm=true"
   },
