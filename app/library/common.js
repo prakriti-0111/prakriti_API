@@ -3343,6 +3343,10 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
                 model: CategoryModel,
                 as: "category",
               },
+              {
+                model: SubCategoryModel,
+                as: "sub_category",
+              },
             ],
           },
           {
@@ -3396,7 +3400,15 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
           if (!product || product.category_id != params.category_id) {
             pushItem = false;
           }
-        } else if(!isEmpty(params.sale_by)){
+        } 
+        
+        if(!isEmpty(params.sub_category_id)){
+          if (!product || product.sub_category_id != params.sub_category_id) {
+            pushItem = false;
+          }
+        } 
+        
+        if(!isEmpty(params.sale_by)){
           if (!p || p.sale_by != params.sale_by) {
             pushItem = false;
           }
