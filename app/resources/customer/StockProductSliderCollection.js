@@ -19,7 +19,7 @@ const getModelObject = (data) => {
     // }else{
     //     discount_display = priceFormat(data.discount, true) + '%';
     // }
-    discount_display = displayAmount(data.discount);
+    discount_display = displayAmount(data.discount, false, true, false);
 
     return {
         id: data.id,
@@ -34,8 +34,8 @@ const getModelObject = (data) => {
         banner: !isEmpty(data.banner) ? getFileAbsulatePath(data.banner) : '',
         products: data.products,
         status: data.status,
-        price_display: displayAmount(data.price),
-        final_price_display: displayAmount(data.final_price),
+        price_display: displayAmount(data.price, false, true, false),
+        final_price_display: displayAmount(data.final_price, false, true, false),
         discount_display: discount_display,
         category_slug: data.category.slug,
         sub_category_slug: data.sub_category ? data.sub_category.slug : ''
