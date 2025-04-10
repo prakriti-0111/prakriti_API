@@ -17,8 +17,8 @@
   },
   "production": {
     "username": "mysql",
-    "password": "prakriti-prod",
-    "database": "prakriti-prod",
+    "password": "prakriti",
+    "database": "prakriti",
     "host": "prod-prakriti-9yam3p",
     "port": 3306,
     "dialect": "mysql",
