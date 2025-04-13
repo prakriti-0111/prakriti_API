@@ -1063,7 +1063,7 @@ exports.delete = async (req, res) => {
   .then((resp) => {
     res.send(formatResponse({
       file_name: saleData.invoice_number+".pdf",
-      url: getFileAbsulatePath(file_path),
+      url: getFileAbsulatePathPDF(file_path),
       image_url: logoUrl
     }, "Invoice pdf"));
   })
@@ -2405,7 +2405,7 @@ if (!saleData.is_same_state_trnx && saleData.igst_tax) {
           formatResponse(
             {
               file_name: saleData.invoice_number + "_info.pdf",
-              url: getFileAbsulatePath(file_path),
+              url: getFileAbsulatePathPDF(file_path),
               html,
               sale,
               saleData,
@@ -3884,7 +3884,7 @@ exports.downloadInvoiceItems = async (req, res) => {
           formatResponse(
             {
               file_name: saleData.invoice_number + "_lists.pdf",
-              url: getFileAbsulatePath(file_path),
+              url: getFileAbsulatePathPDF(file_path),
               html : html,
               saleData,
               payments,

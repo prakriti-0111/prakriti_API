@@ -11,6 +11,7 @@ const {
   getDateFromToWhere,
   priceFormat,
   getFileAbsulatePath,
+  getFileAbsulatePathPDF,
   formatDateTime,
   weightFormat,
   addLog,
@@ -4246,7 +4247,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
           formatResponse(
             {
               file_name: purchaseData.invoice_number + "_tax.pdf",
-              url: getFileAbsulatePath(file_path),
+              url: getFileAbsulatePathPDF(file_path),
               purchase,
               purchaseData,
               payments,
@@ -5785,7 +5786,7 @@ html += `                                 <tr style="
           formatResponse(
             {
               file_name: purchaseData.invoice_number + "_lists.pdf",
-              url: getFileAbsulatePath(file_path),
+              url: getFileAbsulatePathPDF(file_path),
               purchaseData,
               payments,
             },

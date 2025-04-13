@@ -177,6 +177,10 @@ const getFileAbsulatePath = (f) => {
   return process.env.BASE_URL + f;
 }
 
+const getFileAbsulatePathPDF = (f) => {
+  return process.env.BASE_URL_INVOICE + f;
+}
+
 const ucWords = (text) =>{
   return !text ? '' : text.replace(/(^\w|\s\w)(\S*)/g, (_,m1,m2) => m1.toUpperCase()+m2.toLowerCase());
 }
@@ -696,6 +700,7 @@ module.exports = {
   productTypeDisplay,
   generateOrderNo,
   priceConvertToGram,
+  getFileAbsulatePathPDF
   convertUnitToGram,
   paymentModeDisplay,
   getFormatedAddress,
