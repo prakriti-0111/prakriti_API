@@ -700,7 +700,7 @@ module.exports = {
   productTypeDisplay,
   generateOrderNo,
   priceConvertToGram,
-  getFileAbsulatePathPDF
+  getFileAbsulatePathPDF,
   convertUnitToGram,
   paymentModeDisplay,
   getFormatedAddress,
