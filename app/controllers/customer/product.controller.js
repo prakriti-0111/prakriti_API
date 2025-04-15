@@ -366,10 +366,11 @@ exports.viewNew = async (req, res) => {
       where: { certificate_no: slug },
       include: _include,
     });
-  console.log("stock : ", stock.get({ plain: true}));
+  
   if (!stock) {
     return res.status(errorCodes.default).send(formatErrorResponse('Product not found'));
   }
+  console.log("stock : ", stock.get({ plain: true}));
   res.send(formatResponse(await NewProductDetailsCollection(stock, req), "Product details"));
 };
 
