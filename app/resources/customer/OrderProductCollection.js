@@ -22,11 +22,16 @@ const getModelObject = async(data, userId) => {
         image = getFileAbsulatePath(data.product.main_image);
     }
 
+    if(data.stock && data.stock.current_image && !isEmpty(data.stock.current_image)){
+        image = getFileAbsulatePath(data.stock.current_image);
+    }
+
     let haveReview = await ProductReviewModel.findOne({where: {user_id: userId, product_id: data.product_id}});
 
     return {        
         id: data.id,
         product_id: data.product_id,
+        certificate_no: !isEmpty(data.stock) ? data.stock.certificate_no : '',
         category_id: !isEmpty(data.product) ? data.product.category_id : 0,
         product_type: !isEmpty(data.product) ? data.product.type : '',
         product_slug: !isEmpty(data.product) ? data.product.slug : '',

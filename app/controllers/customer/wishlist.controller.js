@@ -2,9 +2,10 @@ const { errorCodes, formatErrorResponse, formatResponse } = require("@utils/resp
 const db = require("@models");
 const { getPaginationOptions } = require('@helpers/paginator')
 const {WishlistCollection} = require("@resources/customer/WishlistCollection");
-const { isEmpty, addLog } = require("@helpers/helper");
+const { isEmpty, addLog, getFileAbsulatePath } = require("@helpers/helper");
 const WishlistModel = db.wishlists;
 const ProductModel = db.products;
+const StockModel = db.stocks;
 const SizeModel = db.sizes;
 const MaterialModel = db.materials;
 const WishlistMaterialModel = db.wishlist_materials;
@@ -47,6 +48,13 @@ exports.index = async (req, res) => {
             model: PurityModel,
             as:'purity'
           }
+        ]
+      },
+      {
+        model: StockModel,
+        as: 'stock',
+        include:[
+          
         ]
       },
       {
@@ -118,8 +126,8 @@ exports.updateWishlist = async (req, res) => {
       product_id: data.product_id,
       user_id: req.userId,
       total_weight: data.total_weight,
-        size_id: data.size_id,
-      current_image: data.current_image
+      size_id: data.size_id,
+      stock_id: data.stock_id
     });
 
 
@@ -166,7 +174,14 @@ exports.wishlistByNow = async (req, res) => {
       {
         model: WishlistMaterialModel,
         as: 'wishlistMaterial',
-      }
+      },
+      {
+        model: StockModel,
+        as: 'stock',
+        include:[
+          
+        ]
+      },
     ]
   });
 
@@ -174,7 +189,8 @@ exports.wishlistByNow = async (req, res) => {
     return res.status(errorCodes.default).send(formatErrorResponse("Wishlist not found."));
   }
 
-  let cart = await cartsModel.findOne({where: {product_id: wishlist.product_id, size_id: wishlist.size_id, user_id: req.userId}});
+  //let cart = await cartsModel.findOne({where: {product_id: wishlist.product_id, size_id: wishlist.size_id, user_id: req.userId}});
+  let cart = await cartsModel.findOne({where: {product_id: wishlist.stock.certificate_no, size_id: wishlist.size_id, user_id: req.userId}});
   let isCartUpdated = false;
   if(cart){
     //check if cart metarials is match
@@ -203,14 +219,15 @@ exports.wishlistByNow = async (req, res) => {
   if(!isCartUpdated){
       let cart = await cartsModel.create({
           product_id: wishlist.product_id,
-          current_image: wishlist.current_image,
-          stock_id: null,
+          current_image: wishlist.stock.current_image != ""? getFileAbsulatePath(wishlist.stock.current_image) : getFileAbsulatePath(wishlist.product.main_image),
+          stock_id: wishlist.stock_id,
+          certificate_no: wishlist.stock.certificate_no,
           user_id: req.userId,
           quantity: 1,
           total_weight: wishlist.total_weight,
           size_id: wishlist.size_id,
           rate: 0,
-    });
+      });
 
     for(let x = 0; x < wishlist.wishlistMaterial.length; x++){
       let material = wishlist.wishlistMaterial[x];
