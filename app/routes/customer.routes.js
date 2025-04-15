@@ -55,7 +55,7 @@ module.exports = (app, express, io) => {
 
     //product
     router.get("/product", [authJwt.verifyTokenForGuest], productController.index);
-    router.get("/product/view", [authJwt.verifyTokenForGuest], productController.view);
+    router.get("/product/view", [authJwt.verifyTokenForGuest], productController.viewNew);
     router.post("/product/price-details", [authJwt.verifyToken, authJwt.isCustomer, priceInfo], productController.productPriceInfo);
     router.get("/product/recently-view-categories", [authJwt.verifyToken, authJwt.isCustomer, priceInfo], productController.recentlyViewCategories);
 

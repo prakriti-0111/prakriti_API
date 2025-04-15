@@ -129,7 +129,8 @@ exports.store = async (req, res) => {
   let cookie_id = data.cookie_id;
   let quantity = 'quantity' in data && data.quantity ? parseInt(data.quantity) : 1;
   let is_manual = 'is_manual' in data && data.is_manual == 1 ? true : false;
-  let cart = await cartsModel.findOne({where: {product_id: data.product_id, size_id: data.size_id, [Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]}});
+  //let cart = await cartsModel.findOne({where: {product_id: data.product_id, size_id: data.size_id, [Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]}});
+  let cart = await cartsModel.findOne({where: {certificate_no: data.certificate_no, size_id: data.size_id, [Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]}});
   let isCartUpdated = false;
   if(cart){
 
@@ -158,7 +159,8 @@ exports.store = async (req, res) => {
       if(cart.is_manual){
         let cartMaterial = await cartMaterialsModel.findOne({where: {cart_id: cart.id}});
         if(cartMaterial){
-          await cartMaterialsModel.update({quantity: quantity, weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });
+          //await cartMaterialsModel.update({quantity: quantity, weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });
+          await cartMaterialsModel.update({quantity: parseInt(data.materials[0].quantity), weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });
         }
       }
       isCartUpdated = true;
@@ -168,7 +170,8 @@ exports.store = async (req, res) => {
   if(!isCartUpdated){
     let cart = await cartsModel.create({
       product_id: data.product_id,
-      stock_id: null,
+      stock_id: data.stock_id,
+      current_image: data.current_image,
       user_id: user_id,
       cookie_id: cookie_id,
       quantity: quantity,
