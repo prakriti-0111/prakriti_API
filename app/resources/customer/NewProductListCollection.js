@@ -89,6 +89,7 @@ const getModelObject = async(data, req) => {
         images: images,
         video: video,
         default_image: main_image,
+        size_materials: [size_materials],
         mrp: total_mrp_price,
         mrp_display: displayAmount(total_mrp_price),
         sale_price: total_sale_price,
