@@ -6,6 +6,7 @@ const { getNextUserName, sendEmail } = require("@library/common");
 const moment = require('moment');
 const dbSequelize = db.sequelize;
 const UserModel = db.users;
+const HomepageSettingModel = db.homepage_settings;
 const BannerModel = db.banners;
 const PromocodeModel = db.promocodes;
 const NewArrivalModel = db.new_arrivals;
@@ -16,6 +17,7 @@ const SubscriberModel = db.subscribers;
 const stateModel = db.states;
 const CategoryModel = db.categories;
 const SubCategoryModel = db.sub_categories;
+const {HomepageSettingCollection} = require("@resources/superadmin/HomepageSettingCollection");
 const {BannerCollection} = require("@resources/superadmin/BannerCollection");
 const {PromocodeCollection} = require("@resources/customer/PromocodeCollection");
 const {NewArrivalCollection} = require("@resources/superadmin/NewArrivalCollection");
@@ -35,6 +37,29 @@ exports.index = async (req, res) => {
     });
 
     res.send(formatResponse(UserCollection(user), "Dashboard"));
+}
+
+/**
+ * Homepage Settings
+ *
+ * @param req
+ * @param res
+ */
+exports.homepagesettings = async (req, res) => {
+    HomepageSettingModel.findAll({
+        where: {is_active: true},
+        order:[['order', 'ASC']]
+    }).then((data) => {
+        console.log(data);
+        let result = {
+            items: HomepageSettingCollection(data),
+            total: data.length
+        }
+        res.send(formatResponse(result));
+    })
+    .catch(err => {
+        res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
 }
 
 /**

@@ -100,6 +100,7 @@ const holidayController = require("@controllers/superadmin/holiday.controller");
 const stockMaterialHistoryController = require("@controllers/superadmin/stockMaterialHistory.controller");
 const salaryController = require("@controllers/superadmin/salary.controller");
 const subscriberController = require("@controllers/superadmin/subscriber.controller");
+const homepageSettingController = require("@controllers/superadmin/homepage-setting.controller");
 
 module.exports = (app, express, io) => {
   var router = express.Router();
@@ -1403,6 +1404,18 @@ module.exports = (app, express, io) => {
     "/stockproducts/delete/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     stockProductController.delete
+  );
+
+  // homepage settings
+  router.get(
+    "/homepagesettings",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    homepageSettingController.index
+  );
+  router.post(
+    "/homepagesettings/update",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    homepageSettingController.update
   );
   
   //my performance

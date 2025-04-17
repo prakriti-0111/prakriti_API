@@ -29,6 +29,8 @@ module.exports = (app, express, io) => {
 
     //dashboard
     router.get("/dashboard", [], dashboardController.index);
+    // homepage settings
+    router.get("/homepagesettings", [], dashboardController.homepagesettings);
     router.get("/banners", [], dashboardController.banners);
     router.get("/promocodes", [], dashboardController.promocodes);
     router.get("/new-arrivals", [], dashboardController.new_arrivals);
