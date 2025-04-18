@@ -15,6 +15,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "product_id",
         as: "product"
       });
+      this.belongsTo(models.stocks, {
+        foreignKey: "stock_id",
+        as: "stock"
+      });
 
       this.belongsTo(models.sizes, {
         foreignKey: "size_id",
@@ -38,6 +42,7 @@ module.exports = (sequelize, DataTypes) => {
   OrderProduct.init({
     order_id: DataTypes.INTEGER,
     product_id: DataTypes.INTEGER,
+    stock_id: DataTypes.INTEGER,
     size_id: DataTypes.INTEGER,
     total_weight: DataTypes.DECIMAL(15, 3),
     discount: DataTypes.DECIMAL(15, 2),

@@ -68,6 +68,9 @@ const getModelObject = async (data, role_id) => {
     }
     //---
     let main_image = data.product && !isEmpty(data.product.main_image) ? getFileAbsulatePath(data.product.main_image) : '';
+    if (data.stock && data.stock.current_image && !isEmpty(data.stock.current_image)) {
+        main_image = getFileAbsulatePath(data.stock.current_image);
+    }
 
     let taxInfo = null;
     if ('tax' in product && product.tax) {
@@ -84,12 +87,13 @@ const getModelObject = async (data, role_id) => {
     return {
         id: data.id,
         product_id: data.product_id,
+        certificate_no: !isEmpty(data.stock) ? data.stock.certificate_no : '',
         product_type: !isEmpty(data.product) ? data.product.type : '',
         product_type_diplay: !isEmpty(data.product) ? productTypeDisplay(data.product.type) : '',
         product_name: !isEmpty(data.product) ? data.product.name : '',
         product_code: !isEmpty(data.product) ? data.product.product_code : '',
         category_name: !isEmpty(data.product) && 'category' in data.product && data.product.category ? data.product.category.name : '',
-        certificate_no: data.certificate_no,
+        //certificate_no: data.certificate_no,
         size_id: !isEmpty(data.size_id) ? data.size_id : '',
         size_name: !isEmpty(data.size) ? data.size.name : '',
         quantity: data.quantity,

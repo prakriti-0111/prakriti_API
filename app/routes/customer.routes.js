@@ -31,6 +31,9 @@ module.exports = (app, express, io) => {
     router.get("/dashboard", [], dashboardController.index);
     router.get("/banners", [], dashboardController.banners);
     router.get("/promocodes", [], dashboardController.promocodes);
+    router.get("/new-arrivals", [], dashboardController.new_arrivals);
+    router.get("/festive-offers", [], dashboardController.festive_offers);
+    router.get("/stock-products-slider", [], dashboardController.stock_products_slider);
     router.get("/best-retailers", [], dashboardController.bestRetailers);
     router.get("/counts", [], dashboardController.counts);
     router.get("/next-user-name", [], dashboardController.nextUserName);
@@ -52,7 +55,7 @@ module.exports = (app, express, io) => {
 
     //product
     router.get("/product", [authJwt.verifyTokenForGuest], productController.index);
-    router.get("/product/view", [authJwt.verifyTokenForGuest], productController.view);
+    router.get("/product/view", [authJwt.verifyTokenForGuest], productController.viewNew);
     router.post("/product/price-details", [authJwt.verifyToken, authJwt.isCustomer, priceInfo], productController.productPriceInfo);
     router.get("/product/recently-view-categories", [authJwt.verifyToken, authJwt.isCustomer, priceInfo], productController.recentlyViewCategories);
 

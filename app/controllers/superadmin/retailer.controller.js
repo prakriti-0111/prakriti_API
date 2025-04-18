@@ -107,6 +107,7 @@ exports.index = async (req, res) => {
       });
   } else {
     let userIds = await getMyRetailerIds(req.userId);
+    userIds = [...new Set(userIds)];
     let conditions = await getCommonCondition(req, my_retailer, userIds);
     if (!isEmpty(search)) {
       search = search.trim();
@@ -132,7 +133,7 @@ exports.index = async (req, res) => {
     const paginatorOptions = all == 1 ? {} : getPaginationOptions(page, limit);
     userModel
       .findAndCountAll({
-        where: { role_id: roleId,...conditions },
+        where: { role_id: roleId, ...conditions },
         order: [["id", "DESC"]],
         ...paginatorOptions,
         include: [
@@ -164,6 +165,7 @@ exports.index = async (req, res) => {
         if (!isSuperAdmin(req)) {
           if (isAdmin(req)) {
             let allDstIds = await getAdminDistributorIds(req.userId);
+            allDstIds = [...new Set(allDstIds)];
             let _cond = await getAdminSEWhereCondition(allDstIds, null, true);
             let se = await userModel.findAll({
               attributes: ["id"],
@@ -189,19 +191,27 @@ exports.index = async (req, res) => {
           if (my_retailer == 1) {
             userWhere.id = { [Op.in]: userIds };
           } else {
-            let district_id = await getUserColumnValue(req.userId, "district_id");
+            let district_id = await getUserColumnValue(
+              req.userId,
+              "district_id"
+            );
             userWhere.district_id = district_id;
           }
         }
         let includes = [
-          {
+          /* {
             model: userModel,
             as: "user",
             where: userWhere,
-          },
+          }, */
         ];
 
-        let whereObj = { where: conditions, include: includes, group: ['user.id'] };
+        let whereObj = {
+          where: conditions,
+          include: includes /*, group: ['user_id']*/,
+        };
+        //console.log("userWhere : ", userWhere);
+        //console.log("whereObj : ", whereObj);
         let total_sale = await SaleModel.sum("bill_amount", whereObj);
         let total_sale_due = await SaleModel.sum("sales.due_amount", whereObj);
         let total_sale_paid = await SaleModel.sum("paid_amount", whereObj);
@@ -263,28 +273,28 @@ exports.store = async (req, res) => {
 
   //upload profile image
   let profile_image = null;
-  let result = base64FileUpload(data.profile_image, "users");
+  let result = await base64FileUpload(data.profile_image, "users");
   if (result) {
     profile_image = result.path;
   }
 
   //upload pan image
   let pan_image = null;
-  result = base64FileUpload(data.pan_image, "users");
+  result = await base64FileUpload(data.pan_image, "users");
   if (result) {
     pan_image = result.path;
   }
 
   //upload adhar image
   let adhar_image = null;
-  result = base64FileUpload(data.adhar_image, "users");
+  result = await base64FileUpload(data.adhar_image, "users");
   if (result) {
     adhar_image = result.path;
   }
 
   //upload company logo
   let company_logo = null;
-  result = base64FileUpload(data.company_logo, "users");
+  result = await base64FileUpload(data.company_logo, "users");
   if (result) {
     company_logo = result.path;
   }
@@ -292,7 +302,7 @@ exports.store = async (req, res) => {
   //upload documents
   let documents = [];
   for (let i = 0; i < data.documents.length; i++) {
-    let result = base64FileUpload(data.documents[i], "users");
+    let result = await base64FileUpload(data.documents[i], "users");
     if (result) {
       documents.push(result);
     }
@@ -345,7 +355,7 @@ exports.store = async (req, res) => {
           to_user_id: result.id,
           to_role_id: roleId,
         });
-      } else if(isDistributor(req)) {
+      } else if (isDistributor(req)) {
         await UserToUserModel.create({
           user_id: req.userId,
           to_user_id: result.id,
@@ -423,7 +433,7 @@ exports.update = async (req, res) => {
 
     //upload new
     if (!isEmpty(data.profile_image)) {
-      let result = base64FileUpload(data.profile_image, "users");
+      let result = await base64FileUpload(data.profile_image, "users");
       if (result) {
         profile_image = result.path;
       }
@@ -441,7 +451,7 @@ exports.update = async (req, res) => {
 
     //upload new
     if (!isEmpty(data.pan_image)) {
-      let result = base64FileUpload(data.pan_image, "users");
+      let result = await base64FileUpload(data.pan_image, "users");
       if (result) {
         pan_image = result.path;
       }
@@ -459,7 +469,7 @@ exports.update = async (req, res) => {
 
     //upload new
     if (!isEmpty(data.adhar_image)) {
-      let result = base64FileUpload(data.adhar_image, "users");
+      let result = await base64FileUpload(data.adhar_image, "users");
       if (result) {
         adhar_image = result.path;
       }
@@ -477,7 +487,7 @@ exports.update = async (req, res) => {
 
     //upload new
     if (!isEmpty(data.company_logo)) {
-      let result = base64FileUpload(data.company_logo, "users");
+      let result = await base64FileUpload(data.company_logo, "users");
       if (result) {
         company_logo = result.path;
       }
@@ -490,7 +500,7 @@ exports.update = async (req, res) => {
   if (!isEmpty(data.documents)) {
     try {
       for (let i = 0; i < data.documents.length; i++) {
-        let result = base64FileUpload(data.documents[i], "users");
+        let result = await base64FileUpload(data.documents[i], "users");
         if (result) {
           documents.push(result);
         }
@@ -759,7 +769,8 @@ const getCommonCondition = async (req, my_retailer, userIds) => {
         return {[Op.or]: [{parent_id: req.userId}, {parent_id: {[Op.eq]: null}, district_id: district_id}]};
       }
       return my_retailer == 1 ? {parent_id: req.userId} : {district_id: district_id, parent_id: {[Op.eq]: null}};*/
-    } if (isDistributor(req)) {
+    }
+    if (isDistributor(req)) {
       if (my_retailer == 1) {
         userIds = !userIds ? await getMyRetailerIds(req.userId) : userIds;
         return { id: { [Op.in]: userIds } };
