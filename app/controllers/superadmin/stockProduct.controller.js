@@ -5,208 +5,290 @@ const {
   formatResponse,
 } = require("@utils/response.config");
 const db = require("@models");
-const { Op } = require("sequelize");
-const moment = require("moment");
-const { getPaginationOptions } = require("@helpers/paginator");
-const { isEmpty } = require("@helpers/helper");
 const {
-  StockProductSliderCollection,
-} = require("@resources/superadmin/StockProductSliderCollection");
-const StockProductSliderModel = db.stock_products_slider;
+  base64FileUpload,
+  base64VideoFileUpload,
+  removeFile,
+  filterFilesFromRemove,
+} = require("@helpers/upload");
+const {
+  isEmpty,
+  isArray,
+  convertToSlug,
+  addLog,
+  convertUnitToGram,
+  weightFormat,
+} = require("@helpers/helper");
+const { updateOrCreate } = require("@library/common");
+const { getPaginationOptions } = require("@helpers/paginator");
+const {
+  ProductCollection,
+} = require("@resources/superadmin/ProductCollection");
+const {
+  CategoryCollection,
+} = require("@resources/superadmin/CategoryCollection");
+const {
+  StocksCollection,
+} = require("@resources/superadmin/StocksCollection");
+const { Op } = require("sequelize");
+const order = require("../../../models/order");
+const sequelize = db.sequelize;
+const ProductModel = db.products;
+const ProductMaterialModel = db.product_materials;
+const ProductSizeModel = db.product_sizes;
 const CategoryModel = db.categories;
 const SubCategoryModel = db.sub_categories;
-const { base64FileUpload, removeFile } = require("@helpers/upload");
+const CertificateModel = db.certificates;
+const MaterialModel = db.materials;
+const SizeModel = db.sizes;
+const PurityModel = db.purities;
+const UnitModel = db.units;
+const TaxSlabModel = db.tax_slabs;
+const ProductCertificateModel = db.product_certificates;
+const ProductSizeMaterialModel = db.product_size_materials;
+const ProductTagModel = db.product_tags;
+const PurchaseProductModel = db.purchase_products;
+const SaleProductModel = db.sale_products;
+const StockModel = db.stocks;
+const StockMaterialModel = db.stock_materials;
 
 /**
- * Retrieve all stockproducts
+ * Retrieve all product categories
  * @param req
  * @param res
  */
 exports.index = async (req, res) => {
-  let { page, limit, all, search } = req.query;
+  let { page, limit, all, category_id, sub_category_id, search, purity_price } =
+    req.query;
   let conditions = {};
-  const paginatorOptions = getPaginationOptions(page, limit);
-  StockProductSliderModel.findAndCountAll({
-    order: [["id", "DESC"]],
-    offset: paginatorOptions.offset,
-    limit: paginatorOptions.limit,
-    where: conditions,
-    include: [
-      {
-        model: CategoryModel,
-        as: "category",
-        required: true,
-      },
-      {
-        model: SubCategoryModel,
-        as: "sub_category",
-        //required: true
-      },
-    ],
-  })
-    .then(async (data) => {
-      let result = {
-        items: await StockProductSliderCollection(data.rows),
-        total: data.count,
-      };
-      res.send(formatResponse(result));
-    })
-    .catch((err) => {
-      res.status(errorCodes.default).send(formatErrorResponse(err));
-    });
-};
-
-/**
- * Create stockproduct
- *
- * @param {*} req
- * @param {*} res
- */
-exports.store = async (req, res) => {
-  let data = req.body;
-
-  //upload banner
-  let banner = null;
-  let result = await base64FileUpload(data.banner, "banners");
-  if (result) {
-    banner = result.path;
+  if (!isEmpty(category_id)) {
+    //conditions.category_id = category_id;
   }
-
-  const postData = {
-    category_id: data.category_id,
-    sub_category_id: data.sub_category_id || null,
-    products: data.products.join(","),
-    title: data.title,
-    description: data.description,
-    price: data.price,
-    discount: data.discount,
-    final_price: data.final_price,
-    button_txt: data.button_txt,
-    status: data.status,
-    banner: banner
-  };
-
-  StockProductSliderModel.create(postData)
-    .then((result) => {
-      res.send(formatResponse("", "stock product banner created successfully!"));
-    })
-    .catch((error) => {
-      return res
-        .status(errorCodes.default)
-        .send(formatErrorResponse(error.toString()));
-    });
-};
-
-/**
- * View stockproduct
- *
- * @param {*} req
- * @param {*} res
- */
-exports.fetch = async (req, res) => {
-  let stockproduct = await StockProductSliderModel.findOne({
-    where: { id: req.params.id },
-    include: [
-      {
-        model: CategoryModel,
-        as: "category",
-        required: true,
-      },
-      {
-        model: SubCategoryModel,
-        as: "sub_category",
-        //required: true
-      },
-    ],
-  });
-  if (!stockproduct) {
-    return res
-      .status(errorCodes.default)
-      .send(formatErrorResponse("stock product banner not found"));
+  if (!isEmpty(sub_category_id)) {
+    //conditions.sub_category_id = sub_category_id;
   }
-  res.send(formatResponse(await StockProductSliderCollection(stockproduct)));
-};
-
-/**
- * Update stockproduct
- *
- * @param {*} req
- * @param {*} res
- */
-exports.update = async (req, res) => {
-  let data = req.body;
-  let stockproduct = await StockProductSliderModel.findOne({
-    where: { id: req.params.id },
-  });
-  if (!stockproduct) {
-    return res
-      .status(errorCodes.default)
-      .send(formatErrorResponse("stock product banner not found"));
+  if (!isEmpty(search)) {
+    //conditions.name = {[Op.like]: `%${search}%` };
+    conditions = {
+      ...conditions,
+      [Op.or]: [{ name: { [Op.like]: `%${search}%` } }, { weight: search }],
+    };
   }
+  if (all == 1) {
 
-  const postData = {
-    category_id: data.category_id,
-    sub_category_id: data.sub_category_id || null,
-    products: data.products.join(","),
-    title: data.title,
-    description: data.description,
-    price: data.price,
-    discount: data.discount,
-    final_price: data.final_price,
-    button_txt: data.button_txt,
-    status: data.status,
-    //banner: banner
-  };
-
-  if (!isEmpty(data.banner)) {
-    removeFile(stockproduct.banner);
-    let result2 = await base64FileUpload(data.banner, "banners");
-    console.log("result2 : ", result2);
-    if (result2) {
-      postData.banner = result2.path;
+    let productConditions = {};
+    if(!isEmpty(search)){
+      productConditions = {...productConditions, [Op.or]: [{ name: { [Op.like]: `%${search}%` } }, { weight: search }]};
     }
-  }
 
-  StockProductSliderModel.update(postData, { where: { id: req.params.id } })
-    .then((result) => {
-      res.send(formatResponse("", "stock product banner updated successfully!"));
+    let _include = [
+      {
+        model: SizeModel,
+        as: "size",
+        //where: sizeConditions,
+      },
+      {
+        model: StockMaterialModel,
+        as: "stockMaterials",
+        required: true,
+        //where: stockMaterialConditions,
+        separate: true,
+        include: [
+          {
+            model: MaterialModel,
+            as: "material",
+          },
+          {
+            model: UnitModel,
+            as: "unit",
+          },
+          {
+            model: PurityModel,
+            as: "purity",
+          },
+        ],
+      },
+      {
+        model: ProductModel,
+        as: "product",
+        required: true,
+        where: productConditions,
+        include: [
+          {
+            model: CategoryModel,
+            as: "category",
+            required: true,
+            where: !isEmpty(category_id) ? { id: category_id } : {},
+          },
+          {
+            model: SubCategoryModel,
+            as: "sub_category",
+            required: true,
+            where: !isEmpty(sub_category_id) ? { id: sub_category_id } : {},
+          },
+          {
+            model: CertificateModel,
+            as: "certificates",
+          },
+          {
+            model: TaxSlabModel,
+            as: "tax",
+          },
+          {
+            model: ProductTagModel,
+            as: 'tags',
+          }
+        ],
+      }
+    ];
+
+    StockModel
+      .findAndCountAll({
+        order: [["id", "DESC"]],
+        //...paginatorOptions,
+        where: conditions,
+        include: _include,
+        distinct: true,
+        //...subQueryData
+      }).then(async (data) => {
+        let result = {
+          this: "all current stocks ",
+          items: await StocksCollection(data),
+          total: data.length,
+        };
+        res.send(formatResponse(result, "All Current Stocks"));
+      })
+      .catch((err) => {
+        res.status(errorCodes.default).send(formatErrorResponse(err));
+      }); 
+
+
+
+    /* ProductModel.findAll({
+      order: [["name", "DESC"]],
+      where: conditions,
+      include: [
+        {
+          model: CategoryModel,
+          as: "category",
+          required: true,
+          where: !isEmpty(category_id) ? { id: category_id } : {},
+        },
+        {
+          model: SubCategoryModel,
+          as: "sub_category",
+          required: true,
+          where: !isEmpty(sub_category_id) ? { id: sub_category_id } : {},
+        },
+        {
+          model: TaxSlabModel,
+          as: "tax",
+        },
+        
+        {
+          order: [["id", "ASC"]],
+          model: MaterialModel,
+          as: "materials",
+          include: [
+            {
+              model: UnitModel,
+              as: "unit",
+            },
+            {
+              model: PurityModel,
+              as: "purities",
+            },
+          ],
+        },
+        {
+          model: SizeModel,
+          as: "sizes",
+        },
+        {
+          model: CertificateModel,
+          as: "certificates",
+        },
+      ],
     })
-    .catch((error) => {
-      return res
-        .status(errorCodes.default)
-        .send(formatErrorResponse(errorCodes.defaultErrorMsg));
-    });
-};
-
-/**
- * delete stockproduct
- *
- * @param {*} req
- * @param {*} res
- */
-exports.delete = async (req, res) => {
-  let stockproduct = await StockProductSliderModel.findOne({
-    where: { id: req.params.id },
-  });
-  if (!stockproduct) {
-    return res
-      .status(errorCodes.default)
-      .send(formatErrorResponse("stock product banner not found"));
-  }
-
-  if (stockproduct) {
-    if (!isEmpty(stockproduct.banner)) {
-      removeFile(stockproduct.banner);
-    }
-  }
-
-  StockProductSliderModel.destroy({ where: { id: req.params.id } })
-    .then((result) => {
-      res.send(formatResponse("", "stock product banner deleted successfully!"));
+      .then(async (data) => {
+        let result = {
+          this: "rhaul the side ",
+          items: await ProductCollection(data, { purity_price: purity_price }),
+          total: data.length,
+        };
+        res.send(formatResponse(result, "All Products"));
+      })
+      .catch((err) => {
+        res.status(errorCodes.default).send(formatErrorResponse(err));
+      }); */
+  } else {
+    const paginatorOptions = getPaginationOptions(page, limit);
+    ProductModel.findAndCountAll({
+      order: [["id", "DESC"]],
+      offset: paginatorOptions.offset,
+      limit: paginatorOptions.limit,
+      where: conditions,
+      include: [
+        {
+          model: CategoryModel,
+          as: "category",
+          required: true,
+          where: !isEmpty(category_id) ? { id: category_id } : {},
+        },
+        {
+          model: SubCategoryModel,
+          as: "sub_category",
+          required: true,
+          where: !isEmpty(sub_category_id) ? { id: sub_category_id } : {},
+        },
+        /*{
+          model: CertificateModel,
+          as: 'certificates',
+        },*/
+        /* {
+          order:[['id', 'ASC']],
+          model: ProductMaterialModel,
+          as: 'pmaterials',
+          include: [
+            
+          ]
+        }, */
+        {
+          order: [["id", "ASC"]],
+          model: MaterialModel,
+          as: "materials",
+          include: [
+            {
+              model: UnitModel,
+              as: "unit",
+            },
+            {
+              model: PurityModel,
+              as: "purities",
+            },
+          ],
+        },
+        /*{
+          model: SizeModel,
+          as: 'sizes',
+        },
+        {
+          model: ProductTagModel,
+          as: 'tags',
+        }*/
+      ],
+      distinct: true,
     })
-    .catch((error) => {
-      return res
-        .status(errorCodes.default)
-        .send(formatErrorResponse(errorCodes.defaultErrorMsg));
-    });
+      .then(async (data) => {
+        let result = {
+          this: "find and count all",
+          items: await ProductCollection(data.rows),
+          total: data.count,
+        };
+        res.send(formatResponse(result, "Product Categories"));
+      })
+      .catch((err) => {
+        res.status(errorCodes.default).send(formatErrorResponse(err));
+      });
+  }
 };
