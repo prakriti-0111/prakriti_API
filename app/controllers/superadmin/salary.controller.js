@@ -2,6 +2,7 @@ const config = require("@config/auth.config");
 const {
   isEmpty,
   getFileAbsulatePath,
+  getFileAbsulatePathPDF,
   convertToSlug,
   removeCurrency,
   ucWords,
@@ -1411,7 +1412,7 @@ exports.download = async (req, res) => {
       formatResponse(
         {
           file_name: file_name + ".pdf",
-          url: getFileAbsulatePath(file_path),
+          url: getFileAbsulatePathPDF(file_path),
         },
         "salary pdf"
       )
