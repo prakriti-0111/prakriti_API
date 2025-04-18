@@ -12,6 +12,7 @@ const {
   getDateFromToWhere,
   priceFormat,
   getFileAbsulatePath,
+  getFileAbsulatePathPDF,
   addLog,
   displayAmount,
   weightFormat,
@@ -4855,7 +4856,7 @@ exports.downloadInvoice = async (req, res) => {
           formatResponse(
             {
               file_name: saleData.invoice_number + ".pdf",
-              url: getFileAbsulatePath(file_path),
+              url: getFileAbsulatePathPDF(file_path),
               saleData,
               payments,
             },
@@ -6250,7 +6251,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
           formatResponse(
             {
               file_name: saleData.invoice_number + "_info.pdf",
-              url: getFileAbsulatePath(file_path),
+              url: getFileAbsulatePathPDF(file_path),
               html,
               sale,
               saleData,
@@ -7735,7 +7736,7 @@ html += `                                 <tr style="
           formatResponse(
             {
               file_name: saleData.invoice_number + "_lists.pdf",
-              url: getFileAbsulatePath(file_path),
+              url: getFileAbsulatePathPDF(file_path),
               html : html,
               saleData,
               payments,
