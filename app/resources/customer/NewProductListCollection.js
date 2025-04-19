@@ -17,7 +17,6 @@ const NewProductListCollection = async (data, user_id) => {
     }else{
         let arr = [];
         for(let i = 0; i < data.length; i++){
-            data.current_image
             arr.push(await getModelObject(data[i], user_id));
         }
         return arr;
