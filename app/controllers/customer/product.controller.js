@@ -120,20 +120,6 @@ exports.index = async (req, res) => {
       }else if(is_featured == 0){
         productConditions.is_featured = false;
       }
-      if(!isEmpty(offer)){
-        try {
-          offer = offer.split(",");
-          let ids = [];
-          for(let i = 0; i < offer.length; i++){
-            if(offer[i]){
-              ids.push(offer[i].trim());
-            }
-          }
-          productConditions.id = {[Op.in]: ids};
-        } catch (error) {
-          
-        }
-      }
     
       if(best_selling == 1){
         let query = "SELECT product_id, COUNT(id) FROM order_products WHERE deleted_at IS NULL GROUP BY product_id ORDER BY COUNT(id) DESC LIMIT 10";
@@ -199,7 +185,21 @@ exports.index = async (req, res) => {
         ],
       });
     }*/
-
+    
+    if(!isEmpty(offer)){
+      try {
+        offer = offer.split(",");
+        let ids = [];
+        for(let i = 0; i < offer.length; i++){
+          if(offer[i]){
+            ids.push(offer[i].trim());
+          }
+        }
+        conditions.id = {[Op.in]: ids};
+      } catch (error) {
+        
+      }
+    }
     StockModel
       .findAndCountAll({
         order: [["id", "DESC"]],

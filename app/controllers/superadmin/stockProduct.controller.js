@@ -19,7 +19,7 @@ const {
   convertUnitToGram,
   weightFormat,
 } = require("@helpers/helper");
-const { updateOrCreate } = require("@library/common");
+const { updateOrCreate, isManager, getWorkingUserID } = require("@library/common");
 const { getPaginationOptions } = require("@helpers/paginator");
 const {
   ProductCollection,
@@ -61,19 +61,9 @@ exports.index = async (req, res) => {
   let { page, limit, all, category_id, sub_category_id, search, purity_price } =
     req.query;
   let conditions = {};
-  if (!isEmpty(category_id)) {
-    //conditions.category_id = category_id;
-  }
-  if (!isEmpty(sub_category_id)) {
-    //conditions.sub_category_id = sub_category_id;
-  }
-  if (!isEmpty(search)) {
-    //conditions.name = {[Op.like]: `%${search}%` };
-    conditions = {
-      ...conditions,
-      [Op.or]: [{ name: { [Op.like]: `%${search}%` } }, { weight: search }],
-    };
-  }
+  let userID = isManager(req)
+        ? req.userId
+        : await getWorkingUserID(req);
   if (all == 1) {
 
     let productConditions = {};
@@ -151,10 +141,11 @@ exports.index = async (req, res) => {
         distinct: true,
         //...subQueryData
       }).then(async (data) => {
+        //console.log(data.rows[0].product);
         let result = {
           this: "all current stocks ",
-          items: await StocksCollection(data),
-          total: data.length,
+          items: await StocksCollection(data.rows, userID),
+          total: data.count,
         };
         res.send(formatResponse(result, "All Current Stocks"));
       })
