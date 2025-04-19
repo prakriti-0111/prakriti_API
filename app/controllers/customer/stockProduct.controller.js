@@ -43,37 +43,9 @@ exports.index = async (req, res) => {
     orderBy = ['id', 'DESC'];
   }
 
-  if(!isEmpty(search)){
-    conditions = {...conditions, [Op.or]: [{name: {[Op.like]: `%${search}%` }}, {'$tags.tag$': {[Op.like]: `%${search}%` }}, {'$category.name$': {[Op.like]: `%${search}%` }}, {'$sub_category.name$': {[Op.like]: `%${search}%` }}]};
-  }
-
-  if(is_featured == 1){
-    conditions.is_featured = true;
-  }else if(is_featured == 0){
-    conditions.is_featured = false;
-  }
-
-  if(best_selling == 1){
-    let query = "SELECT product_id, COUNT(id) FROM order_products WHERE deleted_at IS NULL GROUP BY product_id ORDER BY COUNT(id) DESC LIMIT 10";
-    const productObj = await sequelize.query(query, { type: QueryTypes.SELECT });
-    let ids = arrayColumn(productObj, 'product_id');
-    conditions.id = {[Op.in]: ids};
-  }
-
-  if(recent_view == 1){
-    cookie_id = cookie_id || null;
-    let recentlyViews = await RecentlyViewModel.findAll({
-      where: {[Op.or]: [{user_id: req.userId}, {cookie_id: cookie_id}]},
-      group: ['product_id'],
-      attributes: ['product_id'], raw : true
-    });
-    let ids = arrayColumn(recentlyViews, 'product_id');
-    conditions.id = {[Op.in]: ids};
-  }
-
   const paginatorOptions = (page && limit) ? getPaginationOptions(page, limit) : {};
   let subQueryData = !isEmpty(search) ? {subQuery: false} : {};
-  ProductModel.findAndCountAll({ 
+  /*ProductModel.findAndCountAll({ 
     where: conditions,
     order: [orderBy],
     ...paginatorOptions,
@@ -101,11 +73,71 @@ exports.index = async (req, res) => {
     ],
     distinct: true,
     ...subQueryData
-  })
+  })*/
 
-    /*if (type == "product" || type == "return") {
+    let sizeConditions = {};
+    let stockMaterialConditions = {};
+    let _include = [
+      {
+        model: SizeModel,
+        as: "size",
+        where: sizeConditions,
+      },
+      {
+        model: StockMaterialModel,
+        as: "stockMaterials",
+        required: true,
+        where: stockMaterialConditions,
+        separate: true,
+        include: [
+          {
+            model: MaterialModel,
+            as: "material",
+          },
+          {
+            model: UnitModel,
+            as: "unit",
+          },
+          {
+            model: PurityModel,
+            as: "purity",
+          },
+        ],
+      },
+      {
+        model: UserModel,
+        as: "user",
+      },
+    ];
+    //if (type == "product" || type == "return") {
       let productConditions = {};
-      
+      if(!isEmpty(search)){
+        productConditions = {...productConditions, [Op.or]: [{name: {[Op.like]: `%${search}%` }}, {'$tags.tag$': {[Op.like]: `%${search}%` }}, {'$category.name$': {[Op.like]: `%${search}%` }}, {'$sub_category.name$': {[Op.like]: `%${search}%` }}]};
+      }
+
+      if(is_featured == 1){
+        productConditions.is_featured = true;
+      }else if(is_featured == 0){
+        productConditions.is_featured = false;
+      }
+    
+      if(best_selling == 1){
+        let query = "SELECT product_id, COUNT(id) FROM order_products WHERE deleted_at IS NULL GROUP BY product_id ORDER BY COUNT(id) DESC LIMIT 10";
+        const productObj = await sequelize.query(query, { type: QueryTypes.SELECT });
+        let ids = arrayColumn(productObj, 'product_id');
+        productConditions.id = {[Op.in]: ids};
+      }
+    
+      if(recent_view == 1){
+        cookie_id = cookie_id || null;
+        let recentlyViews = await RecentlyViewModel.findAll({
+          where: {[Op.or]: [{user_id: req.userId}, {cookie_id: cookie_id}]},
+          group: ['product_id'],
+          attributes: ['product_id'], raw : true
+        });
+        let ids = arrayColumn(recentlyViews, 'product_id');
+        productConditions.id = {[Op.in]: ids};
+      }
 
       _include.push({
         model: ProductModel,
@@ -139,7 +171,7 @@ exports.index = async (req, res) => {
           }
         ],
       });
-    } else {
+    /*} else {
       _include.push({
         model: materialModel,
         as: "material",
@@ -154,7 +186,7 @@ exports.index = async (req, res) => {
       });
     }*/
     
-    /*if(!isEmpty(offer)){
+    if(!isEmpty(offer)){
       try {
         offer = offer.split(",");
         let ids = [];
@@ -176,13 +208,13 @@ exports.index = async (req, res) => {
         include: _include,
         distinct: true,
         ...subQueryData
-      })*/
+      })
   
   .then(async (data) => {
     console.log(data.rows);
     let result = {
-      items: await ProductListCollection(data.rows, req),
-      //items: await NewProductListCollection(data.rows, req),
+      //items: await ProductListCollection(data.rows, req),
+      items: await NewProductListCollection(data.rows, req),
       total: data.count
     }
     res.send(formatResponse(result, 'Products list'));
@@ -193,6 +225,153 @@ exports.index = async (req, res) => {
   });
 
   
+};
+
+/**
+ * View Product
+ * 
+ * @param {*} req 
+ * @param {*} res 
+ */
+exports.viewNew = async (req, res) => {
+  let { slug, recently_view, cookie_id } = req.query;
+
+  let sizeConditions = {};
+  let stockMaterialConditions = {};
+  let _include = [
+    {
+      model: SizeModel,
+      as: "size",
+      where: sizeConditions,
+    },
+    {
+      model: StockMaterialModel,
+      as: "stockMaterials",
+      required: true,
+      where: stockMaterialConditions,
+      separate: true,
+      include: [
+        {
+          model: MaterialModel,
+          as: "material",
+        },
+        {
+          model: UnitModel,
+          as: "unit",
+        },
+        {
+          model: PurityModel,
+          as: "purity",
+        },
+      ],
+    },
+    {
+      model: UserModel,
+      as: "user",
+    },
+  ];
+
+  let productConditions = {};
+  /*if(!isEmpty(search)){
+    productConditions = {...productConditions, [Op.or]: [{name: {[Op.like]: `%${search}%` }}, {'$tags.tag$': {[Op.like]: `%${search}%` }}, {'$category.name$': {[Op.like]: `%${search}%` }}, {'$sub_category.name$': {[Op.like]: `%${search}%` }}]};
+  }
+
+  if(is_featured == 1){
+    productConditions.is_featured = true;
+  }else if(is_featured == 0){
+    productConditions.is_featured = false;
+  }
+  if(!isEmpty(offer)){
+    try {
+      offer = offer.split(",");
+      let ids = [];
+      for(let i = 0; i < offer.length; i++){
+        if(offer[i]){
+          ids.push(offer[i].trim());
+        }
+      }
+      productConditions.id = {[Op.in]: ids};
+    } catch (error) {
+      
+    }
+  }*/
+
+  /*if(best_selling == 1){
+    let query = "SELECT product_id, COUNT(id) FROM order_products WHERE deleted_at IS NULL GROUP BY product_id ORDER BY COUNT(id) DESC LIMIT 10";
+    const productObj = await sequelize.query(query, { type: QueryTypes.SELECT });
+    let ids = arrayColumn(productObj, 'product_id');
+    productConditions.id = {[Op.in]: ids};
+  }
+
+  if(recent_view == 1){
+    cookie_id = cookie_id || null;
+    let recentlyViews = await RecentlyViewModel.findAll({
+      where: {[Op.or]: [{user_id: req.userId}, {cookie_id: cookie_id}]},
+      group: ['product_id'],
+      attributes: ['product_id'], raw : true
+    });
+    let ids = arrayColumn(recentlyViews, 'product_id');
+    productConditions.id = {[Op.in]: ids};
+  }*/
+
+  _include.push({
+    model: ProductModel,
+    as: "product",
+    required: true,
+    where: productConditions,
+    include: [
+      {
+        model: CategoryModel,
+        as: "category",
+        required: true,
+        //where: (!isEmpty(category)) ? {slug: category} : {}
+      },
+      {
+        model: SubCategoryModel,
+        as: "sub_category",
+        required: true,
+        //where: (!isEmpty(subcategory)) ? {slug: subcategory} : {}
+      },
+      {
+        model: CertificateModel,
+        as: "certificates",
+      },
+      {
+        model: MaterialModel,
+        as: 'materials',
+        include: [
+          {
+            model: UnitModel,
+            as: 'unit',
+          },
+          {
+            model: PurityModel,
+            as: 'purities',
+          }
+        ]
+      },
+      {
+        model: TaxSlabModel,
+        as: "tax",
+      },
+      {
+        model: ProductTagModel,
+        as: 'tags',
+      }
+    ],
+  });
+  console.log("slug : ", slug);
+  const stock = await StockModel
+    .findOne({
+      where: { certificate_no: slug },
+      include: _include,
+    });
+  
+  if (!stock) {
+    return res.status(errorCodes.default).send(formatErrorResponse('Product not found'));
+  }
+  console.log("stock : ", stock.get({ plain: true}));
+  res.send(formatResponse(await NewProductDetailsCollection(stock, req), "Product details"));
 };
 
 /**
