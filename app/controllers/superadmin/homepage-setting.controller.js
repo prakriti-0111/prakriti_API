@@ -24,7 +24,7 @@ exports.index = async (req, res) => {
   let conditions = {};
   //const paginatorOptions = getPaginationOptions(page, limit);
   HomepageSettingModel.findAndCountAll({
-    order: [["id", "ASC"]],
+    order: [["order", "ASC"]],
     //offset: paginatorOptions.offset,
     //limit: paginatorOptions.limit,
     where: conditions,
@@ -76,7 +76,7 @@ exports.fetch = async (req, res) => {
 exports.update = async (req, res) => {
   let data = req.body;
   console.log("data", data);
-  let settings = await HomepageSettingModel.findAll({ });
+  let settings = await HomepageSettingModel.findAll({ order: [["order", "ASC"]] });
   if (!settings) {
     return res
       .status(errorCodes.default)
