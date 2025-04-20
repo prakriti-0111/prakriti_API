@@ -592,7 +592,7 @@ const calculateProductPrice = async (
     total_mrp_price = 0,
     total_sale_price = 0;
 
-    //console.log("materials : ", materials);
+  //console.log("materials : ", materials);
 
   for (let i = 0; i < materials.length; i++) {
     /* let materialPriceObj = await MaterialPriceModel.findOne({
@@ -620,10 +620,18 @@ const calculateProductPrice = async (
     //console.log("materials[i].material : ", materials[i].material);
     //console.log("materials[i].material.material_price.materialPricePurities : ", materials[i].material.material_price.materialPricePurities);
     //console.log(materials[i].material.material_price.materialPricePurities.filter((mpp) => mpp.purity_id == materials[i].purity_id).pop());
-    let materialPricePurity = (materials[i].material && materials[i].material.material_price && materials[i].material.material_price.materialPricePurities && materials[i].material.material_price.materialPricePurities.length)?materials[i].material.material_price.materialPricePurities.filter((mpp) => mpp.purity_id == materials[i].purity_id).pop():null;
+    let materialPricePurity =
+      materials[i].material &&
+      materials[i].material.material_price &&
+      materials[i].material.material_price.materialPricePurities &&
+      materials[i].material.material_price.materialPricePurities.length
+        ? materials[i].material.material_price.materialPricePurities
+            .filter((mpp) => mpp.purity_id == materials[i].purity_id)
+            .pop()
+        : null;
     //console.log("materialPricePurity : ", materialPricePurity);
     //if (materialPriceObj && materialPriceObj.materialPricePurities.length) {
-    if(materialPricePurity){
+    if (materialPricePurity) {
       //let materialPrice = materialPriceObj.materialPricePurities[0];
       //console.log("materials[i].material.material_price.materialPricePurities : ", materials[i].material.material_price.materialPricePurities);
       let materialPrice = materialPricePurity;
@@ -988,7 +996,7 @@ const calculateProductPriceByPurity = async (
 
 const getDistributorAdmin = async (id, state_id, fullObj) => {
   let user = await UserModel.findOne({ where: { id: id } });
-  if(!user) return null;
+  if (!user) return null;
 
   if (!state_id) {
     //let user = await UserModel.findOne({ where: { id: id } });
@@ -999,7 +1007,7 @@ const getDistributorAdmin = async (id, state_id, fullObj) => {
     //where: { state_id: state_id, role_id: getRoleId("admin") },
     where: { id: user.parent_id },
   });
-  
+
   if (fullObj) {
     return admin;
   } else {
@@ -1055,11 +1063,11 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
               include: [
                 {
                   model: MaterialPricePurityModel,
-                  as: "materialPricePurities"
-                }
-              ]
-            }
-          ]
+                  as: "materialPricePurities",
+                },
+              ],
+            },
+          ],
         },
         {
           model: UnitModel,
@@ -1068,7 +1076,7 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
         {
           model: PurityModel,
           as: "purity",
-        }
+        },
       ],
     },
   ];
@@ -1108,10 +1116,10 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
           include: [
             {
               model: MaterialPricePurityModel,
-              as: "materialPricePurities"
-            }
-          ]
-        }
+              as: "materialPricePurities",
+            },
+          ],
+        },
       ],
     });
   }
@@ -2902,6 +2910,7 @@ const getPurchaseProducts = async (params) => {
       //type: { [Op.in]: ["product", "order_purchase"] },
       user_id: { [Op.in]: managerIds },
     },
+    order: [["createdAt", "DESC"]],
     include: [
       {
         model: PurchaseProductModel,
@@ -2945,7 +2954,14 @@ const getPurchaseProducts = async (params) => {
       },
     ],
   });
-  let total_purchase_return = await PurchaseModel.sum('return_amount', { where: { user_id: { [Op.in]: managerIds }, is_approved: {[Op.ne]: 2 },  is_assigned: false, is_approval: false } });
+  let total_purchase_return = await PurchaseModel.sum("return_amount", {
+    where: {
+      user_id: { [Op.in]: managerIds },
+      is_approved: { [Op.ne]: 2 },
+      is_assigned: false,
+      is_approval: false,
+    },
+  });
 
   let items = [],
     total_amount = 0,
@@ -2959,7 +2975,6 @@ const getPurchaseProducts = async (params) => {
     for (let x = 0; x < p.purchaseProducts.length; x++) {
       let pp = p.purchaseProducts[x];
       let product = pp.product;
-      
 
       if (pp.is_return) {
         //total_return_amount += parseFloat(p.return_amount);
@@ -3040,7 +3055,10 @@ const getPurchaseProducts = async (params) => {
       let item = {
         purchase_id: p.id,
         image: image,
-        current_image:(pp.current_image==null?null:getFileAbsulatePath(pp.current_image)),
+        current_image:
+          pp.current_image == null
+            ? null
+            : getFileAbsulatePath(pp.current_image),
         name: product ? product.name : "",
         certificate_no: pp.certificate_no ?? "",
         total_weight_display: total_weight_display,
@@ -3058,7 +3076,9 @@ const getPurchaseProducts = async (params) => {
       }
       if (product && product.type == "material") {
         total_product += materialItem.length ? materialItem[0].quantity : 0;
-        total_return_product += materialItem.length ? materialItem[0].return_qty : 0;
+        total_return_product += materialItem.length
+          ? materialItem[0].return_qty
+          : 0;
       } else {
         total_product++;
         //total_return_product++;
@@ -3114,6 +3134,7 @@ const getPurchaseProductsUser = async (req, params) => {
       //type: { [Op.in]: ["product", "order_purchase"] },
       user_id: userID,
     },
+    order: [["createdAt", "DESC"]],
     include: [
       {
         model: PurchaseProductModel,
@@ -3157,7 +3178,14 @@ const getPurchaseProductsUser = async (req, params) => {
       },
     ],
   });
-  let total_purchase_return = await PurchaseModel.sum('return_amount', { where: { user_id: userID, is_approved: {[Op.ne]: 2 },  is_assigned: false, is_approval: false } });
+  let total_purchase_return = await PurchaseModel.sum("return_amount", {
+    where: {
+      user_id: userID,
+      is_approved: { [Op.ne]: 2 },
+      is_assigned: false,
+      is_approval: false,
+    },
+  });
   let items = [],
     total_amount = 0,
     total_product = 0,
@@ -3171,7 +3199,7 @@ const getPurchaseProductsUser = async (req, params) => {
       let pp = p.purchaseProducts[x];
       let product = pp.product;
       //total_return_amount += parseFloat(p.return_amount);
-      
+
       if (pp.is_return) {
         //total_return_amount += parseFloat(p.return_amount);
         total_return_product++;
@@ -3252,7 +3280,10 @@ const getPurchaseProductsUser = async (req, params) => {
       let item = {
         purchase_id: p.id,
         image: image,
-        current_image:(pp.current_image==null?null:getFileAbsulatePath(pp.current_image)),
+        current_image:
+          pp.current_image == null
+            ? null
+            : getFileAbsulatePath(pp.current_image),
         name: product ? product.name : "",
         certificate_no: pp.certificate_no ?? "",
         total_weight_display: total_weight_display,
@@ -3271,7 +3302,9 @@ const getPurchaseProductsUser = async (req, params) => {
 
       if (product && product.type == "material") {
         total_product += materialItem.length ? materialItem[0].quantity : 0;
-        total_return_product += materialItem.length ? materialItem[0].return_qty : 0;
+        total_return_product += materialItem.length
+          ? materialItem[0].return_qty
+          : 0;
       } else {
         total_product++;
         //total_return_product++;
@@ -3306,7 +3339,7 @@ const getPurchaseProductsUser = async (req, params) => {
     }
   }
   return {
-    items: items,
+    items: items.reverse(),
     total_amount: priceFormat(total_amount),
     total_return_amount: priceFormat(total_return_amount),
     total_product: total_product,
@@ -3376,8 +3409,8 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
       },
       {
         model: UserModel,
-        as: "saleBy"
-      }
+        as: "saleBy",
+      },
     ],
   });
   console.log(sales.length);
@@ -3400,15 +3433,15 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
           if (!product || product.category_id != params.category_id) {
             pushItem = false;
           }
-        } 
-        
-        if(!isEmpty(params.sub_category_id)){
+        }
+
+        if (!isEmpty(params.sub_category_id)) {
           if (!product || product.sub_category_id != params.sub_category_id) {
             pushItem = false;
           }
-        } 
-        
-        if(!isEmpty(params.sale_by)){
+        }
+
+        if (!isEmpty(params.sale_by)) {
           if (!p || p.sale_by != params.sale_by) {
             pushItem = false;
           }
@@ -3484,7 +3517,7 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
         size_name: pp.size ? pp.size.name : "",
         mrp_display: displayAmount(pp.total),
         sale_by: p.sale_by,
-        sale_by_name: p.saleBy?p.saleBy.name:""
+        sale_by_name: p.saleBy ? p.saleBy.name : "",
       };
       if (pushItem) {
         items.push(item);
@@ -3540,26 +3573,26 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
     ownUsers = [];
 
   let userID = 0;
-  if(roleId == getRoleId("superadmin")){
+  if (roleId == getRoleId("superadmin")) {
     userID = await getSuperAdminId(); // super admin (should be the first user always)
   } else {
     userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   }
 
-  if(roleId == getRoleId("superadmin")){
+  if (roleId == getRoleId("superadmin")) {
     ownUsers = await UserModel.findAll({
       attributes: ["id", "role_id"],
-      where: { own: true, parent_id:userID }
+      where: { own: true, parent_id: userID },
     });
-  } else if(roleId == getRoleId("admin")) {
+  } else if (roleId == getRoleId("admin")) {
     ownUsers = await UserModel.findAll({
       attributes: ["id", "role_id"],
-      where: { own: true, parent_id:userID  },
+      where: { own: true, parent_id: userID },
     });
   } else {
     ownUsers = await UserModel.findAll({
       attributes: ["id", "role_id"],
-      where: { parent_id:userID  },
+      where: { parent_id: userID },
     });
   }
 
@@ -3568,10 +3601,10 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
     where: { own: true, parent_id:userID  },
   }); */
 
-  if(roleId == getRoleId("superadmin")){
+  if (roleId == getRoleId("superadmin")) {
     let mansgers = await UserModel.findAll({
       attributes: ["id"],
-      where: { role_id: getRoleId("manager"), parent_id:userID },
+      where: { role_id: getRoleId("manager"), parent_id: userID },
     });
     let managerIds = arrayColumn(mansgers, "id");
     ownUserIds = ownUserIds.concat(managerIds);
@@ -3585,7 +3618,7 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
         distrIds.push(ownUsers[i].id);
       }
     }
-	
+
     let admin_distr = await UserModel.findAll({
       attributes: ["id"],
       where: {
@@ -3595,7 +3628,7 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
       },
     });
     let admin_distrIds = arrayColumn(admin_distr, "id");
-    
+
     ownUserIds = ownUserIds.concat(admin_distrIds);
     distrIds = distrIds.concat(admin_distrIds);
 
@@ -3611,7 +3644,7 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
 
     ownUserIds.push(userID);
   }
-	
+
   let se = await UserModel.findAll({
     attributes: ["id"],
     where: {
@@ -3620,19 +3653,19 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
     },
   });
   let seIds = arrayColumn(se, "id");
-  
+
   return ownUserIds.concat(seIds);
-}
+};
 
 const avlStockUserIds = async (req, roleId = null) => {
   let ownUserIds = [],
     distributor_role = getRoleId("distributor"),
     distrIds = [],
     ownUsers = [];
-    
+
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
 
-  if(roleId == getRoleId("superadmin")){
+  if (roleId == getRoleId("superadmin")) {
     ownUsers = await UserModel.findAll({
       attributes: ["id", "role_id"],
       //where: { own: true },
@@ -3640,10 +3673,10 @@ const avlStockUserIds = async (req, roleId = null) => {
   } else {
     ownUsers = await UserModel.findAll({
       attributes: ["id", "role_id"],
-      where: { own: true, parent_id:userID  },
+      where: { own: true, parent_id: userID },
     });
   }
-  
+
   for (let i = 0; i < ownUsers.length; i++) {
     ownUserIds.push(ownUsers[i].id);
     if (ownUsers[i].role_id == distributor_role) {
@@ -3651,7 +3684,7 @@ const avlStockUserIds = async (req, roleId = null) => {
     }
   }
 
-  if(roleId == getRoleId("superadmin")){
+  if (roleId == getRoleId("superadmin")) {
     let mansgers = await UserModel.findAll({
       attributes: ["id"],
       where: { role_id: getRoleId("manager") },
@@ -3660,8 +3693,8 @@ const avlStockUserIds = async (req, roleId = null) => {
     ownUserIds = ownUserIds.concat(managerIds);
     let superadminId = await getSuperAdminId(); //isManager(req) ? req.userId : await getSuperAdminId();
     ownUserIds.push(superadminId);
-  } 
-  
+  }
+
   let se = await UserModel.findAll({
     attributes: ["id"],
     where: {
@@ -3670,7 +3703,7 @@ const avlStockUserIds = async (req, roleId = null) => {
     },
   });
   let seIds = arrayColumn(se, "id");
-  
+
   return ownUserIds.concat(seIds);
 };
 
