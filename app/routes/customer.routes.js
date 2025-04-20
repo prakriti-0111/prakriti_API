@@ -7,6 +7,7 @@ const editProfileController = require("@controllers/customer/editProfile.control
 const changePasswordController = require("@controllers/customer/changePassword.controller");
 const CategoryController = require("@controllers/customer/category.controller");
 const productController = require("@controllers/customer/product.controller");
+const stockProductController = require("@controllers/customer/stockProduct.controller");
 const addressController = require("@controllers/customer/address.controller");
 const cartController = require("@controllers/customer/cart.controller");
 const orderController = require("@controllers/customer/order.controller");
@@ -29,8 +30,13 @@ module.exports = (app, express, io) => {
 
     //dashboard
     router.get("/dashboard", [], dashboardController.index);
+    // homepage settings
+    router.get("/homepagesettings", [], dashboardController.homepagesettings);
     router.get("/banners", [], dashboardController.banners);
     router.get("/promocodes", [], dashboardController.promocodes);
+    router.get("/new-arrivals", [], dashboardController.new_arrivals);
+    router.get("/festive-offers", [], dashboardController.festive_offers);
+    router.get("/stock-products-slider", [], dashboardController.stock_products_slider);
     router.get("/best-retailers", [], dashboardController.bestRetailers);
     router.get("/counts", [], dashboardController.counts);
     router.get("/next-user-name", [], dashboardController.nextUserName);
@@ -56,6 +62,10 @@ module.exports = (app, express, io) => {
     router.post("/product/price-details", [authJwt.verifyToken, authJwt.isCustomer, priceInfo], productController.productPriceInfo);
     router.get("/product/recently-view-categories", [authJwt.verifyToken, authJwt.isCustomer, priceInfo], productController.recentlyViewCategories);
 
+    // stock product
+    router.get("/stock-product", [authJwt.verifyTokenForGuest], stockProductController.index);
+    router.get("/stock-product/view", [authJwt.verifyTokenForGuest], stockProductController.viewNew); 
+
     //address
     router.get("/address", [authJwt.verifyToken, authJwt.isCustomer], addressController.index);
     router.post("/address/store", [authJwt.verifyToken, authJwt.isCustomer, AddressCreate], addressController.store);
@@ -69,6 +79,8 @@ module.exports = (app, express, io) => {
     //carts
     router.get("/carts", [authJwt.verifyTokenForGuest, authJwt.isCustomer], cartController.index);
     router.post("/carts/store", [authJwt.verifyTokenForGuest, authJwt.isCustomer, CartCreate], cartController.store);
+    router.get("/stock-carts", [authJwt.verifyTokenForGuest, authJwt.isCustomer], cartController.stockIndex);
+    router.post("/carts/store-stock", [authJwt.verifyTokenForGuest, authJwt.isCustomer, CartCreate], cartController.storeStock);
     router.post("/carts/update/:id", [authJwt.verifyTokenForGuest, authJwt.isCustomer, CartUpdate], cartController.update);
     router.post("/carts/update-size-material/:id", [authJwt.verifyTokenForGuest, authJwt.isCustomer], cartController.updateSizeMaterial);
     router.delete("/carts/delete/:id", [authJwt.verifyTokenForGuest, authJwt.isCustomer], cartController.delete);

@@ -47,10 +47,12 @@ const getModelObject = (data) => {
 
         let total_weight = '';
         if(materials.length == 1){
-            total_weight = weightFormat(materials[0].weight).toFixed(3) + ' ' + materials[0].unit_name;
+            total_weight = weightFormat(materials[0].weight).toFixed(3);
         }else{
-            total_weight = weightFormat(item.total_weight).toFixed(3) + materials[0].unit_name;
+            total_weight = weightFormat(item.total_weight).toFixed(3);
         }
+
+        let total_weight_display = total_weight + ' ' + materials[0].unit_name;
 
         total_sub_total += priceFormat(item.sub_price - item.total_discount);
 
@@ -66,6 +68,7 @@ const getModelObject = (data) => {
             size_name: item.size ? item.size.name : '',
             certificate_no: item.certificate_no,
             total_weight: total_weight,
+            total_weight_display: total_weight_display,
             subtotal_price: priceFormat(item.sub_price),
             sub_price: displayAmount(item.sub_price),
             making_charge: priceFormat(item.making_charge),
@@ -99,7 +102,7 @@ const getModelObject = (data) => {
                 let productSelected = productsCopy.splice(selectedProductIndex,1);
                 productSelected = productSelected[0]; */
                 let productSelected = products[i];
-                if(productSelected.product_name != ''){
+                if(productSelected.product_name != '' && productSelected.sub_category_id != '' && productSelected.sub_category_id != null){
                     if(productSelected.sub_category_id && typeof subCatWiseProducts[productSelected.sub_category_id] === "undefined"){
                         subCatWiseProducts[productSelected.sub_category_id] = [];
                     } 
