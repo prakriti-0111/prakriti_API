@@ -275,10 +275,10 @@ exports.store = async (req, res) => {
         data.products[i].current_image,
         "products"
       );
-      console.log(
-        "image_path________________________________________________________",
-        image_path
-      );
+      // console.log(
+      //   "image_path________________________________________________________",
+      //   image_path
+      // );
 
       let current_image =
         data.products[i].current_image == null ||
@@ -2488,7 +2488,7 @@ exports.purchaseProducts = async (req, res) => {
       ? await getPurchaseProducts(req.query)
       : await getPurchaseProductsUser(req, req.query);
 
-  res.send(formatResponse(purchaseProductsRes));
+  res.send(formatResponse(purchaseProductsRes, "all purchases product"));
 };
 
 const formatStockMaterials = (stockMaterials) => {
