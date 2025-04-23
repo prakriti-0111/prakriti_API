@@ -1750,6 +1750,7 @@ const sendEmail = (params) => {
     return new Promise(function (resolve, reject) {
       transporter.sendMail(mailOptions, function (error, info) {
         if (error) {
+          console.log("mail error: " + error.toString());
           addLog("mail error: " + error.toString());
           reject(false);
         } else {

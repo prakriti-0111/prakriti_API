@@ -41,6 +41,9 @@ module.exports = (app, express, io) => {
      //signup
      router.post("/signup", signup, signupController.signup);
 
+     //forgot password 
+     router.post("/sendpassword", [], authController.sendpassword); 
+
     //edit profile
     router.post("/edit-profile", [authJwt.verifyToken, authJwt.isCustomer, editProfile], editProfileController.editProfile);
 
