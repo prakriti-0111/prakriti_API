@@ -11,12 +11,13 @@ const {
   getDateFromToWhere,
   priceFormat,
   getFileAbsulatePath,
+  getFileAbsulatePathPDF,
   formatDateTime,
   weightFormat,
   addLog,
   convertUnitToGram,
   removeBlankZero,
-  displayAmount
+  displayAmount,
 } = require("@helpers/helper");
 const {
   updateOrCreate,
@@ -34,7 +35,7 @@ const {
   updateAdvanceAmount,
   getPurchaseProducts,
   getPurchaseProductsUser,
-  getRoleId
+  getRoleId,
 } = require("@library/common");
 const { getPaginationOptions } = require("@helpers/paginator");
 const {
@@ -83,7 +84,7 @@ const cartMaterialsModel = db.cart_materials;
 const _ = require("lodash");
 const { base64FileUpload } = require("../../helpers/upload");
 const fs = require("fs");
-const html_to_pdf = require('html-pdf-node');
+const html_to_pdf = require("html-pdf-node");
 
 /**
  * Retrieve all purchase
@@ -183,13 +184,12 @@ exports.store = async (req, res) => {
         .status(errorCodes.default)
         .send(formatErrorResponse("Invoice number is exists.")); */
 
-        /* create new invoice nummber */
-        let purchase = await PurchaseModel.findOne({
-          attributes: ["id"],
-          order: [["id", "DESC"]],
-        });
-        data.invoice_number = "RV-P-" + (purchase ? purchase.id + 1 : 1);
-
+      /* create new invoice nummber */
+      let purchase = await PurchaseModel.findOne({
+        attributes: ["id"],
+        order: [["id", "DESC"]],
+      });
+      data.invoice_number = "RV-P-" + (purchase ? purchase.id + 1 : 1);
     }
   }
 
@@ -528,7 +528,7 @@ exports.store = async (req, res) => {
   } catch (error) {
     console.log("err: " + error.toString());
     addLog("err: " + error.toString());
-    
+
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse("Purchase does not success due to some error"));
@@ -1531,7 +1531,7 @@ exports.view = async (req, res) => {
                 {
                   model: taxSlabModel,
                   as: "tax",
-                }
+                },
               ],
             },
             {
@@ -1579,7 +1579,7 @@ exports.view = async (req, res) => {
       "ascii"
     );
     req_data = JSON.parse(req_data);
-    
+
     res.send(
       formatResponse(PurchaseViewCollection(purchase), "Purchase details")
     );
@@ -2469,8 +2469,11 @@ exports.returnProducts = async (req, res) => {
 exports.purchaseProducts = async (req, res) => {
   let user = await UserModel.findByPk(req.userId);
   let superAdminRoleId = getRoleId("superadmin");
-  let purchaseProductsRes = (user.role_id == superAdminRoleId)?await getPurchaseProducts(req.query):await getPurchaseProductsUser(req, req.query);
-  
+  let purchaseProductsRes =
+    user.role_id == superAdminRoleId
+      ? await getPurchaseProducts(req.query)
+      : await getPurchaseProductsUser(req, req.query);
+
   res.send(formatResponse(purchaseProductsRes));
 };
 
@@ -2565,7 +2568,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
               {
                 model: taxSlabModel,
                 as: "tax",
-              }
+              },
             ],
           },
           {
@@ -2609,9 +2612,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
       .send(formatErrorResponse("Purchase not found"));
   }
 
-
   let purchaseData = PurchaseViewCollection(purchase);
-  
 
   let payments = await PaymentModel.findAll({
     where: {
@@ -2807,7 +2808,6 @@ exports.downloadInvoiceInfo = async (req, res) => {
             </div>
           `;
 
-  
   let html = `<!DOCTYPE html>
   <html lang="en">
       <head>
@@ -3029,8 +3029,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                           </tr>
                                       </tbody>
                                   </table>`;
-                            if(purchaseData.subCatItems.length == 0){
-                          html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+  if (purchaseData.subCatItems.length == 0) {
+    html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
                             border="0"
                             align="center" width="100%">
                             <thead style="background-color: #1E2757;">
@@ -3073,9 +3073,9 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                 </tr>
                             </thead>
                             <tbody>`;
-                        for (let i = 0; i < purchaseData.products.length; i++) {
-                          let bgTrColor = i%2==0?"#C1BDBD":"#C4BEED";
-                          html += `<tr style="background-color: ${bgTrColor}">
+    for (let i = 0; i < purchaseData.products.length; i++) {
+      let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
+      html += `<tr style="background-color: ${bgTrColor}">
                                     <td style="text-align: left;
                                         font-size: 11px;
                                         font-weight: 400;">
@@ -3085,17 +3085,15 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         font-size: 11px;
                                         font-weight: 400;font-size: 10px;">
                                         ${
-                                          purchaseData.products[i]
-                                            .product_name
-                                        } - ${purchaseData.products[i].product_code}
+                                          purchaseData.products[i].product_name
+                                        } - ${
+        purchaseData.products[i].product_code
+      }
                                     </td>
                                     <td style="text-align: left;
                                         font-size: 11px;
                                         font-weight: 400;">
-                                        ${
-                                          purchaseData.products[i]
-                                            .size_name
-                                        }
+                                        ${purchaseData.products[i].size_name}
                                     </td>
                                     <td colspan="8" style="text-align:
                                         left; font-size: 11px;
@@ -3113,10 +3111,10 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         style="border-bottom: 1px solid
                                         #1E2757; width: 300px; text-align: left;">
                                         <div style="max-width: 300px; text-align: left;">`;
-                                for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
-                                purchaseData.products[i].materials[x].amount == "₹0.00"
-                                ? null
-                                : (html += `<div style="display: flex;
+      for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
+        purchaseData.products[i].materials[x].amount == "₹0.00"
+          ? null
+          : (html += `<div style="display: flex;
                                                 flex-wrap: wrap;
                                                 justify-content: center;
                                                 margin: 0 -5px; text-align: left;">
@@ -3151,72 +3149,77 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 </div>
 
                                             </div>`);
-                                        }
+      }
 
-                                        html += `</div>
+      html += `</div>
 
 
                                             </td>
                                             <td style="border-bottom:
                                                 1px solid #1E2757;">`;
-                                            for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
-                                            html += `<div>`;
-                                            if (isEmpty(purchaseData.products[i].materials[x].discount_amount)) {
-                                            purchaseData.products[i].materials[x].amount == "₹0.00"
-                                            ? null
-                                            : (html += `-`);
-                                            } else {
-                                            html += `<span
+      for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
+        html += `<div>`;
+        if (isEmpty(purchaseData.products[i].materials[x].discount_amount)) {
+          purchaseData.products[i].materials[x].amount == "₹0.00"
+            ? null
+            : (html += `-`);
+        } else {
+          html += `<span
                                                         style="text-align:
                                                         left; font-size:
                                                         10px;
                                                         font-weight:
                                                         400;">@${removeBlankZero(
-                                                          purchaseData
-                                                            .products[
+                                                          purchaseData.products[
                                                             i
-                                                          ].materials[
-                                                            x
-                                                          ]
+                                                          ].materials[x]
                                                             .discount_percent
                                                         )}% ${
-                                              purchaseData.products[i].materials[x].discount_amount_display
-                                              }</span> 
+            purchaseData.products[i].materials[x].discount_amount_display
+          }</span> 
                                                                     <!--<span
                                                         style="text-align:
                                                         left; font-size:
                                                         10px;
                                                         font-weight:
                                                         400;">${
-                                                          purchaseData
-                                                            .products[
+                                                          purchaseData.products[
                                                             i
-                                                          ].materials[
-                                                            x
-                                                          ]
+                                                          ].materials[x]
                                                             .discount_amount_display
                                                         }</span>-->`;
-                                        }
-                                        html += `</div>`;
-                                        }
-                                        html += `</td>
+        }
+        html += `</div>`;
+      }
+      html += `</td>
                                             <td style="text-align: left;
                                                 font-size: 10px;
                                                 font-weight: 400;
                                                 border-bottom: 1px solid
                                                 #1E2757;">`;
-                                        for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
-                                        purchaseData.products[i].materials[x].amount == "₹0.00"
-                                        ? null
-                                        : (html += `<div>${purchaseData.products[i].materials[x].material_cost}</div>`);
-                                        }
-                                        html += `</td>
+      for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
+        purchaseData.products[i].materials[x].amount == "₹0.00"
+          ? null
+          : (html += `<div>${purchaseData.products[i].materials[x].material_cost}</div>`);
+      }
+      html += `</td>
                                             <td style="text-align: left;
                                                 font-size: 10px;
                                                 font-weight: 400;
                                                 border-bottom: 1px solid
                                                 #1E2757;">
-                                                ${purchaseData.products[i].making_charge}@${purchaseData.products[i].making_charge_discount?purchaseData.products[i].making_charge_discount:''}% = ${purchaseData.products[i].total_making_charge_discount?purchaseData.products[i].total_making_charge_discount:''}
+                                                ${
+                                                  purchaseData.products[i]
+                                                    .making_charge
+                                                }@${
+        purchaseData.products[i].making_charge_discount
+          ? purchaseData.products[i].making_charge_discount
+          : ""
+      }% = ${
+        purchaseData.products[i].total_making_charge_discount
+          ? purchaseData.products[i].total_making_charge_discount
+          : ""
+      }
                                             </td>
 
                                             <td style="text-align:
@@ -3224,21 +3227,30 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 font-weight: 600;
                                                 border-bottom: 1px solid
                                                 #1E2757;">
-                                                ${purchaseData.products[i].sub_price}
+                                                ${
+                                                  purchaseData.products[i]
+                                                    .sub_price
+                                                }
                                             </td>
                                             <td style="text-align:
                                                 left;font-size: 10px;
                                                 font-weight: 600;
                                                 border-bottom: 1px solid
                                                 #1E2757;">
-                                                ${purchaseData.products[i].total_discount_display}
+                                                ${
+                                                  purchaseData.products[i]
+                                                    .total_discount_display
+                                                }
                                             </td>
                                             <td style="text-align:
                                                 left;font-size: 10px;
                                                 font-weight: 400;
                                                 border-bottom: 1px solid
                                                 #1E2757;">
-                                                ${purchaseData.products[i].sub_total}
+                                                ${
+                                                  purchaseData.products[i]
+                                                    .sub_total
+                                                }
                                             </td>
                                             <td style="text-align:
                                                 left;font-size: 10px;
@@ -3252,12 +3264,15 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 font-weight: 600;
                                                 border-bottom: 1px solid
                                                 #1E2757;">
-                                                ${purchaseData.products[i].total_display}
+                                                ${
+                                                  purchaseData.products[i]
+                                                    .total_display
+                                                }
                                             </td>
 
                                         </tr>`;
-                                      }
-                                      html += `<tr style="
+    }
+    html += `<tr style="
                                             vertical-align: top;">
                                             <td colspan="6"
                                                 style="
@@ -3336,8 +3351,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         </tr> -->
                                     </tbody>
                                 </table>`;
-                              } else {
-                                html +=  `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+  } else {
+    html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
                                       border="0"
                                       align="center" width="100%">
                                       <thead style="background-color: #1E2757;">
@@ -3376,14 +3391,22 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                           </tr>
                                       </thead>
                                       <tbody>`;
-                                  for (let i = 0; i < purchaseData.subCatItems.length; i++) {
-                                    let materialNames = purchaseData.subCatItems[i].material.map((itm) => itm.name).join("<br/ >");
-                                    let materialWts = purchaseData.subCatItems[i].material.map((itm) => itm.weight.toFixed(2)).join("<br/ >");
-                                    let materialUnits = purchaseData.subCatItems[i].material.map((itm) => itm.unit).join("<br/ >");
-                                    let materialRates = purchaseData.subCatItems[i].material.map((itm) => itm.rate.toFixed(2)).join("<br/ >");
-                                    let bgTrColor = i%2==0?"#C1BDBD":"#C4BEED";
+    for (let i = 0; i < purchaseData.subCatItems.length; i++) {
+      let materialNames = purchaseData.subCatItems[i].material
+        .map((itm) => itm.name)
+        .join("<br/ >");
+      let materialWts = purchaseData.subCatItems[i].material
+        .map((itm) => itm.weight.toFixed(2))
+        .join("<br/ >");
+      let materialUnits = purchaseData.subCatItems[i].material
+        .map((itm) => itm.unit)
+        .join("<br/ >");
+      let materialRates = purchaseData.subCatItems[i].material
+        .map((itm) => itm.rate.toFixed(2))
+        .join("<br/ >");
+      let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
 
-                                    html += `<tr style="background-color: ${bgTrColor}">
+      html += `<tr style="background-color: ${bgTrColor}">
                                               <td style="text-align: left;
                                                   font-size: 14px;
                                                   font-weight: 400;">
@@ -3410,37 +3433,31 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                   font-weight: 400;">
                                                   ${
                                                     purchaseData.subCatItems[i]
-                                                      .hsn?purchaseData.subCatItems[i]
-                                                      .hsn:""
+                                                      .hsn
+                                                      ? purchaseData
+                                                          .subCatItems[i].hsn
+                                                      : ""
                                                   }
                                               </td>
                                               <td style="text-align:
                                                   left; font-size: 14px;
                                                   font-weight: 400;">
-                                                  ${
-                                                    materialNames
-                                                  }
+                                                  ${materialNames}
                                               </td>
                                               <td style="text-align:
                                                   left; font-size: 14px;
                                                   font-weight: 400;">
-                                                  ${
-                                                    materialWts
-                                                  }
+                                                  ${materialWts}
                                               </td>
                                               <td style="text-align:
                                                   left; font-size: 14px;
                                                   font-weight: 400;">
-                                                  ${
-                                                    materialUnits
-                                                  }
+                                                  ${materialUnits}
                                               </td>
                                               <td style="text-align:
                                                   left; font-size: 14px;
                                                   font-weight: 400;">
-                                                  ${
-                                                    materialRates
-                                                  }
+                                                  ${materialRates}
                                               </td>
                                               <td style="text-align:
                                                   left; font-size: 14px;
@@ -3453,16 +3470,14 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                               <td style="text-align:
                                                   left; font-size: 14px;
                                                   font-weight: 400;">
-                                                  ${
-                                                    purchaseData.subCatItems[i]
-                                                      .taxableAmount.toFixed(2)
-                                                  }
+                                                  ${purchaseData.subCatItems[
+                                                    i
+                                                  ].taxableAmount.toFixed(2)}
                                               </td>
   
                                           </tr>`;
-                                          
-  }
-  html += `<tr style="
+    }
+    html += `<tr style="
                                                       vertical-align: top;">
                                                       <td colspan="6"
                                                           style="
@@ -3541,8 +3556,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                   </tr> -->
                                               </tbody>
                                           </table>`;
-                                        }
-                                        html +=  `
+  }
+  html += `
                                           <div class="table-footer-area" style="display: table; width:
                                             100%; position:absolute ; bottom: 390px">
                                             <hr/>
@@ -3703,7 +3718,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                                       80px;font-Weight:600"></span></h4>
                                                       </div>`;
   if (purchaseData.is_same_state_trnx) {
-                                                    html += `<div>
+    html += `<div>
                                                           <h4 style="margin:
                                                               0;
                                                               text-align:
@@ -3721,7 +3736,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                                       style="max-width:
                                                                       80px;"></span></h4>
                                                       </div>`;
-                                                    html += `<div>
+    html += `<div>
                                                           <h4 style="margin:
                                                               0;
                                                               text-align:
@@ -3740,7 +3755,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                                       80px;"></span></h4>
                                                       </div>`;
   } else {
-                                                    html += `<div>
+    html += `<div>
                                                           <h4 style="margin:
                                                               0;
                                                               text-align:
@@ -3759,7 +3774,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                                       80px;"></span></h4>
                                                       </div>`;
   }
-  
+
   html += `<div>
                                                           
                                                       </div>
@@ -4134,8 +4149,6 @@ exports.downloadInvoiceInfo = async (req, res) => {
                       </div></body>
                       </html>`;*/
 
-    
-
   /*var options = {
     format: "A4",
     orientation: "portrait",
@@ -4224,36 +4237,35 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
     // Close the browser instance
     await browser.close();*/
-    /* -------------- commented by Soumalya Nandy ------------ */
+  /* -------------- commented by Soumalya Nandy ------------ */
 
-    
-
-  try{
-    let file_path = "public/invoices/" + purchaseData.invoice_number + "_tax.pdf";
-    const options = { format: 'A4' };
+  try {
+    let file_path =
+      "public/invoices/" + purchaseData.invoice_number + "_tax.pdf";
+    const options = { format: "A4" };
 
     (async () => {
-        const file = { content: html };
-    
-        // Generate PDF
-        const pdfBuffer = await html_to_pdf.generatePdf(file, options);
-        
-        // Save PDF to file
-        fs.writeFileSync(file_path, pdfBuffer);
-        console.log('PDF generated successfully!');
+      const file = { content: html };
 
-        res.send(
-          formatResponse(
-            {
-              file_name: purchaseData.invoice_number + "_tax.pdf",
-              url: getFileAbsulatePath(file_path),
-              purchase,
-              purchaseData,
-              payments,
-            },
-            "Invoice pdf"
-          )
-        );
+      // Generate PDF
+      const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+
+      // Save PDF to file
+      fs.writeFileSync(file_path, pdfBuffer);
+      console.log("PDF generated successfully!");
+
+      res.send(
+        formatResponse(
+          {
+            file_name: purchaseData.invoice_number + "_tax.pdf",
+            url: getFileAbsulatePathPDF(file_path),
+            purchase,
+            purchaseData,
+            payments,
+          },
+          "Invoice pdf"
+        )
+      );
     })();
   } catch (error) {
     return res
@@ -4266,8 +4278,8 @@ const removeCurrencyAndDecimalFromPrice = (str) => {
   //console.log("str : ", str);
   //console.log("converted str : ", String(str).replace(/[Rs.|₹]/,"").replace(/[^.]\w*$/, "").replace(/\./, ""));
   //return String(str).replace(/[Rs.|₹]/,"").replace(/[^.]\w*$/, "").replace(/\./, "");
-  return parseFloat(String(str).replace("Rs.","").replace("₹", "")).toFixed(0);
-}
+  return parseFloat(String(str).replace("Rs.", "").replace("₹", "")).toFixed(0);
+};
 
 /**
  * Download Invoice
@@ -4346,7 +4358,7 @@ exports.downloadInvoiceItems = async (req, res) => {
               {
                 model: taxSlabModel,
                 as: "tax",
-              }
+              },
             ],
           },
           {
@@ -4390,9 +4402,7 @@ exports.downloadInvoiceItems = async (req, res) => {
       .send(formatErrorResponse("Purchase not found"));
   }
 
-
   let purchaseData = PurchaseViewCollection(purchase);
-  
 
   let payments = await PaymentModel.findAll({
     where: {
@@ -4585,16 +4595,15 @@ exports.downloadInvoiceItems = async (req, res) => {
             </div>
           `;
 
+  let totalSave = 0.0;
+  let totalTagPrice = 0.0;
+  for (let i = 0; i < purchaseData.products.length; i++) {
+    totalSave += purchaseData.products[i].total_discount;
+    totalTagPrice += purchaseData.products[i].subtotal_price;
+  }
 
-let totalSave = 0.00;
-let totalTagPrice = 0.00;
-for (let i = 0; i < purchaseData.products.length; i++) {
-  totalSave += purchaseData.products[i].total_discount;
-  totalTagPrice += purchaseData.products[i].subtotal_price;
-}
-
-let totalSaveDisplay = displayAmount(totalSave);
-let totalTagPriceDisplay = displayAmount(totalTagPrice);
+  let totalSaveDisplay = displayAmount(totalSave);
+  let totalTagPriceDisplay = displayAmount(totalTagPrice);
 
   let html = `<!DOCTYPE html>
   <html lang="en">
@@ -4879,13 +4888,17 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                           </tr>
                                       </thead>
                                       <tbody>`;
-                                      for (let i = 0; i < purchaseData.products.length; i++) {
-                                        let bgTrColor = i%2==0?"#1E2757":"#1E2757";
-                                        html += `<tr style="background-color: ${bgTrColor}; color:#FFFFFF;">
+  for (let i = 0; i < purchaseData.products.length; i++) {
+    let bgTrColor = i % 2 == 0 ? "#1E2757" : "#1E2757";
+    html += `<tr style="background-color: ${bgTrColor}; color:#FFFFFF;">
                                               <td style="text-align: left;
                                                   font-size: 11px;
                                                   font-weight: 400; width: 25px;">
-                                                  ${i<10?'0'+(i + 1):(i+1)}
+                                                  ${
+                                                    i < 10
+                                                      ? "0" + (i + 1)
+                                                      : i + 1
+                                                  }
                                               </td>
                                               <td style="text-align: left;
                                                   font-size: 11px;
@@ -4894,7 +4907,10 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                     purchaseData.products[i]
                                                       .product_name
                                                   } - ${
-                                                    purchaseData.products[i].product_code?purchaseData.products[i].product_code:""}
+      purchaseData.products[i].product_code
+        ? purchaseData.products[i].product_code
+        : ""
+    }
                                               </td>
                                               <td style="text-align: left;
                                                   font-size: 11px;
@@ -4926,23 +4942,44 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                               <td colspan="2" style="border-bottom: 1px solid #1E2757; padding:0;">
                                                   
                                           `;
-                                          for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
-                                            purchaseData.products[i].materials[x].amount == "₹0.00"
-                                            ? null
-                                            : (
-                                              html += `<div style="display: flex;
+    for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
+      purchaseData.products[i].materials[x].amount == "₹0.00"
+        ? null
+        : (html += `<div style="display: flex;
                                                   margin: 5px 5px 0px 5px; text-align: left; width:150px;">
                                                   <div style="
                                                       line-height:1; text-align: left;">
                                                       <span
                                                           style="
                                                           font-size:10px;
-                                                          font-weight:400;">${purchaseData.products[i].materials[x].material_name} ${purchaseData.products[i].materials[x].pakka_weight?removeCurrencyAndDecimalFromPrice(purchaseData.products[i].materials[x].pakka_weight):removeCurrencyAndDecimalFromPrice(purchaseData.products[i].materials[x].weight)} ${purchaseData.products[i].materials[x].unit_name} x ${removeCurrencyAndDecimalFromPrice(purchaseData.products[i].materials[x].rate)}
+                                                          font-weight:400;">${
+                                                            purchaseData
+                                                              .products[i]
+                                                              .materials[x]
+                                                              .material_name
+                                                          } ${
+            purchaseData.products[i].materials[x].pakka_weight
+              ? removeCurrencyAndDecimalFromPrice(
+                  purchaseData.products[i].materials[x].pakka_weight
+                )
+              : removeCurrencyAndDecimalFromPrice(
+                  purchaseData.products[i].materials[x].weight
+                )
+          } ${
+            purchaseData.products[i].materials[x].unit_name
+          } x ${removeCurrencyAndDecimalFromPrice(
+            purchaseData.products[i].materials[x].rate
+          )}
                                                       </span>
                                                       <!-- span
                                                           style="
                                                           font-size:10px;
-                                                          font-weight:400;"> = ${purchaseData.products[i].materials[x].amount}</span -->
+                                                          font-weight:400;"> = ${
+                                                            purchaseData
+                                                              .products[i]
+                                                              .materials[x]
+                                                              .amount
+                                                          }</span -->
                                                   </div>
 
                                                   <!--div
@@ -4957,20 +4994,23 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                           left; font-size:
                                                           10px;
                                                           font-weight:
-                                                          400;"> = ${purchaseData.products[i].materials[x].amount}</span>
+                                                          400;"> = ${
+                                                            purchaseData
+                                                              .products[i]
+                                                              .materials[x]
+                                                              .amount
+                                                          }</span>
                                                   </div-->
 
-                                              </div>`
-                                            );
-                                          }
-                                          html += `
+                                              </div>`);
+    }
+    html += `
                                               </td>
                                               <td style="border-bottom:1px solid #1E2757;">`;
-                                              for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
-                                                purchaseData.products[i].materials[x].amount == "₹0.00"
-                                                ? null
-                                                : (
-                                                  html += `<div style="display: flex;
+    for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
+      purchaseData.products[i].materials[x].amount == "₹0.00"
+        ? null
+        : (html += `<div style="display: flex;
                                                       width:50px;
                                                       margin: 0px 5px 0px 0px; text-align: left;">
                                                       <div style="
@@ -4978,40 +5018,60 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                           <span
                                                               style="
                                                               font-size:10px;
-                                                              font-weight:400;"> = ${removeCurrencyAndDecimalFromPrice(purchaseData.products[i].materials[x].amount)}</span>
+                                                              font-weight:400;"> = ${removeCurrencyAndDecimalFromPrice(
+                                                                purchaseData
+                                                                  .products[i]
+                                                                  .materials[x]
+                                                                  .amount
+                                                              )}</span>
                                                       </div>
-                                                  </div>`
-                                                );
-                                              }
-                                          html += `
+                                                  </div>`);
+    }
+    html += `
                                               </td>
                                               <td style="border-bottom:1px solid #1E2757;">`;
-                                          for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
-                                            html += `<div style="width:90px;">`;
-                                            if (isEmpty(purchaseData.products[i].materials[x].discount_amount)) {
-                                              purchaseData.products[i].materials[x].amount == "₹0.00"
-                                                ? null
-                                                : (html += `-`);
-                                            } else {
-                                              html += `<span style="text-align:left; font-size:10px;font-weight:400;">
-                                                  Disc@${removeBlankZero(removeCurrencyAndDecimalFromPrice(purchaseData.products[i].materials[x].discount_percent))}% ${removeCurrencyAndDecimalFromPrice(purchaseData.products[i].materials[x].discount_amount_display)}
+    for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
+      html += `<div style="width:90px;">`;
+      if (isEmpty(purchaseData.products[i].materials[x].discount_amount)) {
+        purchaseData.products[i].materials[x].amount == "₹0.00"
+          ? null
+          : (html += `-`);
+      } else {
+        html += `<span style="text-align:left; font-size:10px;font-weight:400;">
+                                                  Disc@${removeBlankZero(
+                                                    removeCurrencyAndDecimalFromPrice(
+                                                      purchaseData.products[i]
+                                                        .materials[x]
+                                                        .discount_percent
+                                                    )
+                                                  )}% ${removeCurrencyAndDecimalFromPrice(
+          purchaseData.products[i].materials[x].discount_amount_display
+        )}
                                                 </span> 
-                                                <!--<span style="text-align:left; font-size:10px; font-weight:400;">${purchaseData.products[i].materials[x].discount_amount_display}</span>-->`;
-                                            }
-                                            html += `</div>`;
-                                          }
-                                          html += `
+                                                <!--<span style="text-align:left; font-size:10px; font-weight:400;">${
+                                                  purchaseData.products[i]
+                                                    .materials[x]
+                                                    .discount_amount_display
+                                                }</span>-->`;
+      }
+      html += `</div>`;
+    }
+    html += `
                                               </td>
                                               <td style="border-bottom: 1px solid #1E2757;">`;
-                                          for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
-                                            purchaseData.products[i].materials[x].amount == "₹0.00"
-                                              ? null
-                                              : (html += `<div style="text-align: left; font-size: 10px; font-weight: 400;
+    for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
+      purchaseData.products[i].materials[x].amount == "₹0.00"
+        ? null
+        : (html += `<div style="text-align: left; font-size: 10px; font-weight: 400;
                                                       margin-top: 5px; 
                                                       width: 40px
-                                                      line-height:1;">${removeCurrencyAndDecimalFromPrice(purchaseData.products[i].materials[x].material_cost)}</div>`);
-                                          }
-                                          html += `
+                                                      line-height:1;">${removeCurrencyAndDecimalFromPrice(
+                                                        purchaseData.products[i]
+                                                          .materials[x]
+                                                          .material_cost
+                                                      )}</div>`);
+    }
+    html += `
                                               </td>
                                               <td style="text-align: left;
                                                   padding-top: 10px;
@@ -5020,7 +5080,18 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                   width: 130px;
                                                   border-bottom: 1px solid
                                                   #1E2757;">
-                                                  ${removeCurrencyAndDecimalFromPrice(purchaseData.products[i].making_charge)}@${removeBlankZero(removeCurrencyAndDecimalFromPrice(purchaseData.products[i].making_charge_discount))}%=${removeBlankZero(removeCurrencyAndDecimalFromPrice(purchaseData.products[i].total_making_charge_discount))}
+                                                  ${removeCurrencyAndDecimalFromPrice(
+                                                    purchaseData.products[i]
+                                                      .making_charge
+                                                  )}@${removeBlankZero(
+      removeCurrencyAndDecimalFromPrice(
+        purchaseData.products[i].making_charge_discount
+      )
+    )}%=${removeBlankZero(
+      removeCurrencyAndDecimalFromPrice(
+        purchaseData.products[i].total_making_charge_discount
+      )
+    )}
                                               </td>
 
                                               <td style="text-align:left;
@@ -5030,7 +5101,10 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                   width: 70px;
                                                   border-bottom: 1px solid
                                                   #1E2757;">
-                                                  ${removeCurrencyAndDecimalFromPrice(purchaseData.products[i].sub_price)}
+                                                  ${removeCurrencyAndDecimalFromPrice(
+                                                    purchaseData.products[i]
+                                                      .sub_price
+                                                  )}
                                               </td>
                                               <td style="text-align:left;
                                                   padding-top: 10px;
@@ -5039,7 +5113,10 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                   width: 70px;
                                                   border-bottom: 1px solid
                                                   #1E2757;">
-                                                  ${removeCurrencyAndDecimalFromPrice(purchaseData.products[i].total_discount_display)}
+                                                  ${removeCurrencyAndDecimalFromPrice(
+                                                    purchaseData.products[i]
+                                                      .total_discount_display
+                                                  )}
                                               </td>
                                               <td style="text-align:left;
                                                   padding-top: 10px;
@@ -5048,7 +5125,10 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                   width: 70px;
                                                   border-bottom: 1px solid
                                                   #1E2757;">
-                                                  ${removeCurrencyAndDecimalFromPrice(purchaseData.products[i].sub_total)}
+                                                  ${removeCurrencyAndDecimalFromPrice(
+                                                    purchaseData.products[i]
+                                                      .sub_total
+                                                  )}
                                               </td>
                                               <td style="text-align:left;
                                                   padding-top: 10px;
@@ -5057,7 +5137,9 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                   width: 40px;
                                                   border-bottom: 1px solid
                                                   #1E2757;">
-                                                  ${removeCurrencyAndDecimalFromPrice(purchaseData.products[i].tax)}
+                                                  ${removeCurrencyAndDecimalFromPrice(
+                                                    purchaseData.products[i].tax
+                                                  )}
                                               </td>
                                               <td style="text-align:left;
                                                   padding-top: 10px;
@@ -5066,12 +5148,15 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                   width: 50px;
                                                   border-bottom: 1px solid
                                                   #1E2757;">
-                                                  ${removeCurrencyAndDecimalFromPrice(purchaseData.products[i].total_display)}
+                                                  ${removeCurrencyAndDecimalFromPrice(
+                                                    purchaseData.products[i]
+                                                      .total_display
+                                                  )}
                                               </td>
 
                                           </tr>`;
-                                      }
-                                html += `<tr style="
+  }
+  html += `<tr style="
                                               vertical-align: top;">
                                               <td colspan="6"
                                                   style="
@@ -5088,7 +5173,9 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                           font-weight:
                                                           600; display:
                                                           ;">
-                                                          <div>${removeCurrencyAndDecimalFromPrice(totalTagPriceDisplay)}</div></h4>
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalTagPriceDisplay
+                                                          )}</div></h4>
                                                   </div>
                                               </td>
                                               
@@ -5102,7 +5189,9 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                           font-weight:
                                                           600; display:
                                                           ;">
-                                                          <div>${removeCurrencyAndDecimalFromPrice(totalSaveDisplay)}</div></h4>
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalSaveDisplay
+                                                          )}</div></h4>
                                                   </div>
                                               </td>
                                               <td colspan="3">
@@ -5124,15 +5213,17 @@ let totalTagPriceDisplay = displayAmount(totalTagPrice);
                                                       ">
                                                           <div><input
                                                               type="text"
-                                                              value="${removeCurrencyAndDecimalFromPrice(purchaseData?.taxable_amount)}"
+                                                              value="${removeCurrencyAndDecimalFromPrice(
+                                                                purchaseData?.taxable_amount
+                                                              )}"
                                                               style="width:
                                                               80px;"></div></h4>
                                                   </div>
                                               </td>
                                           </tr>`;
 
-if(purchaseData.is_same_state_trnx){ 
-html += `                                 <tr style="
+  if (purchaseData.is_same_state_trnx) {
+    html += `                                 <tr style="
                                             vertical-align: top;">
                                             <td colspan="8"
                                                 style="
@@ -5157,7 +5248,9 @@ html += `                                 <tr style="
                                                     ">
                                                         <div><input
                                                             type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(purchaseData?.cgst_tax)}"
+                                                            value="${removeCurrencyAndDecimalFromPrice(
+                                                              purchaseData?.cgst_tax
+                                                            )}"
                                                             style="width:
                                                             80px;"></div></h4>
                                                 </div>
@@ -5188,14 +5281,16 @@ html += `                                 <tr style="
                                                     ">
                                                         <div><input
                                                             type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(purchaseData?.sgst_tax)}"
+                                                            value="${removeCurrencyAndDecimalFromPrice(
+                                                              purchaseData?.sgst_tax
+                                                            )}"
                                                             style="width:
                                                             80px;"></div></h4>
                                                 </div>
                                             </td>
                                           </tr>`;
-} else {
-html += `                                 <tr style="
+  } else {
+    html += `                                 <tr style="
                                             vertical-align: top;">
                                             <td colspan="8"
                                                 style="
@@ -5220,15 +5315,17 @@ html += `                                 <tr style="
                                                     ">
                                                         <div><input
                                                             type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(purchaseData?.igst_tax)}"
+                                                            value="${removeCurrencyAndDecimalFromPrice(
+                                                              purchaseData?.igst_tax
+                                                            )}"
                                                             style="width:
                                                             80px;"></div></h4>
                                                 </div>
                                             </td>
                                           </tr>`;
-}
+  }
 
-html += `                                 <tr style="
+  html += `                                 <tr style="
                                             vertical-align: top;">
                                             <td colspan="8"
                                                 style="
@@ -5253,7 +5350,9 @@ html += `                                 <tr style="
                                                     ">
                                                         <div><input
                                                             type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(purchaseData?.total_amount)}"
+                                                            value="${removeCurrencyAndDecimalFromPrice(
+                                                              purchaseData?.total_amount
+                                                            )}"
                                                             style="width:
                                                             80px;"></div></h4>
                                                 </div>
@@ -5284,7 +5383,9 @@ html += `                                 <tr style="
                                                     ">
                                                         <div><input
                                                             type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(purchaseData?.discount)}"
+                                                            value="${removeCurrencyAndDecimalFromPrice(
+                                                              purchaseData?.discount
+                                                            )}"
                                                             style="width:
                                                             80px;"></div></h4>
                                                 </div>
@@ -5315,7 +5416,9 @@ html += `                                 <tr style="
                                                     ">
                                                         <div><input
                                                             type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(purchaseData?.total_payable)}"
+                                                            value="${removeCurrencyAndDecimalFromPrice(
+                                                              purchaseData?.total_payable
+                                                            )}"
                                                             style="width:
                                                             80px;"></div></h4>
                                                 </div>
@@ -5346,7 +5449,9 @@ html += `                                 <tr style="
                                                     ">
                                                         <div><input
                                                             type="text"
-                                                            value="${purchaseData?.payment_mode}"
+                                                            value="${
+                                                              purchaseData?.payment_mode
+                                                            }"
                                                             style="width:
                                                             80px;"></div></h4>
                                                 </div>
@@ -5366,7 +5471,9 @@ html += `                                 <tr style="
                                                     ">
                                                         <div><input
                                                             type="text"
-                                                            value="${purchaseData?.due_date}"
+                                                            value="${
+                                                              purchaseData?.due_date
+                                                            }"
                                                             style="width:
                                                             120px;"></div></h4>
                                                 </div>
@@ -5399,7 +5506,9 @@ html += `                                 <tr style="
                                                     ">
                                                         <div><input
                                                             type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(purchaseData?.paid_amount_display)}"
+                                                            value="${removeCurrencyAndDecimalFromPrice(
+                                                              purchaseData?.paid_amount_display
+                                                            )}"
                                                             style="width:
                                                             80px;"></div></h4>
                                                 </div>
@@ -5452,14 +5561,16 @@ html += `                                 <tr style="
                                                     ">
                                                         <div><input
                                                             type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(purchaseData?.due_amount_display)}"
+                                                            value="${removeCurrencyAndDecimalFromPrice(
+                                                              purchaseData?.due_amount_display
+                                                            )}"
                                                             style="width:
                                                             80px;"></div></h4>
                                                 </div>
                                             </td>
                                         </tr>`;
-                                    
-                                      html += ` <tr style="
+
+  html += ` <tr style="
                                                     vertical-align: top;">
                                                     
                                                     <td colspan="11"
@@ -5675,8 +5786,6 @@ html += `                                 <tr style="
                       </div></body>
                       </html>`;*/
 
-    
-
   /*var options = {
     format: "A4",
     orientation: "portrait",
@@ -5765,35 +5874,36 @@ html += `                                 <tr style="
 
     // Close the browser instance
     await browser.close();*/
-    /* -------------- commented by Soumalya Nandy ------------ */
+  /* -------------- commented by Soumalya Nandy ------------ */
 
-  try{
-    let file_path = "public/invoices/" + purchaseData.invoice_number + "_lists.pdf";
-    const options = { format: 'A4' };
+  try {
+    let file_path =
+      "public/invoices/" + purchaseData.invoice_number + "_lists.pdf";
+    const options = { format: "A4" };
 
     (async () => {
-        const file = { content: html };
-    
-        // Generate PDF
-        const pdfBuffer = await html_to_pdf.generatePdf(file, options);
-        
-        // Save PDF to file
-        fs.writeFileSync(file_path, pdfBuffer);
-        console.log('PDF generated successfully!');
+      const file = { content: html };
 
-        res.send(
-          formatResponse(
-            {
-              file_name: purchaseData.invoice_number + "_lists.pdf",
-              url: getFileAbsulatePath(file_path),
-              purchaseData,
-              payments,
-            },
-            "Invoice pdf"
-          )
-        );
+      // Generate PDF
+      const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+
+      // Save PDF to file
+      fs.writeFileSync(file_path, pdfBuffer);
+      console.log("PDF generated successfully!");
+
+      res.send(
+        formatResponse(
+          {
+            file_name: purchaseData.invoice_number + "_lists.pdf",
+            url: getFileAbsulatePathPDF(file_path),
+            purchaseData,
+            payments,
+          },
+          "Invoice pdf"
+        )
+      );
     })();
-    
+
     /*const doc = new jsPDF();
     doc.html(html, {
         callback: (pdf) => {
@@ -5813,8 +5923,6 @@ html += `                                 <tr style="
             );
         },
     });*/
-
-    
   } catch (error) {
     return res
       .status(errorCodes.default)

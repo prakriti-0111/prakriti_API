@@ -13,9 +13,8 @@ const StocksCollection = async (data, user_id) => {
     if(isObject(data)){
         return await getModelObject(data, user_id);
     }else{
-        let arr = [];
+        let arr = []; 
         for(let i = 0; i < data.length; i++){
-            data.current_image
             arr.push(await getModelObject(data[i], user_id));
         }
         return arr;
@@ -23,7 +22,7 @@ const StocksCollection = async (data, user_id) => {
 }
 
 const getModelObject = async (data, user_id) => {
-    // console.log("-----data get modal object ",data)
+    //console.log("-----data get modal object ",data)
     let materialItem = [], materialString = [];
     let taxInfo = null;
     if('tax' in data.product && data.product.tax){
@@ -34,7 +33,7 @@ const getModelObject = async (data, user_id) => {
             igst: parseFloat(data.product.tax.igst),
         }
     }
-
+    
     let priceMaterials = await calculateProductPriceCart(data.stockMaterials, data.product.sub_category, data.product.type == "material", 'admin', taxInfo);
     let weight_display = [], unit_display = [], purity_display = [];
     for(let item of data.stockMaterials){
@@ -59,19 +58,19 @@ const getModelObject = async (data, user_id) => {
         unit_display.push((item.unit ? item.unit.name : '-'));
         purity_display.push((item.purity ? item.purity.name : '-'));
     }
-
+    
     let productDetails = StockProductCollection(data.product);
     let total_weight_display = '';
     if(materialItem.length == 1){
-        total_weight_display = weightFormat(materialItem[0].weight) + ' , ' + materialItem[0].unit_name;
+        total_weight_display = weightFormat(materialItem[0].weight) + ' ' + materialItem[0].unit_name;
     }else{
-        total_weight_display = weightFormat(data.total_weight) + ', gm';
+        total_weight_display = weightFormat(data.total_weight) + ' gm';
     }
-
+    
     let can_add_cart = await canStockAddCart(data.id, data.product.type, user_id);
     let stock_user_name = data.user ? (data.user.company_name ? data.user.company_name : data.user.name) : '';
-
-    // console.log(productDetails)
+    
+    //console.log(productDetails);
 
     return {
         ...productDetails,
