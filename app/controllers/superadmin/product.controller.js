@@ -29,7 +29,9 @@ const {
 } = require("@resources/superadmin/CategoryCollection");
 const { Op } = require("sequelize");
 const order = require("../../../models/order");
+const { add } = require("lodash");
 const sequelize = db.sequelize;
+const UserModel = db.users;
 const ProductModel = db.products;
 const ProductMaterialModel = db.product_materials;
 const ProductSizeModel = db.product_sizes;
@@ -70,6 +72,16 @@ exports.index = async (req, res) => {
       [Op.or]: [{ name: { [Op.like]: `%${search}%` } }, { weight: search }],
     };
   }
+
+  /* check for manager/worker and other roles */
+  if(![1, 2, 3, 4, 5, 6, 7, 8, 11].includes(req.role)){
+    let addedBy = req.userId;
+    conditions = {
+      ...conditions,
+      added_by: addedBy,
+    };
+  }
+
   if (all == 1) {
     ProductModel.findAll({
       order: [["name", "DESC"]],
@@ -121,6 +133,10 @@ exports.index = async (req, res) => {
         {
           model: CertificateModel,
           as: "certificates",
+        },
+        {
+          model: UserModel,
+          as: "addedBy",
         },
       ],
     })
@@ -190,6 +206,10 @@ exports.index = async (req, res) => {
           model: ProductTagModel,
           as: 'tags',
         }*/
+        {
+          model: UserModel,
+          as: "addedBy",
+        },
       ],
       distinct: true,
     })
@@ -308,6 +328,7 @@ exports.store = async (req, res) => {
         weight = weightFormat(weight);
       }
       let productData = {
+        added_by: req.userId,
         category_id: data.category_id,
         sub_category_id: data.sub_category_id,
         name: data.name,
@@ -452,6 +473,10 @@ exports.view = async (req, res) => {
         model: ProductTagModel,
         as: "tags",
         separate: true,
+      },
+      {
+        model: UserModel,
+        as: "addedBy",
       },
     ],
   });
