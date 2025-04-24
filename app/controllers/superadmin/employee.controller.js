@@ -273,7 +273,7 @@ exports.store = async (req, res) => {
     }
   }
 
-  let parent_id = "parent_id" in data && data.parent_id ? data.parent_id : null;
+  let parent_id = "parent_id" in data && data.parent_id ? data.parent_id : req.userId;
   let branch_name =
     "branch_name" in data && data.branch_name ? data.branch_name : null;
 
