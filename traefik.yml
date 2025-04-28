@@ -1,0 +1,23 @@
+http:
+  routers:
+    prod-prakriti-api-kwlgpq-router-25:
+      rule: Host(`api.prakriti.one`)
+      service: prod-prakriti-api-kwlgpq-service-25
+      middlewares:
+        - redirect-to-https
+      entryPoints:
+        - web
+    prod-prakriti-api-kwlgpq-router-websecure-25:
+      rule: Host(`api.prakriti.one`)
+      service: prod-prakriti-api-kwlgpq-service-25
+      middlewares: []
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+  services:
+    prod-prakriti-api-kwlgpq-service-25:
+      loadBalancer:
+        servers:
+          - url: http://prod-prakriti-api-kwlgpq:9090
+        passHostHeader: true

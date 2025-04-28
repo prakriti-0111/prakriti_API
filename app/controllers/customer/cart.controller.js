@@ -115,6 +115,100 @@ exports.index = async (req, res) => {
 }
 
 /**
+ * Retrieve all Cart
+ * @param req
+ * @param res
+ */
+exports.stockIndex = async (req, res) => {
+  let {cookie_id} = req.query;
+
+  let user_id = req.userId || null;
+  cookie_id = cookie_id || null;
+  let conditions = {};
+  if(user_id){
+    conditions.user_id = user_id;
+  }else{
+    conditions.cookie_id = cookie_id;
+  }
+  // let conditions = {[Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]};
+  cartsModel.findAndCountAll({ 
+    order:[['id', 'ASC']],
+    where: conditions,
+    include: [
+      {
+        model: cartMaterialsModel,
+        as: 'cartMaterial',
+        separate: true,
+        include:[
+          {
+            model: materialModel,
+            as:'material'
+          },
+          {
+            model: UnitModel,
+            as:'unit'
+          },
+          {
+            model: PurityModel,
+            as:'purity'
+          }
+        ]
+      },
+      {
+        model: productModel,
+        as: 'product',
+        include:[
+          {
+            model: SubCategoryModel,
+            as: 'sub_category',
+            required: true
+          },
+          {
+            model: TaxSlabModel,
+            as: 'tax',
+          }
+        ]
+      },
+      {
+        model: sizeModel,
+        as: 'size'
+      }
+    ]
+  }).then(async (data) => {
+    let result = {
+      items: await CartCollection(data.rows, req.role),
+      total: data.rows.length,
+    }
+
+    let item_total = 0, total_payable = 0, promocode_discount = 0, promocode = '', total_discount = 0, original_price = 0;
+    for(let i = 0; i < result.items.length; i++){
+      item_total += result.items[i].total_price;
+      if(!isEmpty(result.items[i].promocode)){
+        promocode = result.items[i].promocode;
+        promocode_discount = parseFloat(result.items[i].promocode_discount);
+      }
+      total_discount += result.items[i].total_discount;
+      original_price += result.items[i].total_price_without_dis;
+    }
+    total_payable = Math.round(priceFormat(item_total - promocode_discount));
+    result.item_total = priceFormat(item_total);
+    result.item_total_display = displayAmount(item_total);
+    result.promocode = promocode;
+    result.promocode_discount = promocode_discount;
+    result.promocode_discount_display = displayAmount(promocode_discount);
+    result.total_payable = total_payable;
+    result.total_payable_display = displayAmount(total_payable);
+    result.original_price = displayAmount(original_price);
+      result.total_discount = displayAmount(total_discount);
+
+    res.send(formatResponse(result, 'carts'));
+  })
+  .catch(err => {
+    res.status(errorCodes.default).send(formatErrorResponse(err));
+  });
+}
+
+/**
  * Create Cart
  * 
  * @param {*} req 
@@ -130,6 +224,7 @@ exports.store = async (req, res) => {
   let quantity = 'quantity' in data && data.quantity ? parseInt(data.quantity) : 1;
   let is_manual = 'is_manual' in data && data.is_manual == 1 ? true : false;
   let cart = await cartsModel.findOne({where: {product_id: data.product_id, size_id: data.size_id, [Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]}});
+  //let cart = await cartsModel.findOne({where: {certificate_no: data.certificate_no, size_id: data.size_id, [Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]}});
   let isCartUpdated = false;
   if(cart){
 
@@ -158,7 +253,8 @@ exports.store = async (req, res) => {
       if(cart.is_manual){
         let cartMaterial = await cartMaterialsModel.findOne({where: {cart_id: cart.id}});
         if(cartMaterial){
-          await cartMaterialsModel.update({quantity: quantity, weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });
+          //await cartMaterialsModel.update({quantity: quantity, weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });
+          await cartMaterialsModel.update({quantity: parseInt(data.materials[0].quantity), weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });
         }
       }
       isCartUpdated = true;
@@ -169,6 +265,7 @@ exports.store = async (req, res) => {
     let cart = await cartsModel.create({
       product_id: data.product_id,
       stock_id: null,
+      current_image: null,
       user_id: user_id,
       cookie_id: cookie_id,
       quantity: quantity,
@@ -195,7 +292,89 @@ exports.store = async (req, res) => {
   res.send(formatResponse([], "Product added to cart successfully!"));
 }
 
-    
+/**
+ * Create Cart
+ * 
+ * @param {*} req 
+ * @param {*} res 
+ */
+exports.storeStock = async (req, res) => {
+  let data = req.body;
+  const maxEachProductQty = 10;
+
+  //check if cart is exists
+  let user_id = req.userId || null;
+  let cookie_id = data.cookie_id;
+  let quantity = 'quantity' in data && data.quantity ? parseInt(data.quantity) : 1;
+  let is_manual = 'is_manual' in data && data.is_manual == 1 ? true : false;
+  //let cart = await cartsModel.findOne({where: {product_id: data.product_id, size_id: data.size_id, [Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]}});
+  let cart = await cartsModel.findOne({where: {certificate_no: data.certificate_no, size_id: data.size_id, [Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]}});
+  let isCartUpdated = false;
+  if(cart){
+
+    //check if cart metarials is match
+    let isMaterialsMatch = true;
+    for(let i = 0; i < data.materials.length; i++){
+      let cartMaterial = await cartMaterialsModel.findOne({
+        where: {
+          cart_id: cart.id, 
+          material_id: data.materials[i].material_id,
+          purity_id: data.materials[i].purity_id
+        }
+      });
+      if(!cartMaterial){
+        isMaterialsMatch = false;
+      }
+    }
+
+    if(isMaterialsMatch){
+
+      if(parseInt(cart.quantity) == maxEachProductQty){
+        return res.status(errorCodes.default).send(formatErrorResponse("You can't add more than " + maxEachProductQty + "."));
+      }
+
+      await cartsModel.update({quantity: cart.is_manual ? quantity : (parseInt(cart.quantity) + quantity)}, { where: { id: cart.id} });
+      if(cart.is_manual){
+        let cartMaterial = await cartMaterialsModel.findOne({where: {cart_id: cart.id}});
+        if(cartMaterial){
+          //await cartMaterialsModel.update({quantity: quantity, weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });
+          await cartMaterialsModel.update({quantity: parseInt(data.materials[0].quantity), weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });
+        }
+      }
+      isCartUpdated = true;
+    }
+  }
+
+  if(!isCartUpdated){
+    let cart = await cartsModel.create({
+      product_id: data.product_id,
+      stock_id: data.stock_id,
+      current_image: data.current_image,
+      user_id: user_id,
+      cookie_id: cookie_id,
+      quantity: quantity,
+      total_weight: data.total_weight,
+      size_id: data.size_id,
+      rate: priceFormat(data.rate),
+      certificate_no: 'certificate_no' in data ? data.certificate_no : null,
+      is_manual: is_manual
+    });
+
+    for(let x = 0; x < data.materials.length; x++){
+      let material = data.materials[x];
+      await cartMaterialsModel.create({
+        cart_id: cart.id,
+        material_id: material.material_id,
+        purity_id: material.purity_id,
+        weight: material.weight,
+        unit_id: material.unit_id,
+        quantity: material.quantity
+      });
+    }
+  }
+
+  res.send(formatResponse([], "Product added to cart successfully!"));
+}    
 
 
  /**

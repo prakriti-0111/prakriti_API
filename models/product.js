@@ -60,9 +60,15 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "product_id",
         as: "tags"
       });
+
+      this.belongsTo(models.users, {
+        foreignKey: "added_by",
+        as: "addedBy"
+      });
     }
   }
   product.init({
+    added_by: DataTypes.INTEGER,
     name: DataTypes.STRING,
     slug: DataTypes.STRING,
     type: DataTypes.STRING,
