@@ -383,9 +383,8 @@ exports.update = async (req, res) => {
     }
   }
 
-  if(Array.isArray(oldFiles)){
-    documents = [...documents, ...oldFiles];
-  }
+  documents = [...documents, ...oldFiles];
+  
 
   let user_name = admin.user_name;
   if(isEmpty(user_name)){
