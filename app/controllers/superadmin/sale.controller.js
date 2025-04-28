@@ -4923,17 +4923,17 @@ exports.downloadInvoice = async (req, res) => {
       fs.writeFileSync(file_path, pdfBuffer);
       console.log("PDF generated successfully!");
 
-      res.send(
-        formatResponse(
-          {
-            file_name: saleData.invoice_number + ".pdf",
-            url: getFileAbsulatePathPDF(file_path),
-            saleData,
-            payments,
-          },
-          "Invoice pdf"
-        )
-      );
+        res.send(
+          formatResponse(
+            {
+              file_name: saleData.invoice_number + ".pdf",
+              url: getFileAbsulatePathPDF(file_path),
+              saleData,
+              payments,
+            },
+            "Invoice pdf"
+          )
+        );
     })();
 
     /*const doc = new jsPDF();
@@ -6294,19 +6294,19 @@ exports.downloadInvoiceInfo = async (req, res) => {
       fs.writeFileSync(file_path, pdfBuffer);
       console.log("PDF generated successfully!");
 
-      res.send(
-        formatResponse(
-          {
-            file_name: saleData.invoice_number + "_info.pdf",
-            url: getFileAbsulatePathPDF(file_path),
-            html,
-            sale,
-            saleData,
-            payments,
-          },
-          "Invoice pdf"
-        )
-      );
+        res.send(
+          formatResponse(
+            {
+              file_name: saleData.invoice_number + "_info.pdf",
+              url: getFileAbsulatePathPDF(file_path),
+              html,
+              sale,
+              saleData,
+              payments,
+            },
+            "Invoice pdf"
+          )
+        );
     })();
   } catch (error) {
     return res
@@ -7873,18 +7873,18 @@ exports.downloadInvoiceItems = async (req, res) => {
       fs.writeFileSync(file_path, pdfBuffer);
       console.log("PDF generated successfully!");
 
-      res.send(
-        formatResponse(
-          {
-            file_name: saleData.invoice_number + "_lists.pdf",
-            url: getFileAbsulatePathPDF(file_path),
-            html: html,
-            saleData,
-            payments,
-          },
-          "Invoice pdf"
-        )
-      );
+        res.send(
+          formatResponse(
+            {
+              file_name: saleData.invoice_number + "_lists.pdf",
+              url: getFileAbsulatePathPDF(file_path),
+              html : html,
+              saleData,
+              payments,
+            },
+            "Invoice pdf"
+          )
+        );
     })();
 
     /*const doc = new jsPDF();
