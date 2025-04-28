@@ -195,7 +195,7 @@ exports.index = async (req, res) => {
 exports.store = async (req, res) => {
   // console.log("------------this data is purchases",req)
   let data = req.body;
-  console.log(data);
+  // console.log(data);
   if (!isEmpty(data.invoice_number)) {
     let purchaseData = await PurchaseModel.findOne({
       where: { invoice_number: data.invoice_number },
@@ -267,7 +267,7 @@ exports.store = async (req, res) => {
     let current_image =
       data.current_image == undefined
         ? null
-        : `${base64FileUpload(data.current_image, "products").path}`;
+        : `${(await base64FileUpload(data.current_image, "products")).path}`;
 
     // console.log("current image is the ",current_image)
 
@@ -302,13 +302,20 @@ exports.store = async (req, res) => {
     for (let i = 0; i < data.products.length; i++) {
       let thisItem = data.products[i];
       // console.log("--data.product[0].current_image",data.products[i].current_image)
+      let image_path = await base64FileUpload(
+        data.products[i].current_image,
+        "products"
+      );
+      // console.log(
+      //   "image_path________________________________________________________",
+      //   image_path
+      // );
+
       let current_image =
         data.products[i].current_image == null ||
         data.products[i].current_image === undefined
           ? null
-          : `${
-              base64FileUpload(data.products[i].current_image, "products").path
-            }`;
+          : `${image_path.path}`;
       // console.log(current_image)
       // console.log("----------current image ",current_image )
       let worker_id = thisItem.worker_id || null;
@@ -326,6 +333,11 @@ exports.store = async (req, res) => {
         tax: priceFormat(thisItem.tax),
         total: priceFormat(thisItem.total),
       };
+
+      console.log(
+        "thisObj_________________________________________________________________________________",
+        thisObj
+      );
 
       let purchaseProduct = await PurchaseProductModel.create(thisObj);
       req_data.products[i].id = purchaseProduct.id;
@@ -1181,13 +1193,15 @@ exports.statuschange = async (req, res) => {
                   stock = result.item;
                 } else {
                   // console.log("----else Stock 888",req_data.products[0].current_image)
+                  let current_image_path = await base64FileUpload(
+                    req_data.products[i].current_image,
+                    "products"
+                  );
+
                   stock = await StockModel.create(
                     {
                       purchase_id: purchase.id,
-                      current_image: base64FileUpload(
-                        req_data.products[i].current_image,
-                        "products"
-                      ).path,
+                      current_image: current_image_path.path,
                       purchase_product_id: thisItem.id,
                       product_id: thisItem.product_id,
                       size_id: thisItem.size_id || null,
@@ -2513,7 +2527,7 @@ exports.purchaseProducts = async (req, res) => {
       ? await getPurchaseProducts(req.query)
       : await getPurchaseProductsUser(req, req.query);
 
-  res.send(formatResponse(purchaseProductsRes));
+  res.send(formatResponse(purchaseProductsRes, "all purchases product"));
 };
 
 const formatStockMaterials = (stockMaterials) => {
