@@ -130,7 +130,7 @@ const removeFile = (filepath) => {
   }
 };
 
-const filterFilesFromRemove = async (files, removeFiles) => {
+const filterFilesFromRemove = (files, removeFiles) => {
   // console.log("filterFilesFromRemove  file ---", files);
   // console.log("filterFilesFromRemove removeFiles ---", removeFiles);
   if (isArray(files) && isArray(removeFiles)) {
@@ -138,7 +138,7 @@ const filterFilesFromRemove = async (files, removeFiles) => {
     for (let i = 0; i < files.length; i++) {
       let isRemove = false;
       for (let x = 0; x < removeFiles.length; x++) {
-        if (files[i].file_name == (await removeFiles[x].file_name)) {
+        if (files[i].file_name == (removeFiles[x].file_name)) {
           isRemove = true;
           break;
         }
