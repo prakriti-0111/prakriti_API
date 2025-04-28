@@ -219,3 +219,50 @@ exports.existingUser = async (req, res) => {
   
   res.send(formatResponse(''));
 }
+
+exports.sendpassword = async (req, res) => {
+  let customerRoleId = getRoleId('customer');
+  let sales_executiveRoleId = getRoleId('sales_executive');
+  let retailerRoleId = getRoleId('retailer');
+  const user = await UserModel.findOne({
+    where: { 
+      mobile: req.body.mobile,
+      role_id: {[Op.in]: [customerRoleId, sales_executiveRoleId, retailerRoleId]}
+    }
+  });
+  console.log("user.email : ", user.email);
+  if (! user) {
+    return res.send(formatErrorResponse(config.validationMessages.usernameNotFound));
+  }
+
+  let new_password = Math.floor(1000 + Math.random() * 9000);
+
+  let data = {
+    password: bcrypt.hashSync(new_password+"", 8)
+  }
+  console.log("update data : ", data);
+  UserModel.update(data, { where: { id: user.id } }).then(async (result) => {
+    console.log("result : ", result);
+    //res.send(formatResponse("", 'Password changed successfully!'));
+    let message = `
+      <h2>New Password:</h2>
+      <h5>Mobile: <b>${user.mobile}</b></h5>
+      <h5>Email: <b>${user.email}</b></h5>
+      <h5>Password: <b>${new_password+""}</b></h5>
+    `;
+    try {
+        let emailResult = await sendEmail({to: user.email, subject: 'New Password', message: message});
+        console.log("emailResult : ", emailResult);
+        if(!emailResult){
+            return res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+        }
+    } catch (error) {
+      console.log("error : ", error);
+        return res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    }
+
+    res.send(formatResponse("", "New Password sent successfully send to "+user.email+"!"));
+  }).catch(error => {
+    return res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+  });
+}

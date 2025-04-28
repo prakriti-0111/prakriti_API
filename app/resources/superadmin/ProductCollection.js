@@ -175,6 +175,7 @@ const getModelObject = async(data, params) => {
         category_id: data.category_id,
         sub_category_id: data.sub_category_id,
         name: data.name,
+        added_by_name: data.addedBy ? data.addedBy.name : '',
         tax_rate_id: data.tax_rate_id,
         product_code: data.product_code,
         certificate_id: data.certificate_id,

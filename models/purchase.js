@@ -20,6 +20,11 @@ module.exports = (sequelize, DataTypes) => {
         as: "purchaseBy"
       });
 
+      this.belongsTo(models.users, {
+        foreignKey: "added_by",
+        as: "addedBy"
+      });
+
       this.hasMany(models.purchase_products, {
         foreignKey: {
           name: 'purchase_id',
@@ -33,6 +38,7 @@ module.exports = (sequelize, DataTypes) => {
   Purchase.init({
     supplier_id: DataTypes.INTEGER,
     user_id: DataTypes.INTEGER,
+    added_by: DataTypes.INTEGER,
     sale_id: DataTypes.INTEGER,
     return_id: DataTypes.INTEGER,
     invoice_number: DataTypes.STRING,

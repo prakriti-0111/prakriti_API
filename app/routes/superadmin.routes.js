@@ -92,7 +92,7 @@ const bannerController = require("@controllers/superadmin/banner.controller");
 const promocodeController = require("@controllers/superadmin/promocode.controller");
 const newArrivalController = require("@controllers/superadmin/new-arrival.controller");
 const festiveOffersController = require("@controllers/superadmin/festiveOffer.controller");
-const stockProductController = require("@controllers/superadmin/stockProduct.controller");
+const stockProductSliderController = require("@controllers/superadmin/stockProductSlider.controller");
 const myPerformanceController = require("@controllers/superadmin/myPerformance.controller");
 const searchController = require("@controllers/superadmin/search.controller");
 const returnOrderController = require("@controllers/superadmin/returnOrder.controller");
@@ -100,6 +100,8 @@ const holidayController = require("@controllers/superadmin/holiday.controller");
 const stockMaterialHistoryController = require("@controllers/superadmin/stockMaterialHistory.controller");
 const salaryController = require("@controllers/superadmin/salary.controller");
 const subscriberController = require("@controllers/superadmin/subscriber.controller");
+const homepageSettingController = require("@controllers/superadmin/homepage-setting.controller");
+const productStockController = require("@controllers/superadmin/stockProduct.controller");
 
 module.exports = (app, express, io) => {
   var router = express.Router();
@@ -685,6 +687,12 @@ module.exports = (app, express, io) => {
     "/product/delete/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     productController.delete
+  );
+
+  router.get(
+    "/stock-product",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    productStockController.index
   );
 
   //sizes
@@ -1382,27 +1390,39 @@ module.exports = (app, express, io) => {
   router.get(
     "/stockproducts",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
-    stockProductController.index
+    stockProductSliderController.index
   );
   router.post(
     "/stockproducts/store",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
-    stockProductController.store
+    stockProductSliderController.store
   );
   router.post(
     "/stockproducts/update/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
-    stockProductController.update
+    stockProductSliderController.update
   );
   router.get(
     "/stockproducts/fetch/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
-    stockProductController.fetch
+    stockProductSliderController.fetch
   );
   router.delete(
     "/stockproducts/delete/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
-    stockProductController.delete
+    stockProductSliderController.delete
+  );
+
+  // homepage settings
+  router.get(
+    "/homepagesettings",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    homepageSettingController.index
+  );
+  router.post(
+    "/homepagesettings/update",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    homepageSettingController.update
   );
   
   //my performance

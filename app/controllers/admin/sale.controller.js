@@ -13,6 +13,7 @@ const {
   displayAmount,
   addLog,
   getFileAbsulatePath,
+  getFileAbsulatePathPDF,
   weightFormat,
 } = require("@helpers/helper");
 const { updateOrCreate, removeMaterialFromStock } = require("@library/common");
@@ -1859,7 +1860,7 @@ exports.downloadInvoice = async (req, res) => {
         formatResponse(
           {
             file_name: saleData.invoice_number + ".pdf",
-            url: getFileAbsulatePath(file_path),
+            url: getFileAbsulatePathPDF(file_path),
             image_url: logoUrl,
           },
           "Invoice pdf"
@@ -3221,7 +3222,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
           formatResponse(
             {
               file_name: saleData.invoice_number + "_info.pdf",
-              url: getFileAbsulatePath(file_path),
+              url: getFileAbsulatePathPDF(file_path),
               html,
               sale,
               saleData,
@@ -4700,7 +4701,7 @@ exports.downloadInvoiceItems = async (req, res) => {
           formatResponse(
             {
               file_name: saleData.invoice_number + "_lists.pdf",
-              url: getFileAbsulatePath(file_path),
+              url: getFileAbsulatePathPDF(file_path),
               html : html,
               saleData,
               payments,

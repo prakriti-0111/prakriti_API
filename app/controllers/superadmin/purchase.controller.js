@@ -109,6 +109,17 @@ exports.index = async (req, res) => {
   is_assigned = is_assigned === undefined ? false : true;
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let addedBy = userID;
+  let isAddedByUser = false;
+  /* check for manager/worker and other roles */
+  if(![1, 2, 3, 4, 5, 6, 7, 8, 11].includes(req.role)){
+    addedBy = req.userId;
+    isAddedByUser = true;
+    /* check parent and assign as user id */
+    let user = await UserModel.findByPk(addedBy);
+    userID = user.parent_id;
+  }
+  console.log("userID : ",userID);
   let conditions = { type: { [Op.ne]: "order_purchase" } };
   if (all_purchase == 1) {
     conditions = {
@@ -118,11 +129,20 @@ exports.index = async (req, res) => {
       sale_id: { [Op.is]: null },
     };
   } else {
-    conditions = {
-      user_id: userID,
-      is_assigned: is_assigned,
-      is_approval: is_approval,
-    };
+    if(isAddedByUser){
+      conditions = {
+        //user_id: userID,
+        added_by: addedBy,
+        is_assigned: is_assigned,
+        is_approval: is_approval,
+      };
+    } else {
+      conditions = {
+        user_id: userID,
+        is_assigned: is_assigned,
+        is_approval: is_approval,
+      };
+    }
   }
 
   if (status !== undefined && status != "") {
@@ -154,6 +174,7 @@ exports.index = async (req, res) => {
     distinct: true,
   })
     .then(async (data) => {
+      console.log("data.count : ",data.count);
       let result = {
         items: await PurchaseListCollection(data.rows, load_payments),
         total: data.count,
@@ -194,6 +215,15 @@ exports.store = async (req, res) => {
   }
 
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let addedBy = userID;
+  /* check for manager/worker and other roles */
+  if(![1, 2, 3, 4, 5, 6, 7, 8, 11].includes(req.role)){
+    addedBy = req.userId;
+    /* check parent and assign as user id */
+    let user = await UserModel.findByPk(addedBy);
+    userID = user.parent_id;
+  }
+
   if (priceFormat(data.paid_amount) > 0) {
     let wallet_balance = await getWalletBalance(userID, data.payment_mode);
     if (priceFormat(data.paid_amount) > wallet_balance) {
@@ -244,6 +274,7 @@ exports.store = async (req, res) => {
     let purchaseObj = {
       supplier_id: data.supplier_id,
       user_id: userID,
+      added_by: addedBy,
       invoice_number: invoice_number,
       invoice_date: moment(data.invoice_date).format("YYYY-MM-DD"), //, "MM/DD/YYYY"
       notes: data.notes,
@@ -1567,6 +1598,10 @@ exports.view = async (req, res) => {
           model: UserModel,
           as: "purchaseBy",
         },
+        {
+          model: UserModel,
+          as: "addedBy",
+        },
       ],
     });
     if (!purchase) {
@@ -1641,6 +1676,10 @@ exports.edit = async (req, res) => {
       {
         model: UserModel,
         as: "supplier",
+      },
+      {
+        model: UserModel,
+        as: "addedBy",
       },
     ],
   });

@@ -33,6 +33,7 @@ const materialModel = db.materials;
 const orderProductModel = db.order_products;
 const UnitModel = db.units;
 const productModel = db.products;
+const StockModel = db.stocks;
 const sizeModel = db.sizes;
 const PurityModel = db.purities;
 const UserModel = db.users;
@@ -94,6 +95,10 @@ exports.index = async (req, res) => {
                   as: "purity",
                 },
               ],
+            },
+            {
+              model: StockModel,
+              as: "stock",
             },
             {
               model: productModel,
@@ -224,11 +229,13 @@ exports.placeOrder = async (req, res) => {
         {
           order_id: order.id,
           product_id: carts[i].product_id,
-          size_id: carts[i].size_id || null,
+          stock_id: !isEmpty(carts[i].stock_id)?parseInt(carts[i].stock_id):null,
+          size_id: !isEmpty(carts[i].size_id)?carts[i].size_id : null,
           quantity: carts[i].quantity,
           rate: carts[i].price,
           total: carts[i].price,
           total_weight: carts[i].total_weight,
+          certificate_no: carts[i].certificate_no || null,
           making_charge: carts[i].total_making_charge,
           making_charge_discount_amount: carts[i].making_charge_discount_amount,
           making_charge_discount_percent:
@@ -277,6 +284,7 @@ exports.placeOrder = async (req, res) => {
             order_id: order.id,
             order_product_id: orderProduct.id,
             product_id: carts[i].product_id,
+            stock_id: !isEmpty(carts[i].stock_id)?parseInt(carts[i].stock_id):null,
             material_id: cartMaterial.material_id,
             purity_id: cartMaterial.purity_id,
             weight: cartMaterial.weight,
