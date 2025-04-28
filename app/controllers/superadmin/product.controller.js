@@ -238,6 +238,8 @@ exports.store = async (req, res) => {
       let images = [];
       for(let i = 0; i < data.images.length; i++){
         let result = await base64FileUpload(data.images[i], 'products');
+        console.log("uploade images++++++++++++++++",result );
+        
         if(result){
           images.push(result);
         }
@@ -246,6 +248,7 @@ exports.store = async (req, res) => {
       //upload main image
       let main_image = null;
       let result = await base64FileUpload(data.main_image, 'products');
+      console.log("uploade main images++++++++++++++++",result );
       if(result){
         main_image = result.path;
       }
@@ -254,6 +257,7 @@ exports.store = async (req, res) => {
       let video = null;
       if(!isEmpty(data.video)){
         let result = await base64VideoFileUpload(data.video, 'products');
+        console.log("uploade video++++++++++++++++",result );
         if(result){
           video = result.path;
         }
@@ -449,7 +453,8 @@ exports.update = async (req, res) => {
     if(!isEmpty(data.images)){
       try {
         for(let i = 0; i < data.images.length; i++){
-          let result = base64FileUpload(data.images[i], 'products');
+          let result = await base64FileUpload(data.images[i], 'products');
+          console.log("images++++++++++++++++",result );
           if(result){
             images.push(result);
           }
@@ -465,7 +470,8 @@ exports.update = async (req, res) => {
       if(!isEmpty(product.video)){
         let result = removeFile(product.video);
       }
-      let result2 = base64VideoFileUpload(data.video, 'products');
+      let result2 =await base64VideoFileUpload(data.video, 'products');
+      console.log("uploade video++++++++++++++++",result2 );
       if(result2){
         video = result2.path;
       }
@@ -474,7 +480,8 @@ exports.update = async (req, res) => {
     let main_image = product.main_image;
     if(!isEmpty(data.main_image)){
       removeFile(product.main_image);
-      let result2 = base64FileUpload(data.main_image, 'products');
+      let result2 =await base64FileUpload(data.main_image, 'products');
+      console.log("uploade main images++++++++++++++++",result2 );
       if(result2){
         main_image = result2.path;
       }
