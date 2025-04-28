@@ -237,7 +237,7 @@ exports.store = async (req, res) => {
       //upload images
       let images = [];
       for(let i = 0; i < data.images.length; i++){
-        let result = base64FileUpload(data.images[i], 'products');
+        let result = await base64FileUpload(data.images[i], 'products');
         if(result){
           images.push(result);
         }
@@ -245,7 +245,7 @@ exports.store = async (req, res) => {
 
       //upload main image
       let main_image = null;
-      let result = base64FileUpload(data.main_image, 'products');
+      let result = await base64FileUpload(data.main_image, 'products');
       if(result){
         main_image = result.path;
       }
@@ -253,7 +253,7 @@ exports.store = async (req, res) => {
       //upload video
       let video = null;
       if(!isEmpty(data.video)){
-        let result = base64VideoFileUpload(data.video, 'products');
+        let result = await base64VideoFileUpload(data.video, 'products');
         if(result){
           video = result.path;
         }
