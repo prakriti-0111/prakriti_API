@@ -5672,8 +5672,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                             </td>
 
                                         </tr>`;
-    }
-    html += `<tr style="
+      }
+      html += `<tr style="
                                             vertical-align: top;">
                                             <td colspan="6"
                                                 style="
@@ -5793,7 +5793,15 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                   </tr>
                               </thead>
                               <tbody>`;
+    let fine_metals = 0;
     for (let i = 0; i < saleData.subCatItems.length; i++) {
+      saleData.subCatItems[i].material
+        .map((itm) => {
+          if(itm.id == 1){
+            fine_metals += parseFloat(itm.weight);
+          }
+        });
+
       let materialNames = saleData.subCatItems[i].material
         .map((itm) => itm.name)
         .join("<br/ >");
@@ -5871,6 +5879,16 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
                                     </tr>`;
     }
+    let receive_metal = 0;
+    let metalExists = true;
+    payments.map((itm) => {
+      if(itm.payment_mode.toLowerCase() == "metal" && itm.weight != null){
+        metalExists = true;
+        receive_metal += parseFloat(itm.weight);
+      }
+    });
+    let rest_metal = fine_metals - receive_metal;
+    
     html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="6"
@@ -5878,10 +5896,45 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                           border:none;">
 
                                       </td>
-                                  </tr>
+                                  </tr>`;
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2">Fine Metals : </td>
+                                      <td colspan="2">${fine_metals.toFixed(2)} GM</td>
+                                      <td colspan="8"
+                                          style="
+                                          border:none;">
 
+                                      </td>
+                                  </tr>`;
+                          }
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2">Receive Fine Metal : </td>
+                                      <td colspan="2">${receive_metal.toFixed(2)} GM</td>
+                                      <td colspan="8"
+                                          style="
+                                          border:none;">
+
+                                      </td>
+                                  </tr>`;
+                          }
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2">Rest : </td>
+                                      <td colspan="2">${rest_metal.toFixed(2)} GM</td>
+                                      <td colspan="8"
+                                          style="
+                                          border:none;">
+
+                                      </td>
+                                  </tr>`;
+                          }
                                           
-                              </tbody>
+                            html += ` </tbody>
                           </table>`;
   }
 
@@ -5990,7 +6043,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i].amount
+                                                  payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight+" GM":payments[i].amount
                                                 }</td>
                                         </tr>`;
     }

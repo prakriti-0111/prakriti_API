@@ -57,6 +57,7 @@ const getModelObject = async(data) => {
         notes: data.notes || '',
         cheque_no: data.cheque_no || '',
         txn_id: data.txn_id || '',
+        weight: data.weight || '',
         payment_date: formatDateTime(data.payment_date, 8),
         payment_to: data.user ? data.user.name : '',
         purpose: purpose,
