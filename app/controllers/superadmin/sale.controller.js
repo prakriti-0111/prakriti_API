@@ -6043,7 +6043,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight+" GM":payments[i].amount
+                                                  payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight:payments[i].amount
                                                 }</td>
                                         </tr>`;
     }
