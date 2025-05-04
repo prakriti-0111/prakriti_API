@@ -501,6 +501,10 @@ const paymentModeDisplay = (type) => {
       return "NEFT/IMPS/UPI";
       break;
 
+    case "metal":
+      return "Metal";
+      break;
+
     default:
       return "Cash";
       break;
