@@ -51,6 +51,9 @@ const {
 const {
   PaymentCollection,
 } = require("@resources/superadmin/PaymentCollection");
+const {
+  ReportChargeCollection,
+} = require("@resources/superadmin/ReportChargeCollection");
 const { Op, json } = require("sequelize");
 const sequelize = db.sequelize;
 const ProductModel = db.products;
@@ -58,6 +61,7 @@ const UserModel = db.users;
 const CategoryModel = db.categories;
 const SubCategoryModel = db.sub_categories;
 const PurityModel = db.purities;
+const ReportChargeModel = db.report_charge;
 const UnitModel = db.units;
 const MaterialModel = db.materials;
 const SizeModel = db.sizes;
@@ -5079,6 +5083,13 @@ exports.downloadInvoiceInfo = async (req, res) => {
     ],
   });
   payments = await PaymentCollection(payments);
+
+  let reportCharge = await ReportChargeModel.findAll({ 
+    order:[['amount', 'ASC']],
+    where: {}
+  })
+  reportCharge = await ReportChargeCollection(reportCharge);
+
   //console.log("payments : ",payments);
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
@@ -5794,11 +5805,14 @@ exports.downloadInvoiceInfo = async (req, res) => {
                               </thead>
                               <tbody>`;
     let fine_metals = 0;
+    let totDiamondQty = 0;
     for (let i = 0; i < saleData.subCatItems.length; i++) {
       saleData.subCatItems[i].material
         .map((itm) => {
           if(itm.id == 1){
             fine_metals += parseFloat(itm.weight);
+          } else if(itm.id == 2){
+            totDiamondQty += parseInt(itm.quantity);
           }
         });
 
@@ -5888,12 +5902,44 @@ exports.downloadInvoiceInfo = async (req, res) => {
       }
     });
     let rest_metal = fine_metals - receive_metal;
+
+    let totalReportCharge = totDiamondQty*parseFloat(reportCharge[0].amount);
+    let taxOnReportCharge = (totalReportCharge*parseFloat(reportCharge[0].tax))/100;
+    let afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
     
     html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="6"
                                           style="
                                           border:none;">
+
+                                      </td>
+                                  </tr>`;
+                                  html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2"></td>
+                                      <td colspan="3">Rate</td>
+                                      <td colspan="1">Subtotal</td>
+                                      <td colspan="1">Tax</td>
+                                      <td colspan="1">Tax Amt.</td>
+                                      <td colspan="1">Total</td>
+                                      <td colspan="1"
+                                          style="
+                                          ">
+
+                                      </td>
+                                  </tr>`;
+                                  html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2">Report Charges : </td>
+                                      <td colspan="3">${totDiamondQty} Pics x ${reportCharge[0].amount} = </td>
+                                      <td colspan="1">${totalReportCharge}</td>
+                                      <td colspan="1">${reportCharge[0].tax}</td>
+                                      <td colspan="1">${taxOnReportCharge.toFixed(2)}</td>
+                                      <td colspan="1">${afterTaxTotalReportCharge.toFixed(2)}</td>
+                                      <td colspan="1"
+                                          style="
+                                          ">
 
                                       </td>
                                   </tr>`;

@@ -146,6 +146,7 @@ const getModelObject = (data) => {
                         subCatWiseProductMaterials[mItem.material_id] = {
                             "id" : mItem.material_id,
                             "name" : mItem.material_name,
+                            "quantity" : parseInt(mItem.quantity),
                             "weight" : parseFloat(mItem.weight),
                             "unit" : mItem.unit_name,
                             "rate" : mItem.rate,
@@ -154,6 +155,7 @@ const getModelObject = (data) => {
                     } else {
                         /* already exists in array */
                         subCatWiseProductMaterials[mItem.material_id].weight += parseFloat(mItem.weight);
+                        subCatWiseProductMaterials[mItem.material_id].quantity += parseInt(mItem.quantity);
                     }
                 }
             }
