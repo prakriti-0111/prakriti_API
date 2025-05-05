@@ -6057,7 +6057,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 400; font-size: 12px; text-align: left;"> Mode</th>
                                             <th
                                                 style="font-weight:
-                                                400; font-size: 12px; text-align: left;"> Payment</th>
+                                                400; font-size: 12px; text-align: left;"> Note</th>
                                             <th
                                                 style="font-weight:
                                                 400; font-size: 12px; text-align: left;">Amount</th>
@@ -6084,12 +6084,12 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i].purpose[0]
+                                                  payments[i].notes
                                                 }</td>
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight+" GM":payments[i].amount
+                                                  payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight:payments[i].amount
                                                 }</td>
                                         </tr>`;
     }

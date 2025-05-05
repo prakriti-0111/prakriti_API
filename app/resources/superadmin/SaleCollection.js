@@ -240,6 +240,7 @@ const getModelObject = (data) => {
             bank_name: (data.user && data.user.bank_name) ? data.user.bank_name : '',
             bank_account_no: (data.user && data.user.bank_account_no) ? data.user.bank_account_no : '',
             bank_ifsc: (data.user && data.user.bank_ifsc) ? data.user.bank_ifsc : '',
+            mobile: (data.user && data.user.mobile) ? data.user.mobile : '',
         },
         sale_by_id: data.sale_by,
         sale_by_name: data.saleBy ? data.saleBy.name : '',
