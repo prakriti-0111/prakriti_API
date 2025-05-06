@@ -208,6 +208,12 @@ exports.index = async (req, res) => {
 exports.store = async (req, res) => {
   let data = req.body;
 
+  let reportCharge = await ReportChargeModel.findAll({ 
+    order:[['amount', 'ASC']],
+    where: {}
+  })
+  reportCharge = await ReportChargeCollection(reportCharge);
+
   if (!isEmpty(data.invoice_number)) {
     let sdata = await SaleModel.findOne({
       where: { invoice_number: data.invoice_number },
@@ -307,6 +313,9 @@ exports.store = async (req, res) => {
       notes: data.notes,
       payment_mode: data.payment_mode,
       transaction_no: data.transaction_no,
+      report_qty: data.diamond_qty,
+      report_charge: reportCharge[0].amount,
+      report_tax_percentage: reportCharge[0].tax,
       total_amount: priceFormat(data.total_amount),
       cgst_tax: priceFormat(data.cgst_tax),
       sgst_tax: priceFormat(data.sgst_tax),
@@ -5084,12 +5093,6 @@ exports.downloadInvoiceInfo = async (req, res) => {
   });
   payments = await PaymentCollection(payments);
 
-  let reportCharge = await ReportChargeModel.findAll({ 
-    order:[['amount', 'ASC']],
-    where: {}
-  })
-  reportCharge = await ReportChargeCollection(reportCharge);
-
   //console.log("payments : ",payments);
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
@@ -5805,15 +5808,12 @@ exports.downloadInvoiceInfo = async (req, res) => {
                               </thead>
                               <tbody>`;
     let fine_metals = 0;
-    let totDiamondQty = 0;
     for (let i = 0; i < saleData.subCatItems.length; i++) {
       saleData.subCatItems[i].material
         .map((itm) => {
           if(itm.id == 1){
             fine_metals += parseFloat(itm.weight);
-          } else if(itm.id == 2){
-            totDiamondQty += parseInt(itm.quantity);
-          }
+          } 
         });
 
       let materialNames = saleData.subCatItems[i].material
@@ -5903,8 +5903,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
     });
     let rest_metal = fine_metals - receive_metal;
 
-    let totalReportCharge = totDiamondQty*parseFloat(reportCharge[0].amount);
-    let taxOnReportCharge = (totalReportCharge*parseFloat(reportCharge[0].tax))/100;
+    let totalReportCharge = parseInt(saleData.report_qty)*parseFloat(saleData.report_charge);
+    let taxOnReportCharge = (totalReportCharge*parseFloat(saleData.report_tax_percentage))/100;
     let afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
     
     html += `<tr style="
@@ -5915,34 +5915,28 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
                                       </td>
                                   </tr>`;
-                                  html += `<tr style="
-                                      vertical-align: top;">
-                                      <td colspan="2"></td>
-                                      <td colspan="3">Rate</td>
-                                      <td colspan="1">Subtotal</td>
-                                      <td colspan="1">Tax</td>
-                                      <td colspan="1">Tax Amt.</td>
-                                      <td colspan="1">Total</td>
-                                      <td colspan="1"
-                                          style="
-                                          ">
-
-                                      </td>
-                                  </tr>`;
-                                  html += `<tr style="
-                                      vertical-align: top;">
-                                      <td colspan="2">Report Charges : </td>
-                                      <td colspan="3">${totDiamondQty} Pics x ${reportCharge[0].amount} = </td>
-                                      <td colspan="1">${totalReportCharge}</td>
-                                      <td colspan="1">${reportCharge[0].tax}</td>
-                                      <td colspan="1">${taxOnReportCharge.toFixed(2)}</td>
-                                      <td colspan="1">${afterTaxTotalReportCharge.toFixed(2)}</td>
-                                      <td colspan="1"
-                                          style="
-                                          ">
-
-                                      </td>
-                                  </tr>`;
+                                  if(saleData.report_qty > 0){
+                                    html += `<tr style="
+                                        vertical-align: top;">
+                                        <td colspan="2"></td>
+                                        <td colspan="3">Rate</td>
+                                        <td colspan="2">Total</td>
+                                        <td colspan="1">Tax(%)</td>
+                                        <td colspan="1">Tax</td>
+                                        <td colspan="2">Total</td>
+                                        
+                                    </tr>`;
+                                    html += `<tr style="
+                                        vertical-align: top;">
+                                        <td colspan="2">Report Charges : </td>
+                                        <td colspan="3">${saleData.report_qty} Pics x ${saleData.report_charge.toFixed(2)} = </td>
+                                        <td colspan="2">${totalReportCharge.toFixed(2)}</td>
+                                        <td colspan="1">${saleData.report_tax_percentage.toFixed(2)}</td>
+                                        <td colspan="1">${taxOnReportCharge.toFixed(2)}</td>
+                                        <td colspan="2">${afterTaxTotalReportCharge.toFixed(2)}</td>
+                                        
+                                    </tr>`;
+                                  }
                           if(metalExists){
                             html += `<tr style="
                                       vertical-align: top;">
@@ -6121,7 +6115,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 style="">
                                                 <input
                                                     type="text"
-                                                    value="${saleData.total_sub_total}"
+                                                    value="${saleData.taxable_amount}"
                                                     style="max-width:
                                                     80px;font-Weight:600"></span></h4>
                                     </div>`;
