@@ -51,6 +51,9 @@ const {
 const {
   PaymentCollection,
 } = require("@resources/superadmin/PaymentCollection");
+const {
+  ReportChargeCollection,
+} = require("@resources/superadmin/ReportChargeCollection");
 const { Op, json } = require("sequelize");
 const sequelize = db.sequelize;
 const ProductModel = db.products;
@@ -58,6 +61,7 @@ const UserModel = db.users;
 const CategoryModel = db.categories;
 const SubCategoryModel = db.sub_categories;
 const PurityModel = db.purities;
+const ReportChargeModel = db.report_charge;
 const UnitModel = db.units;
 const MaterialModel = db.materials;
 const SizeModel = db.sizes;
@@ -204,6 +208,12 @@ exports.index = async (req, res) => {
 exports.store = async (req, res) => {
   let data = req.body;
 
+  let reportCharge = await ReportChargeModel.findAll({ 
+    order:[['amount', 'ASC']],
+    where: {}
+  })
+  reportCharge = await ReportChargeCollection(reportCharge);
+
   if (!isEmpty(data.invoice_number)) {
     let sdata = await SaleModel.findOne({
       where: { invoice_number: data.invoice_number },
@@ -303,6 +313,9 @@ exports.store = async (req, res) => {
       notes: data.notes,
       payment_mode: data.payment_mode,
       transaction_no: data.transaction_no,
+      report_qty: data.diamond_qty,
+      report_charge: reportCharge[0].amount,
+      report_tax_percentage: reportCharge[0].tax,
       total_amount: priceFormat(data.total_amount),
       cgst_tax: priceFormat(data.cgst_tax),
       sgst_tax: priceFormat(data.sgst_tax),
@@ -5079,6 +5092,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
     ],
   });
   payments = await PaymentCollection(payments);
+
   //console.log("payments : ",payments);
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
@@ -5799,7 +5813,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
         .map((itm) => {
           if(itm.id == 1){
             fine_metals += parseFloat(itm.weight);
-          }
+          } 
         });
 
       let materialNames = saleData.subCatItems[i].material
@@ -5888,6 +5902,10 @@ exports.downloadInvoiceInfo = async (req, res) => {
       }
     });
     let rest_metal = fine_metals - receive_metal;
+
+    let totalReportCharge = parseInt(saleData.report_qty)*parseFloat(saleData.report_charge);
+    let taxOnReportCharge = (totalReportCharge*parseFloat(saleData.report_tax_percentage))/100;
+    let afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
     
     html += `<tr style="
                                       vertical-align: top;">
@@ -5897,6 +5915,28 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
                                       </td>
                                   </tr>`;
+                                  if(saleData.report_qty > 0){
+                                    html += `<tr style="
+                                        vertical-align: top;">
+                                        <td colspan="2"></td>
+                                        <td colspan="3">Rate</td>
+                                        <td colspan="2">Total</td>
+                                        <td colspan="1">Tax(%)</td>
+                                        <td colspan="1">Tax</td>
+                                        <td colspan="2">Total</td>
+                                        
+                                    </tr>`;
+                                    html += `<tr style="
+                                        vertical-align: top;">
+                                        <td colspan="2">Report Charges : </td>
+                                        <td colspan="3">${saleData.report_qty} Pics x ${saleData.report_charge.toFixed(2)} = </td>
+                                        <td colspan="2">${totalReportCharge.toFixed(2)}</td>
+                                        <td colspan="1">${saleData.report_tax_percentage.toFixed(2)}</td>
+                                        <td colspan="1">${taxOnReportCharge.toFixed(2)}</td>
+                                        <td colspan="2">${afterTaxTotalReportCharge.toFixed(2)}</td>
+                                        
+                                    </tr>`;
+                                  }
                           if(metalExists){
                             html += `<tr style="
                                       vertical-align: top;">
@@ -6075,7 +6115,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 style="">
                                                 <input
                                                     type="text"
-                                                    value="${saleData.total_sub_total}"
+                                                    value="${saleData.taxable_amount}"
                                                     style="max-width:
                                                     80px;font-Weight:600"></span></h4>
                                     </div>`;

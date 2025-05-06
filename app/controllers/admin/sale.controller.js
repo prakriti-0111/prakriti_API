@@ -2804,7 +2804,9 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                 }
                               });
                               let rest_metal = fine_metals - receive_metal;
-                              
+                              let totalReportCharge = parseInt(saleData.report_qty)*parseFloat(saleData.report_charge);
+                              let taxOnReportCharge = (totalReportCharge*parseFloat(saleData.report_tax_percentage))/100;
+                              let afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
                               html += `<tr style="
                                                                 vertical-align: top;">
                                                                 <td colspan="6"
@@ -2813,6 +2815,28 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
                                                                 </td>
                                                             </tr>`;
+                                                  if(saleData.report_qty > 0){
+                                                    html += `<tr style="
+                                                        vertical-align: top;">
+                                                        <td colspan="2"></td>
+                                                        <td colspan="3">Rate</td>
+                                                        <td colspan="2">Total</td>
+                                                        <td colspan="1">Tax(%)</td>
+                                                        <td colspan="1">Tax</td>
+                                                        <td colspan="2">Total</td>
+                                                        
+                                                    </tr>`;
+                                                    html += `<tr style="
+                                                        vertical-align: top;">
+                                                        <td colspan="2">Report Charges : </td>
+                                                        <td colspan="3">${saleData.report_qty} Pics x ${saleData.report_charge.toFixed(2)} = </td>
+                                                        <td colspan="2">${totalReportCharge.toFixed(2)}</td>
+                                                        <td colspan="1">${saleData.report_tax_percentage.toFixed(2)}</td>
+                                                        <td colspan="1">${taxOnReportCharge.toFixed(2)}</td>
+                                                        <td colspan="2">${afterTaxTotalReportCharge.toFixed(2)}</td>
+                                                        
+                                                    </tr>`;
+                                                  }
                                                     if(metalExists){
                                                       html += `<tr style="
                                                                 vertical-align: top;">
