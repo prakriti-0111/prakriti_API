@@ -15,6 +15,12 @@ module.exports = (sequelize, DataTypes) => {
         as: "supplier"
       });
 
+      this.belongsTo(models.sales, {
+        foreignKey: "sale_id",
+        allowNull: true,
+        as: "sale"
+      });
+
       this.belongsTo(models.users, {
         foreignKey: "user_id",
         as: "purchaseBy"

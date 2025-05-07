@@ -313,7 +313,7 @@ exports.store = async (req, res) => {
       notes: data.notes,
       payment_mode: data.payment_mode,
       transaction_no: data.transaction_no,
-      report_qty: data.diamond_qty,
+      report_qty: data.report_qty,
       report_charge: reportCharge[0].amount,
       report_tax_percentage: reportCharge[0].tax,
       total_amount: priceFormat(data.total_amount),
@@ -5917,7 +5917,12 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                   </tr>`;
                                   if(saleData.report_qty > 0){
                                     html += `<tr style="
-                                        vertical-align: top;">
+                                        vertical-align: top;
+                                        background-color: #0A8AB8;
+                                        font-size: 12px; 
+                                        font-weight:400;
+                                        color:#ffffff;
+                                        ">
                                         <td colspan="2"></td>
                                         <td colspan="3">Rate</td>
                                         <td colspan="2">Total</td>
@@ -5927,50 +5932,49 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         
                                     </tr>`;
                                     html += `<tr style="
-                                        vertical-align: top;">
-                                        <td colspan="2">Report Charges : </td>
-                                        <td colspan="3">${saleData.report_qty} Pics x ${saleData.report_charge.toFixed(2)} = </td>
-                                        <td colspan="2">${totalReportCharge.toFixed(2)}</td>
-                                        <td colspan="1">${saleData.report_tax_percentage.toFixed(2)}</td>
-                                        <td colspan="1">${taxOnReportCharge.toFixed(2)}</td>
-                                        <td colspan="2">${afterTaxTotalReportCharge.toFixed(2)}</td>
+                                        vertical-align: top;
+                                        font-size: 14px; 
+                                        font-weight:400;
+                                        ">
+                                        <td colspan="2" style="background-color: #C1BDBD;">Report Charges : </td>
+                                        <td colspan="3" style="background-color: #C1BDBD;">${saleData.report_qty} Pics x ${saleData.report_charge.toFixed(2)} = </td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${totalReportCharge.toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${saleData.report_tax_percentage.toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${taxOnReportCharge.toFixed(2)}</td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${afterTaxTotalReportCharge.toFixed(2)}</td>
                                         
                                     </tr>`;
                                   }
-                          if(metalExists){
-                            html += `<tr style="
+                                  html += `<tr style="
                                       vertical-align: top;">
-                                      <td colspan="2">Fine Metals : </td>
-                                      <td colspan="2">${fine_metals.toFixed(2)} GM</td>
-                                      <td colspan="8"
+                                      <td colspan="6"
                                           style="
                                           border:none;">
 
                                       </td>
                                   </tr>`;
-                          }
                           if(metalExists){
                             html += `<tr style="
                                       vertical-align: top;">
-                                      <td colspan="2">Receive Fine Metal : </td>
-                                      <td colspan="2">${receive_metal.toFixed(2)} GM</td>
-                                      <td colspan="8"
-                                          style="
-                                          border:none;">
-
-                                      </td>
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Fine Metals : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${fine_metals.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
                           }
                           if(metalExists){
                             html += `<tr style="
                                       vertical-align: top;">
-                                      <td colspan="2">Rest : </td>
-                                      <td colspan="2">${rest_metal.toFixed(2)} GM</td>
-                                      <td colspan="8"
-                                          style="
-                                          border:none;">
-
-                                      </td>
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Receive Fine Metal : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${receive_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Rest : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${rest_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
                           }
                                           

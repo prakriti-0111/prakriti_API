@@ -124,6 +124,7 @@ const getModelObject = async(data, req) => {
             pincode: (!isEmpty(supplier) && !isEmpty(supplier.pincode)) ? supplier.pincode : '',
         },
         //supplier_name: data.supplier ? data.supplier.name : '',
+        sale:data.sale,
         added_by_details: {
             id: data.added_by,
             company_name: (data.addedBy && data.addedBy.company_name) ? data.addedBy.company_name : '',

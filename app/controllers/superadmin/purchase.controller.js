@@ -1602,6 +1602,10 @@ exports.view = async (req, res) => {
           model: UserModel,
           as: "addedBy",
         },
+        {
+          model: SaleModel,
+          as: "sale",
+        },
       ],
     });
     if (!purchase) {
@@ -1680,6 +1684,10 @@ exports.edit = async (req, res) => {
       {
         model: UserModel,
         as: "addedBy",
+      },
+      {
+        model: SaleModel,
+        as: "sale",
       },
     ],
   });
@@ -2643,6 +2651,10 @@ exports.downloadInvoiceInfo = async (req, res) => {
         model: UserModel,
         as: "purchaseBy",
       },
+      {
+        model: SaleModel,
+        as: "sale",
+      },
     ],
   });
   if (!purchase) {
@@ -3430,7 +3442,15 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                           </tr>
                                       </thead>
                                       <tbody>`;
+    let fine_metals = 0;                      
     for (let i = 0; i < purchaseData.subCatItems.length; i++) {
+      purchaseData.subCatItems[i].material
+        .map((itm) => {
+          if(itm.id == 1){
+            fine_metals += parseFloat(itm.weight);
+          } 
+        });
+
       let materialNames = purchaseData.subCatItems[i].material
         .map((itm) => itm.name)
         .join("<br/ >");
@@ -3516,84 +3536,98 @@ exports.downloadInvoiceInfo = async (req, res) => {
   
                                           </tr>`;
     }
+    let receive_metal = 0;
+    let metalExists = true;
+    payments.map((itm) => {
+      if(itm.payment_mode.toLowerCase() == "metal" && itm.weight != null){
+        metalExists = true;
+        receive_metal += parseFloat(itm.weight);
+      }
+    });
+    let rest_metal = fine_metals - receive_metal;
+    
+    let totalReportCharge = 0;
+    let taxOnReportCharge = 0;
+    let afterTaxTotalReportCharge = 0;
+    if(purchaseData.sale){ 
+      totalReportCharge = parseInt(purchaseData.sale.report_qty)*parseFloat(purchaseData.sale.report_charge);
+      taxOnReportCharge = (totalReportCharge*parseFloat(purchaseData.sale.report_tax_percentage))/100;
+      afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
+    }
+
     html += `<tr style="
-                                                      vertical-align: top;">
-                                                      <td colspan="6"
-                                                          style="
-                                                          border:none;">
-  
-                                                      </td>
-                                                      <!-- <td style="">
-                                                          <div>
-                                                              <h4 style="margin:
-                                                                  0;
-                                                                  text-align:
-                                                                  left; font-size:
-                                                                  12px;
-                                                                  font-weight:
-                                                                  600; display:
-                                                                  ;">
-                                                                  Total
-                                                                  Save <div>139000</div></h4>
-                                                          </div>
-                                                      </td> -->
-                                                      
-                                                      
-                                                      
-  
-                                                  </tr>
+                                      vertical-align: top;">
+                                      <td colspan="6"
+                                          style="
+                                          border:none;">
+
+                                      </td>
+                                  </tr>`;
+                                  if(purchaseData.sale && purchaseData.sale.report_qty > 0){
+                                    html += `<tr style="
+                                        vertical-align: top;
+                                        background-color: #0A8AB8;
+                                        font-size: 12px; 
+                                        font-weight:400;
+                                        color:#ffffff;
+                                        ">
+                                        <td colspan="2"></td>
+                                        <td colspan="3">Rate</td>
+                                        <td colspan="2">Total</td>
+                                        <td colspan="1">Tax(%)</td>
+                                        <td colspan="1">Tax</td>
+                                        <td colspan="2">Total</td>
+                                        
+                                    </tr>`;
+                                    html += `<tr style="
+                                        vertical-align: top;
+                                        font-size: 14px; 
+                                        font-weight:400;
+                                        ">
+                                        <td colspan="2" style="background-color: #C1BDBD;">Report Charges : </td>
+                                        <td colspan="3" style="background-color: #C1BDBD;">${purchaseData.sale.report_qty} Pics x ${parseFloat(purchaseData.sale.report_charge).toFixed(2)} = </td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${totalReportCharge.toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${parseFloat(purchaseData.sale.report_tax_percentage).toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${taxOnReportCharge.toFixed(2)}</td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${afterTaxTotalReportCharge.toFixed(2)}</td>
+                                        
+                                    </tr>`;
+                                  }
+                                  html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="6"
+                                          style="
+                                          border:none;">
+
+                                      </td>
+                                  </tr>`;
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Fine Metals : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${fine_metals.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Receive Fine Metal : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${receive_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Rest : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${rest_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
  
-                                                  <!-- <tr style="
-                                                      vertical-align: top;">
-                                                      <td colspan="8"
-                                                          style="
-                                                          border:none; padding: 0;">
-                                                      </td>
-                                                   
-                                                     
-                                                      
-                                                      <td colspan="3" style="margin: 0;
-                                                          text-align: left;
-                                                          font-size: 12px;
-                                                          font-weight: 600; padding: 4px;">
-                                                          <div>
-                                                              <h4 style="margin:
-                                                                  0;
-                                                                  text-align:
-                                                                  right; font-size:
-                                                                  12px;
-                                                                  font-weight:
-                                                                  600;">
-                                                                  Total <span style=""> <input type="text" value="139000" style="max-width: 80px;"></span></h4>
-                                                          </div>
-                                                      </td>
-  
-                                                  </tr>
-                                                  <tr style="
-                                                      vertical-align: top;">
-                                                      <td colspan="8"
-                                                          style="
-                                                          border:none; padding: 0;">
-  
-                                                      </td> 
-                                                      <td colspan="3" style="margin: 0;
-                                                          text-align: left;
-                                                          font-size: 12px;
-                                                          font-weight: 600; padding: 4px;">
-                                                          <div>
-                                                              <h4 style="margin:
-                                                                  0;
-                                                                  text-align:
-                                                                  right; font-size:
-                                                                  12px;
-                                                                  font-weight:
-                                                                  600;">
-                                                                  Total <span style=""> <input type="text" value="139000" style="max-width: 80px;"></span></h4>
-                                                          </div>
-                                                      </td>
-  
-                                                  </tr> -->
-                                              </tbody>
+                                                  
+                          html += `   </tbody>
                                           </table>`;
   }
   html += `
@@ -3684,7 +3718,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                                   400; font-size: 12px; text-align: left;"> Mode</th>
                                                               <th
                                                                   style="font-weight:
-                                                                  400; font-size: 12px; text-align: left;"> Payment</th>
+                                                                  400; font-size: 12px; text-align: left;"> Note</th>
                                                               <th
                                                                   style="font-weight:
                                                                   400; font-size: 12px; text-align: left;">Amount</th>
@@ -3714,13 +3748,12 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                                   style="border-right:
                                                                   none; font-size: 12px;">${
                                                                     payments[i]
-                                                                      .purpose[0]
+                                                                      .notes
                                                                   }</td>
                                                               <td
                                                                   style="border-right:
                                                                   none; font-size: 12px;">${
-                                                                    payments[i]
-                                                                      .amount
+                                                                    payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight:payments[i].amount
                                                                   }</td>
                                                              
                                                           </tr>`;
