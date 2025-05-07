@@ -221,6 +221,7 @@ const getModelObject = (data) => {
             bank_account_no: (data.supplier && data.supplier.bank_account_no) ? data.supplier.bank_account_no : '',
             bank_ifsc: (data.supplier && data.supplier.bank_ifsc) ? data.supplier.bank_ifsc : '',
         },
+        sale: data.sale,
         purchase_by_id: data.user_id,
         purchase_by_name: data.purchaseBy ? data.purchaseBy.name : '',
         purchase_by_mobile: data.purchaseBy ? data.purchaseBy.mobile : '',
