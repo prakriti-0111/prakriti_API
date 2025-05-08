@@ -3444,11 +3444,11 @@ exports.saleProducts = async (req, res) => {
   //let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   //let adminRoleId = getRoleId("admin");
   let superAdminRoleId = getRoleId("superadmin");
-
+  console.log("req ====> ", req.userId, req.role);
   let saleProductsRes = await getOwnUserSaleProducts(
     req,
     req.query,
-    superAdminRoleId
+    req.role
   );
   res.send(formatResponse(saleProductsRes));
 };
