@@ -400,7 +400,12 @@ exports.index = async (req, res) => {
     } else if (isAdmin(req)) {
       totalStockPrice = await getTotalStockPriceByUser(null, userID);
       totalStock = await getTotalStockByUser(userID);
-
+      materialTotalStock = await getTotalStockByUser(userID, "material");
+      materialTotalStockPrice = await getTotalStockPriceByUser(
+        null,
+        userID,
+        "material"
+      );
       //customers
       totalCustomer = await UserModel.count({
         where: { role_id: customerRoleId, state_id: user.state_id },
