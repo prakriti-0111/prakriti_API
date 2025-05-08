@@ -366,11 +366,6 @@ exports.index = async (req, res) => {
     }
     let _include = [
       {
-        model: sizesModel,
-        as: "size",
-        where: sizeConditions,
-      },
-      {
         model: stock_materialsModel,
         as: "stockMaterials",
         required: true,
@@ -397,6 +392,11 @@ exports.index = async (req, res) => {
       },
     ];
     if (type == "product" || type == "return") {
+      _include.push({
+        model: sizesModel,
+        as: "size",
+        where: sizeConditions,
+      });
       _include.push({
         model: productsModel,
         as: "product",
@@ -435,7 +435,7 @@ exports.index = async (req, res) => {
         ],
       });
     }
-
+    console.log(_include);
     stocksModel
       .findAndCountAll({
         order: [["id", "DESC"]],
@@ -447,7 +447,7 @@ exports.index = async (req, res) => {
       })
       .then(async (data) => {
         //
-        // console.log("-------this is actual value ",data.rows[0]);
+        console.log("-------this is actual value ",data.rows);
         let result = {
           items:
             type == "product" || type == "return"
@@ -455,7 +455,7 @@ exports.index = async (req, res) => {
               : await StocksMaterialCollection(data.rows, userID),
           total: data.count,
         };
-
+        console.log("result : ", result);
         console.log("search : ", search);
         //if(!isNaN(search) && search != ""){
         let sArr = search.split(",");
