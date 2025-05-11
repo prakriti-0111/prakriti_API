@@ -105,6 +105,7 @@ exports.store = async (req, res) => {
             to_user_id: data.user_id,
             material_id: data.material_id,
             weight: data.weight,
+            pakka_weight: data.pakka_weight,
             unit_id: data.unit_id,
             quantity: data.quantity,
             purity_id: data.purity_id,
@@ -120,6 +121,7 @@ exports.store = async (req, res) => {
             to_user_id: data.user_id,
             material_id: data.material_id,
             weight: data.weight,
+            pakka_weight: data.pakka_weight,
             unit_id: data.unit_id,
             quantity: data.quantity,
             purity_id: data.purity_id,
@@ -218,17 +220,18 @@ exports.updateStatus = async (req, res) => {
 }
 
 const UpdateStockMaterial = async (stockH, userID, t) => {
+    const stockPurityId = 22;
     let unit = await UnitModel.findByPk(stockH.unit_id);
-    let weight_in_gram = convertUnitToGram(unit.name, stockH.weight);
+    let weight_in_gram = convertUnitToGram(unit.name, stockH.pakka_weight);
     let result = await updateOrCreate(StockModel, {
         material_id: stockH.material_id,
-        purity_id: stockH.purity_id,
+        purity_id: stockPurityId,
         user_id: userID,
         type: 'material'
     }, {
         material_id: stockH.material_id,
-        purity_id: stockH.purity_id,
-        weight: stockH.weight,
+        purity_id: stockPurityId,
+        weight: stockH.pakka_weight,
         unit_id: stockH.unit_id,
         quantity: stockH.quantity,
         total_weight: weight_in_gram,
@@ -236,17 +239,18 @@ const UpdateStockMaterial = async (stockH, userID, t) => {
         type: 'material'
     }, t, ['quantity', 'total_weight']);
     let stock = result.item;
-
+    console.log("UpdateStockMaterial stock ===============: ", stock);
     let stockMaterial = await StockMaterialModel.findOne({ where: { stock_id: stock.id, material_id: stockH.material_id } });
     let thisM = await MaterialModel.findByPk(stockH.material_id);
     category_id = thisM.id;
+    console.log("UpdateStockMaterial stockMaterial ===============: ", stockMaterial);
     if (stockMaterial) {
         let thisquantity = stockH.quantity ? (parseInt(stockMaterial.quantity) + parseInt(stockH.quantity)) : stockMaterial.quantity;
         await StockMaterialModel.update({
-            weight: weightFormat(parseFloat(stockMaterial.weight) + weightFormat(stockH.weight)),
+            weight: weightFormat(parseFloat(stockMaterial.weight) + weightFormat(stockH.pakka_weight)),
             weight_in_gram: weightFormat(parseFloat(stockMaterial.weight_in_gram) + weightFormat(weight_in_gram)),
             quantity: thisquantity,
-            purity_id: stockH.purity_id,
+            purity_id: stockPurityId,
             unit_id: stockH.unit_id,
             category_id: category_id
         }, { where: { id: stockMaterial.id }, transaction: t });
@@ -254,14 +258,180 @@ const UpdateStockMaterial = async (stockH, userID, t) => {
         await StockMaterialModel.create({
             stock_id: stock.id,
             material_id: stockH.material_id,
-            weight: weightFormat(stockH.weight),
+            weight: weightFormat(stockH.pakka_weight),
             weight_in_gram: weightFormat(weight_in_gram),
             quantity: stockH.quantity || 0,
-            purity_id: stockH.purity_id,
+            purity_id: stockPurityId,
             unit_id: stockH.unit_id,
             category_id: category_id
         }, { transaction: t });
     }
+}
+
+exports.transferStockMaterial = async (req, res) => {
+    //const t = await sequelize.transaction();
+
+    try {
+        let data = req.body;
+        let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+        console.log("<=================== transferStockMaterial =================>");
+        /* get all materials by from_user_id */
+        let _include = [
+            {
+              model: StockMaterialModel,
+              as: "stockMaterials",
+              required: true,
+              where: {},
+              //separate: true,
+              include: [
+                {
+                  model: MaterialModel,
+                  as: "material",
+                },
+                {
+                  model: UnitModel,
+                  as: "unit",
+                },
+                {
+                  model: PurityModel,
+                  as: "purity",
+                },
+              ],
+            },
+            {
+              model: UserModel,
+              as: "user",
+            },
+        ];
+        _include.push({
+            model: MaterialModel,
+            as: "material",
+            required: true,
+            where: {},
+            include: [
+              {
+                model: CategoryModel,
+                as: "category",
+              },
+            ],
+          });
+          console.log({ type: 'material', user_id: data.from_user_id, material_id: data.material_id });
+        let stocks = await StockModel
+        .findAll({
+            order: [["id", "DESC"]],
+            where: { type: 'material', user_id: data.from_user_id, material_id: data.material_id },
+            include: _include,
+            distinct: true,
+            //subQuery: isEmpty(search) ? true : false,
+        });
+        
+        stocks = await StocksMaterialCollection(stocks, data.from_user_id);
+        //console.log("stocks :==> ", stocks); return false;
+        console.log("stocks ====================: ", stocks);
+        console.log("data ============: "  , data);
+        let total_weight = 0;
+        let total_quantity = 0; 
+        stocks.forEach((item) => {
+            total_weight += parseFloat(item.total_weight);
+        });
+        console.log("transferMaterial ===============: ");
+        await transferMaterial(data, stocks[0]);
+
+        res.send(formatResponse("", 'Sent Successfully.'));
+
+    } catch (error) {
+        //await t.rollback();
+        res.status(errorCodes.default).send(formatErrorResponse());
+    }
+}
+
+const transferMaterial = async (data, stockMaterial) => {
+    const t = await sequelize.transaction();
+    const stockPurityId = 22;
+    try {
+        let stockH = await stockHistoryModel.create({
+            belongs_to: data.from_user_id,
+            from_user_id: data.from_user_id,
+            to_user_id: data.to_user_id,
+            material_id: data.material_id,
+            weight: data.weight,
+            pakka_weight: data.effective_weight,
+            unit_id: data.unit_id,
+            quantity: data.quantity,
+            purity_id: data.purity_id,
+            status: "accepted",
+            type: "debit",
+            can_accept: false
+        }, { transaction: t });
+
+        await stockHistoryModel.create({
+            parent_id: stockH.id,
+            belongs_to: data.to_user_id,
+            from_user_id: data.from_user_id,
+            to_user_id: data.to_user_id,
+            material_id: data.material_id,
+            weight: data.weight,
+            pakka_weight: data.effective_weight,
+            unit_id: data.unit_id,
+            quantity: data.quantity,
+            purity_id: data.purity_id,
+            status: "accepted",
+            type: "credit",
+            can_accept: true
+        }, { transaction: t });
+
+        
+        let unit = await UnitModel.findByPk(data.unit_id);
+        let weight_in_gram = convertUnitToGram(unit.name, data.effective_weight);
+        console.log("stockH ===============: ", stockH);
+        console.log({
+                material_id: stockH.material_id,
+                purity_id: stockPurityId, //stockH.purity_id,
+                user_id: data.from_user_id,
+                type: 'material'
+            });
+        let stock = await StockModel.findOne({
+            where: {
+                material_id: stockH.material_id,
+                purity_id: stockPurityId,
+                user_id: data.from_user_id,
+                type: 'material'
+            }
+        });
+        console.log("stockH stock ===============: ", stock);
+        if (stock) {
+            let stockMaterial = await StockMaterialModel.findOne({ where: { material_id: data.material_id, stock_id: stock.id } });
+            if (stockMaterial) {
+                console.log("stockMaterial ===============: ", stockMaterial);
+                let quantity = data.quantity ? parseInt(data.quantity) : 0;
+                await StockMaterialModel.update({
+                    weight: weightFormat(parseFloat(stockMaterial.weight) - weightFormat(data.effective_weight)),
+                    quantity: (parseInt(stockMaterial.quantity) - quantity)
+                }, { where: { id: stockMaterial.id } });
+
+                /*if ((parseFloat(stockMaterial.weight) - parseFloat(data.effective_weight)) <= 0) {
+                    await StockModel.destroy({ where: { id: stock.id } });
+                    await StockMaterialModel.destroy({ where: { stock_id: stock.id } });
+                } else {*/
+                    await StockModel.update({
+                        quantity: (parseInt(stockMaterial.quantity) - quantity),
+                        total_weight: (parseFloat(stock.total_weight) - weight_in_gram),
+                    }, { where: { id: stock.id } });
+                //}
+                console.log("UpdateStockMaterial ===============: ");
+                await UpdateStockMaterial(stockH, stockH.to_user_id, t);
+            }
+        }
+
+        await t.commit();
+
+        //send notification
+        sendNotification('material_stock_send', req, { from_user_id: data.from_user_id, to_user_id: data.to_user_id });
+        return true;
+    } catch (error) {
+        await t.rollback();
+        res.status(errorCodes.default).send(formatErrorResponse());
+    }        
 }
 
 /**

@@ -1523,6 +1523,12 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     stockMaterialHistoryController.updateStatus
   );
+  router.post(
+    "/stock-material-history/transfer",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockMaterialHistoryController.transferStockMaterial
+  );
+  
 
   //salary
   router.get(
