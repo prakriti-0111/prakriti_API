@@ -195,7 +195,8 @@ exports.index = async (req, res) => {
 exports.store = async (req, res) => {
   // console.log("------------this data is purchases",req)
   let data = req.body;
-  console.log(data);
+  console.log("purchase store payload : ", data);
+  //return false;
   if (!isEmpty(data.invoice_number)) {
     let purchaseData = await PurchaseModel.findOne({
       where: { invoice_number: data.invoice_number },
@@ -326,7 +327,7 @@ exports.store = async (req, res) => {
         tax: priceFormat(thisItem.tax),
         total: priceFormat(thisItem.total),
       };
-
+      //console.log("thisObj : ", thisObj);
       let purchaseProduct = await PurchaseProductModel.create(thisObj);
       req_data.products[i].id = purchaseProduct.id;
 
@@ -376,6 +377,7 @@ exports.store = async (req, res) => {
           rate: thisItem.materials[x].rate,
           amount: thisItem.materials[x].amount,
         };
+        console.log("thisMObj : ", thisMObj);
         await PurchaseProductMaterialModel.create(thisMObj);
 
         if (!isEmpty(worker_id)) {
@@ -384,6 +386,7 @@ exports.store = async (req, res) => {
             to_user_id: req.userId,
             material_id: thisItem.materials[x].material_id,
             weight: weightFormat(thisItem.materials[x].weight),
+            pakka_weight: weightFormat(thisItem.materials[x].pakka_weight),
             unit_id: thisItem.materials[x].unit_id,
             quantity: thisItem.materials[x].quantity,
             date: moment().format("YYYY-MM-DD"),
@@ -763,6 +766,7 @@ exports.statuschange = async (req, res) => {
 
   try {
     let sale_id = null;
+    let gold24kPurityId = 22;
     const trans = await sequelize.transaction(async (t) => {
       if (data.approve_status != 4) {
         let purchaseObj = {
@@ -832,12 +836,14 @@ exports.statuschange = async (req, res) => {
                   total_weight: thisItem.total_weight,
                   user_id: userID, //isSuperAdmin(req) ? null : req.userId,
                   type: stock_type,
+                  purchase_id: purchase.id,
+                  purchase_product_id: thisItem.id
                 };
               if (purchase.type == "material") {
                 _wC.material_id = thisItem.material_id;
-                _wC.purity_id = thisItem.materials[0].purity_id;
+                _wC.purity_id = gold24kPurityId; //24K gold //thisItem.materials[0].purity_id;
                 _iu_data.material_id = thisItem.material_id;
-                _iu_data.purity_id = thisItem.materials[0].purity_id;
+                _iu_data.purity_id = gold24kPurityId; //thisItem.materials[0].purity_id;
               } else {
                 _wC.product_id = thisItem.product_id;
                 _iu_data.product_id = thisItem.product_id;
@@ -888,7 +894,9 @@ exports.statuschange = async (req, res) => {
                     to_user_id: userID,
                     material_id: thisItem.materials[x].material_id,
                     weight: weightFormat(thisItem.materials[x].weight),
+                    pakka_weight: weightFormat(thisItem.materials[x].pakka_weight),
                     unit_id: thisItem.materials[x].unit_id,
+                    purity_id: thisItem.materials[x].purity_id,
                     quantity: thisItem.materials[x].quantity || 1,
                     date: moment().format("YYYY-MM-DD"),
                     type: "debit",
@@ -919,6 +927,8 @@ exports.statuschange = async (req, res) => {
                     material_id: thisItem.materials[x].material_id,
                   },
                 });
+                let unit = await UnitModel.findByPk(thisItem.materials[x].unit_id);
+                let pakka_weight_in_gram = convertUnitToGram(unit.name, thisItem.materials[x].pakka_weight);
                 if (stockMaterial) {
                   let thisquantity = thisItem.materials[x].quantity
                     ? parseInt(stockMaterial.quantity) +
@@ -928,14 +938,14 @@ exports.statuschange = async (req, res) => {
                     {
                       weight: weightFormat(
                         parseFloat(stockMaterial.weight) +
-                          weightFormat(thisItem.materials[x].weight)
+                          weightFormat(thisItem.materials[x].pakka_weight)
                       ),
                       weight_in_gram: weightFormat(
                         parseFloat(stockMaterial.weight_in_gram) +
-                          weightFormat(thisItem.materials[x].weight_in_gram)
+                          weightFormat(pakka_weight_in_gram)
                       ),
                       quantity: thisquantity,
-                      purity_id: thisItem.materials[x].purity_id,
+                      purity_id: gold24kPurityId, //thisItem.materials[x].purity_id,
                       unit_id: thisItem.materials[x].unit_id,
                       category_id: category_id,
                     },
@@ -946,12 +956,12 @@ exports.statuschange = async (req, res) => {
                     {
                       stock_id: stock.id,
                       material_id: thisItem.materials[x].material_id,
-                      weight: weightFormat(thisItem.materials[x].weight),
+                      weight: weightFormat(thisItem.materials[x].pakka_weight),
                       weight_in_gram: weightFormat(
-                        thisItem.materials[x].weight_in_gram
+                        pakka_weight_in_gram
                       ),
                       quantity: thisItem.materials[x].quantity || 0,
-                      purity_id: thisItem.materials[x].purity_id,
+                      purity_id: gold24kPurityId, //thisItem.materials[x].purity_id,
                       unit_id: thisItem.materials[x].unit_id,
                       category_id: category_id,
                     },
@@ -1166,14 +1176,16 @@ exports.statuschange = async (req, res) => {
                     {
                       product_id: thisItem.product_id,
                       user_id: parentUserID,
-                      purity_id: thisItem.materials[0].purity_id,
+                      purity_id: gold24kPurityId // thisItem.materials[0].purity_id,
                     },
                     {
+                      purchase_id: purchase.id,
+                      purchase_product_id: thisItem.id,
                       product_id: thisItem.product_id,
                       quantity: quantity,
                       total_weight: thisItem.total_weight,
                       user_id: parentUserID,
-                      purity_id: thisItem.materials[0].purity_id,
+                      purity_id: gold24kPurityId //thisItem.materials[0].purity_id,
                     },
                     t,
                     ["quantity", "total_weight"]
@@ -1233,6 +1245,8 @@ exports.statuschange = async (req, res) => {
                         material_id: thisItem.materials[x].material_id,
                       },
                     });
+                    let unit = await UnitModel.findByPk(thisItem.materials[x].unit_id);
+                    let pakka_weight_in_gram = convertUnitToGram(unit.name, thisItem.materials[x].pakka_weight);
                     if (stockMaterial) {
                       let thisquantity = thisItem.materials[x].quantity
                         ? parseInt(stockMaterial.quantity) +
@@ -1242,14 +1256,14 @@ exports.statuschange = async (req, res) => {
                         {
                           weight: weightFormat(
                             parseFloat(stockMaterial.weight) +
-                              weightFormat(thisItem.materials[x].weight)
+                              weightFormat(thisItem.materials[x].pakka_weight)
                           ),
                           weight_in_gram: weightFormat(
                             parseFloat(stockMaterial.weight_in_gram) +
-                              weightFormat(thisItem.materials[x].weight_in_gram)
+                              weightFormat(pakka_weight_in_gram)
                           ),
                           quantity: thisquantity,
-                          purity_id: thisItem.materials[x].purity_id,
+                          purity_id: gold24kPurityId, //thisItem.materials[x].purity_id,
                           unit_id: thisItem.materials[x].unit_id,
                           category_id: product.category_id,
                         },
@@ -1260,12 +1274,12 @@ exports.statuschange = async (req, res) => {
                         {
                           stock_id: stock.id,
                           material_id: thisItem.materials[x].material_id,
-                          weight: weightFormat(thisItem.materials[x].weight),
+                          weight: weightFormat(thisItem.materials[x].pakka_weight),
                           weight_in_gram: weightFormat(
-                            thisItem.materials[x].weight_in_gram
+                            pakka_weight_in_gram
                           ),
                           quantity: thisItem.materials[x].quantity || 0,
-                          purity_id: thisItem.materials[x].purity_id,
+                          purity_id: gold24kPurityId, //thisItem.materials[x].purity_id,
                           unit_id: thisItem.materials[x].unit_id,
                           category_id: product.category_id,
                         },

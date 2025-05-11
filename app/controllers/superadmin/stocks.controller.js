@@ -370,7 +370,7 @@ exports.index = async (req, res) => {
         as: "stockMaterials",
         required: true,
         where: stockMaterialConditions,
-        separate: true,
+        //separate: true,
         include: [
           {
             model: materialModel,
@@ -432,6 +432,10 @@ exports.index = async (req, res) => {
             model: CategoryModel,
             as: "category",
           },
+          {
+            model: PurityModel,
+            as: 'purities',
+          }
         ],
       });
     }
