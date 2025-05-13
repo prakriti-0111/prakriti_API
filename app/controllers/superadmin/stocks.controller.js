@@ -140,6 +140,7 @@ exports.index = async (req, res) => {
       size,
       price,
       user_id,
+      material_id,
       type,
       own_distributor,
       own_admin,
@@ -343,6 +344,10 @@ exports.index = async (req, res) => {
       conditions = { ...conditions, [Op.or]: sCond };
     }
     console.log(conditions);
+
+    if(typeof material_id != "undefined" && material_id != null && material_id != "") {
+      conditions.material_id = material_id;
+    }
 
     /*if (!isEmpty(qty)) {
       stockMaterialConditions.quantity = qty;
