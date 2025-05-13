@@ -8,6 +8,7 @@ const { getPaginationOptions } = require('@helpers/paginator')
 const {PurchaseListCollection} = require("@resources/superadmin/PurchaseListCollection");
 const {PurchaseEditCollection} = require("@resources/superadmin/PurchaseEditCollection");
 const {PurchaseViewCollection} = require("@resources/superadmin/PurchaseViewCollection");
+const { PurityCollection } = require("@resources/superadmin/PurityCollection");
 const { Op } = require("sequelize");
 const sequelize = db.sequelize;
 const ProductModel = db.products;
@@ -1448,6 +1449,15 @@ exports.downloadInvoiceInfo = async (req, res) => {
     ],
   });
   payments = await PaymentCollection(payments);
+  /* 18k gold purity value */
+  let purity18K = await PurityModel.findOne({  
+    where: {
+      id: 4, //18K
+    },  
+  });
+
+  purity18K = await PurityCollection(purity18K);
+  
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
   const logoUrl = `public/images/logo.png`;
@@ -2314,6 +2324,13 @@ exports.downloadInvoiceInfo = async (req, res) => {
         receive_metal += parseFloat(itm.weight);
       }
     });
+    console.log("fine_metals before : ", fine_metals);
+    console.log("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
+    /* convert gold to 24k from 18k */
+    if(purity18K && purity18K.value != null){
+      fine_metals = (parseFloat(fine_metals)*parseFloat(purity18K.value))/100;
+    }
+
     let rest_metal = fine_metals - receive_metal;
     
     let totalReportCharge = 0;
