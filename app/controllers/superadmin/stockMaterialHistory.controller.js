@@ -41,7 +41,8 @@ const PurchaseProductMaterialModel = db.purchase_product_materials;
 exports.index = async (req, res) => {
     let { page, limit, search } = req.query;
     let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-    let conditions = { belongs_to: userID };
+    //let conditions = { belongs_to: userID };
+    let conditions = { from_user_id: userID };
     if (!isEmpty(search)) {
         conditions = { ...conditions, [Op.or]: [{ '$material.name$': { [Op.like]: `%${search}%` } }, { '$unit.name$': { [Op.like]: `%${search}%` } }, { '$purity.name$': { [Op.like]: `%${search}%` } }, { '$toUser.name$': { [Op.like]: `%${search}%` } }] }
     }
