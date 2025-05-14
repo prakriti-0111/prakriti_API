@@ -40,6 +40,7 @@ const {
   SizeUpdate,
   PurityCreate,
   PurityUpdate,
+  ReportChargeUpdate,
   LeaveApplicationCreate,
   SalaryCreate,
   SalaryUpdate,
@@ -68,6 +69,7 @@ const supplierController = require("@controllers/superadmin/supplier.controller"
 const workerController = require("@controllers/superadmin/worker.controller");
 const sizeController = require("@controllers/superadmin/size.controller");
 const purityController = require("@controllers/superadmin/purity.controller");
+const reportChargeController = require("@controllers/superadmin/reportCharge.controller");
 const materialPriceController = require("@controllers/superadmin/materialPrice.controller");
 const leaveApplicationController = require("@controllers/superadmin/leaveApplication.controller");
 const purchaseController = require("@controllers/superadmin/purchase.controller");
@@ -747,6 +749,18 @@ module.exports = (app, express, io) => {
     "/purities/delete/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     purityController.delete
+  );
+
+  // report charge
+  router.get(
+    "/report-charge",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    reportChargeController.index
+  );
+  router.post(
+    "/report-charge/update/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin, ReportChargeUpdate],
+    reportChargeController.update
   );
 
   //material price
@@ -1509,6 +1523,12 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     stockMaterialHistoryController.updateStatus
   );
+  router.post(
+    "/stock-material-history/transfer",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockMaterialHistoryController.transferStockMaterial
+  );
+  
 
   //salary
   router.get(

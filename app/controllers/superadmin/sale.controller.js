@@ -51,6 +51,10 @@ const {
 const {
   PaymentCollection,
 } = require("@resources/superadmin/PaymentCollection");
+const {
+  ReportChargeCollection,
+} = require("@resources/superadmin/ReportChargeCollection");
+const { PurityCollection } = require("@resources/superadmin/PurityCollection");
 const { Op, json } = require("sequelize");
 const sequelize = db.sequelize;
 const ProductModel = db.products;
@@ -58,6 +62,7 @@ const UserModel = db.users;
 const CategoryModel = db.categories;
 const SubCategoryModel = db.sub_categories;
 const PurityModel = db.purities;
+const ReportChargeModel = db.report_charge;
 const UnitModel = db.units;
 const MaterialModel = db.materials;
 const SizeModel = db.sizes;
@@ -204,6 +209,12 @@ exports.index = async (req, res) => {
 exports.store = async (req, res) => {
   let data = req.body;
 
+  let reportCharge = await ReportChargeModel.findAll({ 
+    order:[['amount', 'ASC']],
+    where: {}
+  })
+  reportCharge = await ReportChargeCollection(reportCharge);
+
   if (!isEmpty(data.invoice_number)) {
     let sdata = await SaleModel.findOne({
       where: { invoice_number: data.invoice_number },
@@ -303,6 +314,9 @@ exports.store = async (req, res) => {
       notes: data.notes,
       payment_mode: data.payment_mode,
       transaction_no: data.transaction_no,
+      report_qty: data.report_qty,
+      report_charge: data.report_charge_amount,
+      report_tax_percentage: reportCharge[0].tax,
       total_amount: priceFormat(data.total_amount),
       cgst_tax: priceFormat(data.cgst_tax),
       sgst_tax: priceFormat(data.sgst_tax),
@@ -3431,11 +3445,11 @@ exports.saleProducts = async (req, res) => {
   //let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   //let adminRoleId = getRoleId("admin");
   let superAdminRoleId = getRoleId("superadmin");
-
+  console.log("req ====> ", req.userId, req.role);
   let saleProductsRes = await getOwnUserSaleProducts(
     req,
     req.query,
-    superAdminRoleId
+    req.role
   );
   res.send(formatResponse(saleProductsRes));
 };
@@ -5079,6 +5093,16 @@ exports.downloadInvoiceInfo = async (req, res) => {
     ],
   });
   payments = await PaymentCollection(payments);
+
+  /* 18k gold purity value */
+  let purity18K = await PurityModel.findOne({  
+    where: {
+      id: 4, //18K
+    },  
+  });
+
+  purity18K = await PurityCollection(purity18K);
+
   //console.log("payments : ",payments);
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
@@ -5799,7 +5823,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
         .map((itm) => {
           if(itm.id == 1){
             fine_metals += parseFloat(itm.weight);
-          }
+          } 
         });
 
       let materialNames = saleData.subCatItems[i].material
@@ -5887,9 +5911,58 @@ exports.downloadInvoiceInfo = async (req, res) => {
         receive_metal += parseFloat(itm.weight);
       }
     });
+    console.log("fine_metals before : ", fine_metals);
+    console.log("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
+    /* convert gold to 24k from 18k */
+    if(purity18K && purity18K.value != null){
+      fine_metals = (parseFloat(fine_metals)*parseFloat(purity18K.value))/100;
+    }
+    
     let rest_metal = fine_metals - receive_metal;
+
+    let totalReportCharge = parseInt(saleData.report_qty)*parseFloat(saleData.report_charge);
+    let taxOnReportCharge = (totalReportCharge*parseFloat(saleData.report_tax_percentage))/100;
+    let afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
     
     html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="6"
+                                          style="
+                                          border:none;">
+
+                                      </td>
+                                  </tr>`;
+                                  if(saleData.report_qty > 0){
+                                    html += `<tr style="
+                                        vertical-align: top;
+                                        background-color: #0A8AB8;
+                                        font-size: 12px; 
+                                        font-weight:400;
+                                        color:#ffffff;
+                                        ">
+                                        <td colspan="2"></td>
+                                        <td colspan="3">Rate</td>
+                                        <td colspan="2">Total</td>
+                                        <td colspan="1">Tax(%)</td>
+                                        <td colspan="1">Tax</td>
+                                        <td colspan="2">Total</td>
+                                        
+                                    </tr>`;
+                                    html += `<tr style="
+                                        vertical-align: top;
+                                        font-size: 14px; 
+                                        font-weight:400;
+                                        ">
+                                        <td colspan="2" style="background-color: #C1BDBD;">Report Charges : </td>
+                                        <td colspan="3" style="background-color: #C1BDBD;">${saleData.report_qty} Pics x ${saleData.report_charge.toFixed(2)} = </td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${totalReportCharge.toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${saleData.report_tax_percentage.toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${taxOnReportCharge.toFixed(2)}</td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${afterTaxTotalReportCharge.toFixed(2)}</td>
+                                        
+                                    </tr>`;
+                                  }
+                                  html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="6"
                                           style="
@@ -5900,37 +5973,25 @@ exports.downloadInvoiceInfo = async (req, res) => {
                           if(metalExists){
                             html += `<tr style="
                                       vertical-align: top;">
-                                      <td colspan="2">Fine Metals : </td>
-                                      <td colspan="2">${fine_metals.toFixed(2)} GM</td>
-                                      <td colspan="8"
-                                          style="
-                                          border:none;">
-
-                                      </td>
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Fine Metals : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${fine_metals.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
                           }
                           if(metalExists){
                             html += `<tr style="
                                       vertical-align: top;">
-                                      <td colspan="2">Receive Fine Metal : </td>
-                                      <td colspan="2">${receive_metal.toFixed(2)} GM</td>
-                                      <td colspan="8"
-                                          style="
-                                          border:none;">
-
-                                      </td>
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Receive Fine Metal : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${receive_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
                           }
                           if(metalExists){
                             html += `<tr style="
                                       vertical-align: top;">
-                                      <td colspan="2">Rest : </td>
-                                      <td colspan="2">${rest_metal.toFixed(2)} GM</td>
-                                      <td colspan="8"
-                                          style="
-                                          border:none;">
-
-                                      </td>
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Rest : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${rest_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
                           }
                                           
@@ -6011,7 +6072,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 400; font-size: 12px; text-align: left;"> Mode</th>
                                             <th
                                                 style="font-weight:
-                                                400; font-size: 12px; text-align: left;"> Payment</th>
+                                                400; font-size: 12px; text-align: left;"> Note</th>
                                             <th
                                                 style="font-weight:
                                                 400; font-size: 12px; text-align: left;">Amount</th>
@@ -6038,12 +6099,12 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i].purpose[0]
+                                                  payments[i].notes
                                                 }</td>
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight+" GM":payments[i].amount
+                                                  payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight:payments[i].amount
                                                 }</td>
                                         </tr>`;
     }
@@ -6075,7 +6136,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 style="">
                                                 <input
                                                     type="text"
-                                                    value="${saleData.total_sub_total}"
+                                                    value="${saleData.taxable_amount}"
                                                     style="max-width:
                                                     80px;font-Weight:600"></span></h4>
                                     </div>`;

@@ -28,6 +28,7 @@ const getModelObject = (data) => {
         material_name: data.material ? data.material.name : '',
         purity_name: data.purity ? data.purity.name : '',
         unit_name: data.unit ? data.unit.name : '',
+        pakka_weight: weightFormat(data.pakka_weight),
         weight: weightFormat(data.weight),
         quantity: data.quantity ?? '',
         status: data.status,

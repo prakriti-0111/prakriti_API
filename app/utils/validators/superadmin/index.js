@@ -20,6 +20,7 @@ const {  SubcategoryCreate,  SubcategoryUpdate } = require("./subcategory");
 const {  MaterialCreate,  MaterialUpdate } = require("./material");
 const {  SizeCreate,  SizeUpdate } = require("./size");
 const {  PurityCreate,  PurityUpdate } = require("./purity");
+const {  ReportChargeUpdate } = require("./report_charge");
 const { LeaveApplicationCreate, LeaveApplicationUpdate }=require("./leave_application");
 const {  ExpenseCreate,  ExpenseUpdate } = require("./expense");
 
@@ -57,6 +58,7 @@ module.exports = {
     UnitUpdate,
     PurityCreate,
     PurityUpdate,
+    ReportChargeUpdate,
     TaxCreate,
     TaxUpdate,
     CertificateCreate,

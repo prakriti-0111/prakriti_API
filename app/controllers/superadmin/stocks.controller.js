@@ -140,6 +140,7 @@ exports.index = async (req, res) => {
       size,
       price,
       user_id,
+      material_id,
       type,
       own_distributor,
       own_admin,
@@ -344,6 +345,10 @@ exports.index = async (req, res) => {
     }
     console.log(conditions);
 
+    if(typeof material_id != "undefined" && material_id != null && material_id != "") {
+      conditions.material_id = material_id;
+    }
+
     /*if (!isEmpty(qty)) {
       stockMaterialConditions.quantity = qty;
     }
@@ -366,16 +371,11 @@ exports.index = async (req, res) => {
     }
     let _include = [
       {
-        model: sizesModel,
-        as: "size",
-        where: sizeConditions,
-      },
-      {
         model: stock_materialsModel,
         as: "stockMaterials",
         required: true,
         where: stockMaterialConditions,
-        separate: true,
+        //separate: true,
         include: [
           {
             model: materialModel,
@@ -397,6 +397,11 @@ exports.index = async (req, res) => {
       },
     ];
     if (type == "product" || type == "return") {
+      _include.push({
+        model: sizesModel,
+        as: "size",
+        where: sizeConditions,
+      });
       _include.push({
         model: productsModel,
         as: "product",
@@ -432,10 +437,14 @@ exports.index = async (req, res) => {
             model: CategoryModel,
             as: "category",
           },
+          {
+            model: PurityModel,
+            as: 'purities',
+          }
         ],
       });
     }
-
+    console.log(_include);
     stocksModel
       .findAndCountAll({
         order: [["id", "DESC"]],
@@ -447,7 +456,7 @@ exports.index = async (req, res) => {
       })
       .then(async (data) => {
         //
-        // console.log("-------this is actual value ",data.rows[0]);
+        console.log("-------this is actual value ",data.rows);
         let result = {
           items:
             type == "product" || type == "return"
@@ -455,7 +464,7 @@ exports.index = async (req, res) => {
               : await StocksMaterialCollection(data.rows, userID),
           total: data.count,
         };
-
+        console.log("result : ", result);
         console.log("search : ", search);
         //if(!isNaN(search) && search != ""){
         let sArr = search.split(",");

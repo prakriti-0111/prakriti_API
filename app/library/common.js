@@ -3739,7 +3739,8 @@ const getPurchaseProductsUser = async (req, params) => {
 
 const getOwnUserSaleProducts = async (req, params, roleId = null) => {
   let userIds = await avlStockUserIdsNew(req, roleId);
-  console.log(userIds);
+  console.log("getOwnUserSaleProducts users ===> ", userIds);
+  
   //let superadminId = isManager(req) ? req.userId : await getWorkingUserID(req);
   //userIds.push(superadminId);
   let sales = await SaleModel.findAll({
