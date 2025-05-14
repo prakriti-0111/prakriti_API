@@ -1067,7 +1067,7 @@ exports.delete = async (req, res) => {
   .then((resp) => {
     res.send(formatResponse({
       file_name: saleData.invoice_number+".pdf",
-      url: getFileAbsulatePath(file_path),
+      url: getFileAbsulatePathPDF(file_path),
       image_url: logoUrl
     }, "Invoice pdf"));
   })
@@ -3984,7 +3984,7 @@ exports.downloadInvoiceItems = async (req, res) => {
           formatResponse(
             {
               file_name: saleData.invoice_number + "_lists.pdf",
-              url: getFileAbsulatePath(file_path),
+              url: getFileAbsulatePathPDF(file_path),
               html : html,
               saleData,
               payments,

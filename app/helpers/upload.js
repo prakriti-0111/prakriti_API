@@ -31,7 +31,7 @@ const base64FileUpload = async (file, filepath) => {
     try {
       const response = await axios.request(config);
       console.log(JSON.stringify(response.data));
-      return {
+      return await {
         file_name: response.data.file_name,
         path: response.data.path,
       };
