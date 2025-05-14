@@ -472,7 +472,9 @@ exports.update = async (req, res) => {
       }
     } catch (error) {}
   }
+
   documents = [...documents, ...oldFiles];
+  
 
   let user_name = admin.user_name;
   if (isEmpty(user_name)) {

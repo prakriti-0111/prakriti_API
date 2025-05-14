@@ -1311,14 +1311,19 @@ const calculateProductPriceByPurity = async (
 };
 
 const getDistributorAdmin = async (id, state_id, fullObj) => {
+  let user = await UserModel.findOne({ where: { id: id } });
+  if (!user) return null;
+
   if (!state_id) {
-    let user = await UserModel.findOne({ where: { id: id } });
+    //let user = await UserModel.findOne({ where: { id: id } });
     state_id = user ? user.state_id : 0;
   }
 
   let admin = await UserModel.findOne({
-    where: { state_id: state_id, role_id: getRoleId("admin") },
+    //where: { state_id: state_id, role_id: getRoleId("admin") },
+    where: { id: user.parent_id },
   });
+
   if (fullObj) {
     return admin;
   } else {
@@ -3294,6 +3299,7 @@ const getPurchaseProducts = async (params) => {
       //type: { [Op.in]: ["product", "order_purchase"] },
       user_id: { [Op.in]: managerIds },
     },
+    order: [["createdAt", "DESC"]],
     include: [
       {
         model: PurchaseProductModel,
@@ -3517,6 +3523,7 @@ const getPurchaseProductsUser = async (req, params) => {
       //type: { [Op.in]: ["product", "order_purchase"] },
       user_id: userID,
     },
+    order: [["createdAt", "DESC"]],
     include: [
       {
         model: PurchaseProductModel,
@@ -3721,7 +3728,7 @@ const getPurchaseProductsUser = async (req, params) => {
     }
   }
   return {
-    items: items,
+    items: items.reverse(),
     total_amount: priceFormat(total_amount),
     total_return_amount: priceFormat(total_return_amount),
     total_product: total_product,

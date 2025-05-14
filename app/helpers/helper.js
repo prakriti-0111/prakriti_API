@@ -173,11 +173,11 @@ const removeCurrency = (amount) => {
 
 const getFileAbsulatePath = (f) => {
   return process.env.BASE_URL + f;
-};
+}
 
 const getFileAbsulatePathPDF = (f) => {
   return process.env.BASE_URL_INVOICE + f;
-};
+}
 
 const ucWords = (text) => {
   return !text
@@ -719,6 +719,7 @@ module.exports = {
   productTypeDisplay,
   generateOrderNo,
   priceConvertToGram,
+  getFileAbsulatePathPDF,
   convertUnitToGram,
   paymentModeDisplay,
   getFormatedAddress,
