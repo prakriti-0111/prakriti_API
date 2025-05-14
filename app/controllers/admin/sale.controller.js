@@ -19,6 +19,7 @@ const {
 const { updateOrCreate, removeMaterialFromStock } = require("@library/common");
 const { getPaginationOptions } = require("@helpers/paginator");
 const { SaleCollection } = require("@resources/superadmin/SaleCollection");
+const { PurityCollection } = require("@resources/superadmin/PurityCollection");
 const { Op } = require("sequelize");
 const sequelize = db.sequelize;
 const ProductModel = db.products;
@@ -145,6 +146,9 @@ exports.store = async (req, res) => {
       notes: data.notes,
       payment_mode: data.payment_mode,
       transaction_no: data.transaction_no,
+      report_qty: data.report_qty,
+      report_charge: data.report_charge_amount,
+      report_tax_percentage: reportCharge[0].tax,
       total_amount: priceFormat(data.total_amount),
       cgst_tax: priceFormat(data.cgst_tax),
       sgst_tax: priceFormat(data.sgst_tax),
@@ -1305,7 +1309,7 @@ exports.downloadInvoice = async (req, res) => {
                                                                   400; font-size: 12px; text-align: left;"> Mode</th>
                                                               <th
                                                                   style="font-weight:
-                                                                  400; font-size: 12px; text-align: left;"> Payment</th>
+                                                                  400; font-size: 12px; text-align: left;"> Note</th>
                                                               <th
                                                                   style="font-weight:
                                                                   400; font-size: 12px; text-align: left;">Amount</th>
@@ -1334,8 +1338,7 @@ exports.downloadInvoice = async (req, res) => {
                                                               <td
                                                                   style="border-right:
                                                                   none; font-size: 12px;">${
-                                                                    payments[i]
-                                                                      .purpose[0]
+                                                                    payments[i].notes
                                                                   }</td>
                                                               <td
                                                                   style="border-right:
@@ -1904,7 +1907,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
               {
                 model: taxSlabModel,
                 as: "tax",
-              }
+              },
             ],
           },
           {
@@ -1947,8 +1950,9 @@ exports.downloadInvoiceInfo = async (req, res) => {
         model: StockModel,
         as: "saleStocks",
         where: {
-          purchase_id: sequelize.col('purchase.id')
-        }
+          purchase_id: sequelize.col("purchase.id"),
+        },
+        required: false,
       },
       {
         model: UserModel,
@@ -1966,9 +1970,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
       .send(formatErrorResponse("Sale not found"));
   }
 
-
   let saleData = SaleCollection(sale);
-  
 
   let payments = await PaymentModel.findAll({
     where: {
@@ -1983,6 +1985,16 @@ exports.downloadInvoiceInfo = async (req, res) => {
     ],
   });
   payments = await PaymentCollection(payments);
+
+  /* 18k gold purity value */
+  let purity18K = await PurityModel.findOne({  
+    where: {
+      id: 4, //18K
+    },  
+  });
+
+  purity18K = await PurityCollection(purity18K);
+
   //console.log("payments : ",payments);
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
@@ -1991,7 +2003,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
   const bitmap = fs.readFileSync(logoUrl);
   const logo = bitmap.toString("base64");
-  
+
   let footerhtml = `
               <div class="invoice" style="width: 100%; margin: 0; padding: 15px; position: absolute; left:0px; bottom: 0px; background-color: #f9f9f9;">
                   <hr/>
@@ -2162,7 +2174,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
             </div>
           `;
 
-      let html = `
+  let html = `
       <!DOCTYPE html>
       <html lang="en">
           <head>
@@ -2234,7 +2246,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                   align="center" width="100%">
                                   <tbody>
                                       <tr>
-                                          <hr style="border: 1px solid #1e2746" />
+                                          <hr style="border: 1px solid #1E2757" />
                                       </tr>
                                   </tbody>
                               </table>
@@ -2359,16 +2371,16 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                       </tr>
                                   </tbody>
                               </table>`;
-                            if(saleData.subCatItems.length == 0){
-                              html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+  if (saleData.subCatItems.length == 0) {
+    html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
                                 border="0"
                                 align="center" width="100%">
-                                <thead style="background-color: #1E2746;">
-                                    <tr style="background-color: #1E2746;">
+                                <thead style="background-color: #1E2757;">
+                                    <tr style="background-color: #1E2757;">
                                         <th style="text-align: left; color:
-                                            #fff; border: 1px solid #1E2746;
+                                            #fff; border: 1px solid #1E2757;
                                             font-size: 12px; font-weight:
-                                            400;background-color: #1E2746;">#</th>
+                                            400;background-color: #1E2757;">#</th>
                                         <th style="text-align: left; color:
                                             #fff; font-size: 12px;
                                             font-weight: 400; width:
@@ -2403,9 +2415,9 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                     </tr>
                                 </thead>
                                 <tbody>`;
-                        for (let i = 0; i < saleData.products.length; i++) {
-                          let bgTrColor = i%2==0?"#C1BDBD":"#C4BEED";
-                          html += `<tr style="background-color: ${bgTrColor}">
+    for (let i = 0; i < saleData.products.length; i++) {
+      let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
+      html += `<tr style="background-color: ${bgTrColor}">
                                         <td style="text-align: left;
                                             font-size: 11px;
                                             font-weight: 400;">
@@ -2415,17 +2427,15 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                             font-size: 11px;
                                             font-weight: 400;font-size: 10px;">
                                             ${
-                                              saleData.products[i]
-                                                .product_name
-                                            } - ${saleData.products[i].product_code}
+                                              saleData.products[i].product_name
+                                            } - ${
+        saleData.products[i].product_code
+      }
                                         </td>
                                         <td style="text-align: left;
                                             font-size: 11px;
                                             font-weight: 400;">
-                                            ${
-                                              saleData.products[i]
-                                                .size_name
-                                            }
+                                            ${saleData.products[i].size_name}
                                         </td>
                                         <td colspan="8" style="text-align:
                                             left; font-size: 11px;
@@ -2441,12 +2451,12 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         vertical-align: top;">
                                         <td colspan="3"
                                             style="border-bottom: 1px solid
-                                            #1E2746; width: 300px; text-align: left;">
+                                            #1E2757; width: 300px; text-align: left;">
                                             <div style="max-width: 300px; text-align: left;">`;
-    for (let x = 0; x < saleData.products[i].materials.length; x++) {
-    saleData.products[i].materials[x].amount == "₹0.00"
-    ? null
-    : (html += `<div style="display: flex;
+      for (let x = 0; x < saleData.products[i].materials.length; x++) {
+        saleData.products[i].materials[x].amount == "₹0.00"
+          ? null
+          : (html += `<div style="display: flex;
                                                     flex-wrap: wrap;
                                                     justify-content: center;
                                                     margin: 0 -5px; text-align: left;">
@@ -2481,71 +2491,63 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                     </div>
 
                                                 </div>`);
-    }
+      }
 
-    html += `</div>
+      html += `</div>
 
 
                                             </td>
                                             <td style="border-bottom:
-                                                1px solid #1E2746;">`;
-              for (let x = 0; x < saleData.products[i].materials.length; x++) {
-              html += `<div>`;
-              if (isEmpty(saleData.products[i].materials[x].discount_amount)) {
-              saleData.products[i].materials[x].amount == "₹0.00"
-              ? null
-              : (html += `-`);
-              } else {
-              html += `<span
+                                                1px solid #1E2757;">`;
+      for (let x = 0; x < saleData.products[i].materials.length; x++) {
+        html += `<div>`;
+        if (isEmpty(saleData.products[i].materials[x].discount_amount)) {
+          saleData.products[i].materials[x].amount == "₹0.00"
+            ? null
+            : (html += `-`);
+        } else {
+          html += `<span
                                                         style="text-align:
                                                         left; font-size:
                                                         10px;
                                                         font-weight:
                                                         400;">@${removeBlankZero(
-                                                          saleData
-                                                            .products[
-                                                            i
-                                                          ].materials[
-                                                            x
-                                                          ]
+                                                          saleData.products[i]
+                                                            .materials[x]
                                                             .discount_percent
                                                         )}% ${
-              saleData.products[i].materials[x].discount_amount_display
-              }</span> 
+            saleData.products[i].materials[x].discount_amount_display
+          }</span> 
                                     <!--<span
                                                         style="text-align:
                                                         left; font-size:
                                                         10px;
                                                         font-weight:
                                                         400;">${
-                                                          saleData
-                                                            .products[
-                                                            i
-                                                          ].materials[
-                                                            x
-                                                          ]
+                                                          saleData.products[i]
+                                                            .materials[x]
                                                             .discount_amount_display
                                                         }</span>-->`;
-                }
-                html += `</div>`;
-                }
-                html += `</td>
+        }
+        html += `</div>`;
+      }
+      html += `</td>
                                             <td style="text-align: left;
                                                 font-size: 10px;
                                                 font-weight: 400;
                                                 border-bottom: 1px solid
-                                                #1E2746;">`;
-                                              for (let x = 0; x < saleData.products[i].materials.length; x++) {
-                                              saleData.products[i].materials[x].amount == "₹0.00"
-                                              ? null
-                                              : (html += `<div>${saleData.products[i].materials[x].material_cost}</div>`);
-                                              }
-                                              html += `</td>
+                                                #1E2757;">`;
+      for (let x = 0; x < saleData.products[i].materials.length; x++) {
+        saleData.products[i].materials[x].amount == "₹0.00"
+          ? null
+          : (html += `<div>${saleData.products[i].materials[x].material_cost}</div>`);
+      }
+      html += `</td>
                                             <td style="text-align: left;
                                                 font-size: 10px;
                                                 font-weight: 400;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].making_charge}@${saleData.products[i].making_charge_discount}% = ${saleData.products[i].total_making_charge_discount}
                                             </td>
 
@@ -2553,41 +2555,41 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 left;font-size: 10px;
                                                 font-weight: 600;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].sub_price}
                                             </td>
                                             <td style="text-align:
                                                 left;font-size: 10px;
                                                 font-weight: 600;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].total_discount_display}
                                             </td>
                                             <td style="text-align:
                                                 left;font-size: 10px;
                                                 font-weight: 400;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].sub_total}
                                             </td>
                                             <td style="text-align:
                                                 left;font-size: 10px;
                                                 font-weight: 400;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].tax}
                                             </td>
                                             <td style="text-align:
                                                 left;font-size: 10px;
                                                 font-weight: 600;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].total_display}
                                             </td>
 
                                         </tr>`;
-                              }
-                              html += `<tr style="
+      }
+      html += `<tr style="
                                             vertical-align: top;">
                                             <td colspan="6"
                                                 style="
@@ -2666,17 +2668,16 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         </tr> -->
                                     </tbody>
                                 </table>`;
-                              } else {
-
-                        html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+  } else {
+    html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
                                       border="0"
                                       align="center" width="100%">
-                              <thead style="background-color: #1E2746;">
-                                  <tr style="background-color: #1E2746;">
+                              <thead style="background-color: #1E2757;">
+                                  <tr style="background-color: #1E2757;">
                                       <th style="text-align: left; color:
-                                          #fff; border: 1px solid #1E2746;
+                                          #fff; border: 1px solid #1E2757;
                                           font-size: 12px; font-weight:
-                                          400;background-color: #1E2746; width: 50px;">SL</th>
+                                          400;background-color: #1E2757; width: 50px;">SL</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400; width:
@@ -2708,15 +2709,33 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                   </tr>
                               </thead>
                               <tbody>`;
-                              for (let i = 0; i < saleData.subCatItems.length; i++) {
-                                let materialNames = saleData.subCatItems[i].material.map((itm) => itm.name).join("<br/ >");
-                                let materialWts = saleData.subCatItems[i].material.map((itm) => itm.weight.toFixed(2)).join("<br/ >");
-                                let materialUnits = saleData.subCatItems[i].material.map((itm) => itm.unit).join("<br/ >");
-                                let materialRates = saleData.subCatItems[i].material.map((itm) => itm.rate.toFixed(2)).join("<br/ >");
-                                let materialCosts = saleData.subCatItems[i].material.map((itm) => itm.material_cost.toFixed(2)).join("<br/ >");
-                                let bgTrColor = i%2==0?"#C1BDBD":"#C4BEED";
+    let fine_metals = 0;
+    for (let i = 0; i < saleData.subCatItems.length; i++) {
+      saleData.subCatItems[i].material
+        .map((itm) => {
+          if(itm.id == 1){
+            fine_metals += parseFloat(itm.weight);
+          } 
+        });
 
-                          html += `<tr style="background-color: ${bgTrColor};">
+      let materialNames = saleData.subCatItems[i].material
+        .map((itm) => itm.name)
+        .join("<br/ >");
+      let materialWts = saleData.subCatItems[i].material
+        .map((itm) => itm.weight.toFixed(2))
+        .join("<br/ >");
+      let materialUnits = saleData.subCatItems[i].material
+        .map((itm) => itm.unit)
+        .join("<br/ >");
+      let materialRates = saleData.subCatItems[i].material
+        .map((itm) => itm.rate.toFixed(2))
+        .join("<br/ >");
+      let materialCosts = saleData.subCatItems[i].material
+        .map((itm) => itm.material_cost.toFixed(2))
+        .join("<br/ >");
+      let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
+
+      html += `<tr style="background-color: ${bgTrColor};">
                                       <td style="text-align: left;
                                           font-size: 14px;
                                           font-weight: 400;">
@@ -2725,91 +2744,155 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                       <td style="text-align: left;
                                           font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            saleData.subCatItems[i]
-                                              .name
-                                          }
+                                          ${saleData.subCatItems[i].name}
                                       </td>
                                       <td style="text-align: left;
                                           font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            saleData.subCatItems[i]
-                                              .qty
-                                          }
+                                          ${saleData.subCatItems[i].qty}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
                                           ${
-                                            saleData.subCatItems[i]
-                                              .hsn?saleData.subCatItems[i]
-                                              .hsn:""
+                                            saleData.subCatItems[i].hsn
+                                              ? saleData.subCatItems[i].hsn
+                                              : ""
                                           }
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            materialNames
-                                          }
+                                          ${materialNames}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            materialWts
-                                          }
+                                          ${materialWts}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            materialUnits
-                                          }
+                                          ${materialUnits}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            materialRates
-                                          }
+                                          ${materialRates}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            saleData.subCatItems[i]
-                                              .tax
-                                          }
+                                          ${saleData.subCatItems[i].tax}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            saleData.subCatItems[i]
-                                              .taxableAmount.toFixed(2)
-                                          }
+                                          ${saleData.subCatItems[
+                                            i
+                                          ].taxableAmount.toFixed(2)}
                                       </td>
 
                                     </tr>`;
-                                  
-                              }
-                          html += `<tr style="
+    }
+    let receive_metal = 0;
+    let metalExists = true;
+    payments.map((itm) => {
+      if(itm.payment_mode.toLowerCase() == "metal" && itm.weight != null){
+        metalExists = true;
+        receive_metal += parseFloat(itm.weight);
+      }
+    });
+
+    console.log("fine_metals before : ", fine_metals);
+    console.log("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
+    /* convert gold to 24k from 18k */
+    if(purity18K && purity18K.value != null){
+      fine_metals = (parseFloat(fine_metals)*parseFloat(purity18K.value))/100;
+    }
+
+    let rest_metal = fine_metals - receive_metal;
+
+    let totalReportCharge = parseInt(saleData.report_qty)*parseFloat(saleData.report_charge);
+    let taxOnReportCharge = (totalReportCharge*parseFloat(saleData.report_tax_percentage))/100;
+    let afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
+    
+    html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="6"
                                           style="
                                           border:none;">
 
                                       </td>
-                                  </tr>
+                                  </tr>`;
+                                  if(saleData.report_qty > 0){
+                                    html += `<tr style="
+                                        vertical-align: top;
+                                        background-color: #0A8AB8;
+                                        font-size: 12px; 
+                                        font-weight:400;
+                                        color:#ffffff;
+                                        ">
+                                        <td colspan="2"></td>
+                                        <td colspan="3">Rate</td>
+                                        <td colspan="2">Total</td>
+                                        <td colspan="1">Tax(%)</td>
+                                        <td colspan="1">Tax</td>
+                                        <td colspan="2">Total</td>
+                                        
+                                    </tr>`;
+                                    html += `<tr style="
+                                        vertical-align: top;
+                                        font-size: 14px; 
+                                        font-weight:400;
+                                        ">
+                                        <td colspan="2" style="background-color: #C1BDBD;">Report Charges : </td>
+                                        <td colspan="3" style="background-color: #C1BDBD;">${saleData.report_qty} Pics x ${saleData.report_charge.toFixed(2)} = </td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${totalReportCharge.toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${saleData.report_tax_percentage.toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${taxOnReportCharge.toFixed(2)}</td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${afterTaxTotalReportCharge.toFixed(2)}</td>
+                                        
+                                    </tr>`;
+                                  }
+                                  html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="6"
+                                          style="
+                                          border:none;">
 
+                                      </td>
+                                  </tr>`;
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Fine Metals : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${fine_metals.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Receive Fine Metal : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${receive_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Rest : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${rest_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
                                           
-                              </tbody>
+                            html += ` </tbody>
                           </table>`;
-                        }
+  }
 
-                        html += `
+  html += `
                         <div class="table-footer-area" style="display: table; width:
                             100%; position:absolute ; bottom: 400px">
                             <hr/>
@@ -2860,8 +2943,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                     }px;
                                 ">
                                     `;
-                                  if (payments.length) {
-                            html += `<table cellspacing="0"
+  if (payments.length) {
+    html += `<table cellspacing="0"
                                         cellpadding="3"
                                         rules="rows"
                                         align="left"
@@ -2869,7 +2952,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         style=" margin-right:40px;">
                                         <tr
                                             style="background-color:
-                                            #1E2746;
+                                            #1E2757;
                                             color: #fff;">
                                             <th
                                                 style="font-weight:
@@ -2882,13 +2965,13 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 400; font-size: 12px; text-align: left;"> Mode</th>
                                             <th
                                                 style="font-weight:
-                                                400; font-size: 12px; text-align: left;"> Payment</th>
+                                                400; font-size: 12px; text-align: left;"> Note</th>
                                             <th
                                                 style="font-weight:
                                                 400; font-size: 12px; text-align: left;">Amount</th>
                                             `;
-                                      for (let i = 0; i < payments.length; i++) {
-                                html += `<tr
+    for (let i = 0; i < payments.length; i++) {
+      html += `<tr
                                             style=" ">
                                             <td
                                                 style="border-right:
@@ -2898,33 +2981,29 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i]
-                                                    .payment_date
+                                                  payments[i].payment_date
                                                 }</td>
                                             
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i]
-                                                    .payment_mode
+                                                  payments[i].payment_mode
                                                 }</td>
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i]
-                                                    .purpose[0]
+                                                  payments[i].notes
                                                 }</td>
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i]
-                                                    .amount
+                                                  payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight:payments[i].amount
                                                 }</td>
                                         </tr>`;
-                                      }
-                            html += `</table>`;
-                                  }
-                        html += `</div>
+    }
+    html += `</table>`;
+  }
+  html += `</div>
                             </div>
                             <div style="display:
                                 table-cell;
@@ -2950,12 +3029,12 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 style="">
                                                 <input
                                                     type="text"
-                                                    value="${saleData.total_sub_total}"
+                                                    value="${saleData.taxable_amount}"
                                                     style="max-width:
                                                     80px;font-Weight:600"></span></h4>
                                     </div>`;
-                  if (saleData.is_same_state_trnx && saleData.cgst_tax) {
-                                              html += `<div>
+  if (saleData.is_same_state_trnx && saleData.cgst_tax) {
+    html += `<div>
                                                           <h4 style="margin:
                                                               0;
                                                               text-align:
@@ -2973,9 +3052,9 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                                       style="max-width:
                                                                       80px;"></span></h4>
                                                       </div>`;
-                  }
-                  if (saleData.is_same_state_trnx && saleData.sgst_tax) {
-                                              html += `<div>
+  }
+  if (saleData.is_same_state_trnx && saleData.sgst_tax) {
+    html += `<div>
                                                           <h4 style="margin:
                                                               0;
                                                               text-align:
@@ -2993,9 +3072,9 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                                       style="max-width:
                                                                       80px;"></span></h4>
                                                       </div>`;
-                  }
-                  if (!saleData.is_same_state_trnx && saleData.igst_tax) {
-                                              html += `<div>
+  }
+  if (!saleData.is_same_state_trnx && saleData.igst_tax) {
+    html += `<div>
                                                           <h4 style="margin:
                                                               0;
                                                               text-align:
@@ -3013,8 +3092,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                                       style="max-width:
                                                                       80px;"></span></h4>
                                                       </div>`;
-                  }
-                            html += `<div>
+  }
+  html += `<div>
                                         
                                     </div>
                                     <div>
@@ -3151,8 +3230,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                       style="max-width:
                                                       80px;"></span></h4>
                                       </div>`;
-                                if (saleData.return_amount) {
-                              html += `<div>
+  if (saleData.return_amount) {
+    html += `<div>
                                           <h4 style="margin:
                                               0;
                                               text-align:
@@ -3166,13 +3245,17 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                   style="">
                                                   <input
                                                       type="text"
-                                                      value="${saleData.return_amount?saleData.return_amount:"0.00"}"
+                                                      value="${
+                                                        saleData.return_amount
+                                                          ? saleData.return_amount
+                                                          : "0.00"
+                                                      }"
                                                       style="max-width:
                                                       80px;"></span></h4>
                                       </div>`;
-                                  }
+  }
 
-                              html += `<div>
+  html += `<div>
                                           <h4 style="margin:
                                               0;
                                               text-align:
@@ -3204,33 +3287,33 @@ exports.downloadInvoiceInfo = async (req, res) => {
   </html>
   `;
 
-  try{
+  try {
     let file_path = "public/invoices/" + saleData.invoice_number + "_info.pdf";
-    const options = { format: 'A4' };
+    const options = { format: "A4" };
 
     (async () => {
-        const file = { content: html };
-    
-        // Generate PDF
-        const pdfBuffer = await html_to_pdf.generatePdf(file, options);
-        
-        // Save PDF to file
-        fs.writeFileSync(file_path, pdfBuffer);
-        console.log('PDF generated successfully!');
+      const file = { content: html };
 
-        res.send(
-          formatResponse(
-            {
-              file_name: saleData.invoice_number + "_info.pdf",
-              url: getFileAbsulatePathPDF(file_path),
-              html,
-              sale,
-              saleData,
-              payments,
-            },
-            "Invoice pdf"
-          )
-        );
+      // Generate PDF
+      const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+
+      // Save PDF to file
+      fs.writeFileSync(file_path, pdfBuffer);
+      console.log("PDF generated successfully!");
+
+      res.send(
+        formatResponse(
+          {
+            file_name: saleData.invoice_number + "_info.pdf",
+            url: getFileAbsulatePathPDF(file_path),
+            html,
+            sale,
+            saleData,
+            payments,
+          },
+          "Invoice pdf"
+        )
+      );
     })();
   } catch (error) {
     return res
