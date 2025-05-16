@@ -95,6 +95,7 @@ const getModelObject = async(data, req, userIds) => {
         image: (!isEmpty(data.profile_image)) ? getFileAbsulatePath(data.profile_image) : defaultProfileImage(),
         rating: parseFloat(data.avg_rating),
         is_my_retailer: (userIds && userIds.includes(data.id)) ? true : false,
+        partner: data.partner == 1?'1':'0',
         created_by: 'createdBy' in data && data.createdBy ? data.createdBy.name : '',
         created_by_display: [
             'createdBy' in data && data.createdBy ? data.createdBy.name : '',
