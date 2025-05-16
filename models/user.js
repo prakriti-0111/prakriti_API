@@ -150,6 +150,7 @@ module.exports = (sequelize, DataTypes) => {
     dob: DataTypes.DATEONLY,
     marital_status: DataTypes.STRING,
     own: DataTypes.BOOLEAN,
+    partner: DataTypes.BOOLEAN,
     expense: DataTypes.BOOLEAN,
     expense_action: DataTypes.BOOLEAN,
     created_by: DataTypes.INTEGER,
