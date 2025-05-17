@@ -214,7 +214,13 @@ exports.stock_products_slider = async (req, res) => {
  * @param res
  */
 exports.bestRetailers = async (req, res) => {
-    let query = "SELECT users.profile_image, users.name, users.city, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.id) WHERE users.role_id = 5 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL GROUP BY users.id ORDER BY total_amount DESC LIMIT 5";
+    let { city } = req.query;
+    let query = "SELECT users.id, users.profile_image, users.name, users.company_name, states.name as `state_name`, districts.name as `district_name`, users.city, users.mobile, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    if(city){
+        query += ` AND users.city LIKE '%${city}%'`;
+    }
+    query += " GROUP BY users.id ORDER BY total_amount DESC LIMIT 5";
+    console.log("bestRetailers query ===========:> ", query);
     const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
     let retailers = [];
     for(let item of users){
@@ -223,17 +229,89 @@ exports.bestRetailers = async (req, res) => {
         if(item.city){
             address.push(item.city);
         }
+        if(item.district_name){
+            address.push(item.district_name);
+        }
         if(state){
             address.push(state.name);
         }
         retailers.push({
+            id: item.id,
             name: item.name,
+            company_name: item.company_name || '',
+            district_name: item.district_name || '',
+            city: item.city || '',
+            state_name: state.name || '',
+            mobile: item.mobile || '',
             since: 1990,
             address: address.join(", "),
             image: (!isEmpty(item.profile_image)) ? getFileAbsulatePath(item.profile_image) : logoImage()
         })
     }
     res.send(formatResponse(retailers));
+}
+
+exports.bestRetailerCities = async (req, res) => {
+    /* let { city } = req.query; */
+    let query = "SELECT DISTINCT users.city FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    /* if(city){
+        query += ` AND users.city LIKE '%${city}%'`;
+    } */
+    query += " GROUP BY users.city ORDER BY users.city ASC";
+    console.log("bestRetailer cities query ===========:> ", query);
+    const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
+    let retailers = [];
+    let c = 0;
+    for(let item of users){
+        c++;
+        retailers.push({
+            id: c,
+            name: item.city || ''
+        });
+    }
+    res.send(formatResponse(retailers));
+}
+
+exports.bestRetailerView = async (req, res) => {
+    let { id } = req.query;
+
+    let query = "SELECT users.id, users.profile_image, users.name, users.company_name, states.name as `state_name`, districts.name as `district_name`, users.city, users.mobile, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    if(id){
+        query += ` AND users.id = '${id}'`;
+    }
+    query += "";
+    console.log("bestRetailer view query ===========:> ", query);
+    const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
+    let retailers = [];
+    for(let item of users){
+        let state = await stateModel.findOne({where: {id: item.state_id}});
+        let address = [];
+        if(item.city){
+            address.push(item.city);
+        }
+        if(item.district_name){
+            address.push(item.district_name);
+        }
+        if(state){
+            address.push(state.name);
+        }
+        retailers.push({
+            id: item.id,
+            name: item.name,
+            company_name: item.company_name || '',
+            district_name: item.district_name || '',
+            city: item.city || '',
+            state_name: state.name || '',
+            mobile: item.mobile || '',
+            since: 1990,
+            address: address.join(", "),
+            image: (!isEmpty(item.profile_image)) ? getFileAbsulatePath(item.profile_image) : logoImage()
+        });
+    }
+    if(!retailers.length){
+        return res.status(errorCodes.default).send(formatErrorResponse("Retailer not found."));
+    }
+    res.send(formatResponse(retailers[0]));
 }
 
 /**
