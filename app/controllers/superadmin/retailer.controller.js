@@ -344,6 +344,7 @@ exports.store = async (req, res) => {
     company_logo: company_logo,
     status: data.status ? true : false,
     documents: documents,
+    partner: data.partner || null
   };
 
   userModel
@@ -546,6 +547,7 @@ exports.update = async (req, res) => {
     company_logo: company_logo,
     status: data.status ? true : false,
     documents: documents,
+    partner: data.partner || null
   };
   if (!isEmpty(data.password)) {
     postData.password = bcrypt.hashSync(data.password, 8);
