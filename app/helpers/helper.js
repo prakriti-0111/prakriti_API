@@ -496,15 +496,12 @@ const paymentModeDisplay = (type) => {
     case "advance":
       return "Advance";
       break;
-
     case "imps_neft":
       return "Banking/RTGS/NEFT";
       break;
-
     case "metal":
       return "Metal";
       break;
-
     default:
       return "Cash";
       break;
