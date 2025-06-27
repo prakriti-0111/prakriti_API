@@ -491,14 +491,14 @@ const paymentModeDisplay = (type) => {
       return "Paytm";
       break;
     case "online":
-      return "Online";
+      return "UPI/PhonePe/GPay";
       break;
     case "advance":
       return "Advance";
       break;
 
     case "imps_neft":
-      return "NEFT/IMPS/UPI";
+      return "Banking/RTGS/NEFT";
       break;
 
     case "metal":
