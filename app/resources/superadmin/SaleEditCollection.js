@@ -71,7 +71,7 @@ const getModelObject = async(data) => {
             total_weight = weightFormat(p_item.total_weight).toFixed(3);
         }
 
-        let total_weight_display = total_weight + ' ' + materials[0].unit_name;
+        let total_weight_display = materials.length > 0?total_weight + ' ' + materials[0].unit_name: total_weight + ' gm';
 
         let thisObj = {
             id: p_item.id,
