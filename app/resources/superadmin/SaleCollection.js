@@ -52,7 +52,7 @@ const getModelObject = (data) => {
             total_weight = weightFormat(item.total_weight).toFixed(3);
         }
 
-        let total_weight_display = total_weight + ' ' + materials[0].unit_name;
+        let total_weight_display = materials.length > 0?total_weight + ' ' + materials[0].unit_name:total_weight + ' gm';
 
         total_sub_total += priceFormat(item.sub_price - item.total_discount);
 
