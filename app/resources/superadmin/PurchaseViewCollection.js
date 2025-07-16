@@ -46,7 +46,7 @@ const getModelObject = (data) => {
         if(materials.length == 1){
             total_weight = weightFormat(materials[0].weight).toFixed(3) + ' ' + materials[0].unit_name;
         }else{
-            total_weight = weightFormat(item.total_weight).toFixed(3) + materials[0].unit_name;
+            total_weight = materials.length > 0?weightFormat(item.total_weight).toFixed(3) + materials[0].unit_name: weightFormat(item.total_weight).toFixed(3) + ' gm';
         }
         let sub_total = !isEmpty(data.sale_id) ? displayAmount(item.sub_price) : displayAmount(parseFloat(item.sub_price) + parseFloat(item.making_charge));
         products.push({
