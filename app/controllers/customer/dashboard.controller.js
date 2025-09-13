@@ -214,8 +214,11 @@ exports.stock_products_slider = async (req, res) => {
  * @param res
  */
 exports.bestRetailers = async (req, res) => {
-    let { city } = req.query;
+    let { state, city } = req.query;
     let query = "SELECT users.id, users.profile_image, users.name, users.company_name, states.name as `state_name`, districts.name as `district_name`, users.city, users.mobile, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    if(state){
+        query += ` AND users.state_id='${state}'`;
+    }
     if(city){
         query += ` AND users.city LIKE '%${city}%'`;
     }
@@ -251,12 +254,31 @@ exports.bestRetailers = async (req, res) => {
     res.send(formatResponse(retailers));
 }
 
-exports.bestRetailerCities = async (req, res) => {
-    /* let { city } = req.query; */
-    let query = "SELECT DISTINCT users.city FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
-    /* if(city){
-        query += ` AND users.city LIKE '%${city}%'`;
+exports.bestRetailerStates = async (req, res) => {
+    /* let { state } = req.query; */
+    let query = "SELECT DISTINCT states.id, states.name FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    /* if(state){
+        query += ` AND states.name LIKE '%${state}%'`;
     } */
+    query += " GROUP BY states.id ORDER BY states.name ASC";
+    console.log("bestRetailer states query ===========:> ", query);
+    const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
+    let retailers = [];
+    for(let item of users){
+        retailers.push({
+            id: item.id,
+            name: item.name || ''
+        });
+    }
+    res.send(formatResponse(retailers));
+}
+
+exports.bestRetailerCities = async (req, res) => {
+    let { state } = req.query;
+    let query = "SELECT DISTINCT users.city FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    if(state){
+        query += ` AND users.state_id='${state}'`;
+    }
     query += " GROUP BY users.city ORDER BY users.city ASC";
     console.log("bestRetailer cities query ===========:> ", query);
     const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
@@ -275,7 +297,7 @@ exports.bestRetailerCities = async (req, res) => {
 exports.bestRetailerView = async (req, res) => {
     let { id } = req.query;
 
-    let query = "SELECT users.id, users.profile_image, users.name, users.company_name, states.name as `state_name`, districts.name as `district_name`, users.city, users.mobile, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    let query = "SELECT users.id, users.profile_image, users.name, users.company_name, states.name as `state_name`, districts.name as `district_name`, users.city, users.landmark, users.mobile, users.email, users.gst, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
     if(id){
         query += ` AND users.id = '${id}'`;
     }
@@ -300,11 +322,14 @@ exports.bestRetailerView = async (req, res) => {
             name: item.name,
             company_name: item.company_name || '',
             district_name: item.district_name || '',
+            landmark: item.landmark || '',
             city: item.city || '',
             state_name: state.name || '',
+            email: item.email || '',
             mobile: item.mobile || '',
             since: 1990,
             address: address.join(", "),
+            gst: item.gst || '',
             image: (!isEmpty(item.profile_image)) ? getFileAbsulatePath(item.profile_image) : logoImage()
         });
     }
