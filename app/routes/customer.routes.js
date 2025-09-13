@@ -38,6 +38,7 @@ module.exports = (app, express, io) => {
     router.get("/festive-offers", [], dashboardController.festive_offers);
     router.get("/stock-products-slider", [], dashboardController.stock_products_slider);
     router.get("/best-retailers", [], dashboardController.bestRetailers);
+    router.get("/best-retailers/states", [], dashboardController.bestRetailerStates);
     router.get("/best-retailers/cities", [], dashboardController.bestRetailerCities);
     router.get("/best-retailers/view", [], dashboardController.bestRetailerView);
     router.get("/counts", [], dashboardController.counts);
