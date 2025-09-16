@@ -220,11 +220,30 @@ exports.store = async (req, res) => {
 
   //check if cart is exists
   let user_id = req.userId || null;
-  let cookie_id = data.cookie_id;
+  let cookie_id = data.cookie_id || null;
   let quantity = 'quantity' in data && data.quantity ? parseInt(data.quantity) : 1;
   let is_manual = 'is_manual' in data && data.is_manual == 1 ? true : false;
-  let cart = await cartsModel.findOne({where: {product_id: data.product_id, size_id: data.size_id, [Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]}});
+
+  let uniqueCondition = [];
+  if(user_id){
+    uniqueCondition.push({user_id: user_id});
+  }
+  if(cookie_id){
+    uniqueCondition.push({cookie_id: cookie_id});
+  }
+  if(uniqueCondition.length == 0){
+    return res.status(errorCodes.default).send(formatErrorResponse('Invalid request. No cookie or user id found.'));
+  }
+
+  let cart = await cartsModel.findOne({
+    where: {
+      product_id: data.product_id, 
+      size_id: data.size_id, 
+      [Op.or]: uniqueCondition
+    }
+  });
   //let cart = await cartsModel.findOne({where: {certificate_no: data.certificate_no, size_id: data.size_id, [Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]}});
+  
   let isCartUpdated = false;
   if(cart){
 
@@ -242,7 +261,7 @@ exports.store = async (req, res) => {
         isMaterialsMatch = false;
       }
     }
-
+    
     if(isMaterialsMatch){
 
       if(parseInt(cart.quantity) == maxEachProductQty){
@@ -252,6 +271,7 @@ exports.store = async (req, res) => {
       await cartsModel.update({quantity: cart.is_manual ? quantity : (parseInt(cart.quantity) + quantity)}, { where: { id: cart.id} });
       if(cart.is_manual){
         let cartMaterial = await cartMaterialsModel.findOne({where: {cart_id: cart.id}});
+        console.log("cartMaterial", cartMaterial);
         if(cartMaterial){
           //await cartMaterialsModel.update({quantity: quantity, weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });
           await cartMaterialsModel.update({quantity: parseInt(data.materials[0].quantity), weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });
@@ -260,7 +280,7 @@ exports.store = async (req, res) => {
       isCartUpdated = true;
     }
   }
-
+  
   if(!isCartUpdated){
     let cart = await cartsModel.create({
       product_id: data.product_id,
@@ -275,7 +295,7 @@ exports.store = async (req, res) => {
       certificate_no: 'certificate_no' in data ? data.certificate_no : null,
       is_manual: is_manual
     });
-
+    
     for(let x = 0; x < data.materials.length; x++){
       let material = data.materials[x];
       await cartMaterialsModel.create({
@@ -304,11 +324,30 @@ exports.storeStock = async (req, res) => {
 
   //check if cart is exists
   let user_id = req.userId || null;
-  let cookie_id = data.cookie_id;
+  let cookie_id = data.cookie_id || null;
   let quantity = 'quantity' in data && data.quantity ? parseInt(data.quantity) : 1;
   let is_manual = 'is_manual' in data && data.is_manual == 1 ? true : false;
+
+  let uniqueCondition = [];
+  if(user_id){
+    uniqueCondition.push({user_id: user_id});
+  }
+  if(cookie_id){
+    uniqueCondition.push({cookie_id: cookie_id});
+  }
+  if(uniqueCondition.length == 0){
+    return res.status(errorCodes.default).send(formatErrorResponse('Invalid request. No cookie or user id found.'));
+  }
+
   //let cart = await cartsModel.findOne({where: {product_id: data.product_id, size_id: data.size_id, [Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]}});
-  let cart = await cartsModel.findOne({where: {certificate_no: data.certificate_no, size_id: data.size_id, [Op.or]: [{user_id: user_id}, {cookie_id: cookie_id}]}});
+  let cart = await cartsModel.findOne({
+    where: {
+      certificate_no: data.certificate_no, 
+      size_id: data.size_id, 
+      [Op.or]: uniqueCondition
+    }
+  });
+
   let isCartUpdated = false;
   if(cart){
 
