@@ -1989,7 +1989,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
   /* 18k gold purity value */
   let purity18K = await PurityModel.findOne({  
     where: {
-      id: 4, //18K
+      id: 1, //18K
     },  
   });
 
