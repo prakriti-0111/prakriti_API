@@ -4039,8 +4039,9 @@ const avlStockUserIdsNew = async (req, roleId = null) => {
 
   let se = await UserModel.findAll({
     attributes: ["id"],
-    where: {
-      parent_id: { [Op.in]: distrIds },
+    where: { 
+      //parent_id: { [Op.in]: distrIds },
+      [Op.or]: [{ parent_id: { [Op.in]: distrIds } }, { parent_id: { [Op.in]: ownUserIds } }],
       role_id: getRoleId("sales_executive"),
     },
   });
@@ -4090,7 +4091,8 @@ const avlStockUserIds = async (req, roleId = null) => {
   let se = await UserModel.findAll({
     attributes: ["id"],
     where: {
-      parent_id: { [Op.in]: distrIds },
+      //parent_id: { [Op.in]: distrIds },
+      [Op.or]: [{ parent_id: { [Op.in]: distrIds } }, { parent_id: { [Op.in]: ownUserIds } }],
       role_id: getRoleId("sales_executive"),
     },
   });
