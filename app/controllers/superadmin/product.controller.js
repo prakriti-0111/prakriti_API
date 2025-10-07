@@ -277,13 +277,21 @@ exports.store = async (req, res) => {
   let product_code = data.product_code || null;
 
   //make unique
-  let haveCode = await ProductModel.findOne({
+  /*let haveCode = await ProductModel.findOne({
     where: { product_code: product_code },
   });
   if (haveCode) {
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse("Product Code already in use."));
+  }*/
+ let haveName = await ProductModel.findOne({
+    where: { name: data.name },
+  });
+  if (haveName) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Product Name already in use."));
   }
 
   try {
@@ -509,7 +517,7 @@ exports.update = async (req, res) => {
   let data = req.body;
 
   //make unique
-  let product_code = data.product_code || null;
+  /*let product_code = data.product_code || null;
   let haveCode = await ProductModel.findOne({
     where: { product_code: product_code, id: { [Op.not]: req.params.id } },
   });
@@ -517,6 +525,14 @@ exports.update = async (req, res) => {
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse("Product Code already in use."));
+  }*/
+  let haveName = await ProductModel.findOne({
+    where: { name: data.name, id: { [Op.not]: req.params.id } },
+  });
+  if (haveName) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Product Name already in use."));
   }
 
   try {
