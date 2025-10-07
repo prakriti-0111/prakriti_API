@@ -101,7 +101,11 @@ exports.index = async (req, res) => {
           pIds.push(distributorIds[i]);
         }
 
-        conditions.parent_id = { [Op.in]: pIds };
+        //conditions.parent_id = { [Op.in]: pIds };
+        conditions = {
+          ...conditions,
+          [Op.or]: [{ parent_id: { [Op.in]: pIds } }, { parent_id: { [Op.in]: adminIds } }, { parent_id: { [Op.in]: [req.userId] } }]
+        };
         load_stock_wallet = true;
       } else if (isAdmin(req)) {
         /* get all own distributers */
@@ -117,7 +121,11 @@ exports.index = async (req, res) => {
         });
         let distributorIds = arrayColumn(distributors, "id");
 
-        conditions.parent_id = { [Op.in]: distributorIds };
+        //conditions.parent_id = { [Op.in]: distributorIds };
+        conditions = {
+          ...conditions,
+          [Op.or]: [{ parent_id: { [Op.in]: distributorIds } }, { parent_id: { [Op.in]: [req.userId] } }]
+        };
         load_stock_wallet = true;
       }
     }
@@ -451,7 +459,7 @@ exports.update = async (req, res) => {
     user_name = await getNextUserName("employee", admin.id);
   }
 
-  let parent_id = "parent_id" in data && data.parent_id ? data.parent_id : null;
+  let parent_id = "parent_id" in data && data.parent_id ? data.parent_id : req.userId;
   let branch_name =
     "branch_name" in data && data.branch_name ? data.branch_name : null;
   let postData = {
