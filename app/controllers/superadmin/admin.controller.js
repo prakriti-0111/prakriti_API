@@ -17,6 +17,7 @@ const {
   getNextUserName,
   getSuperAdminId,
   isDistributor,
+  isSalesExecutive,
   getUserColumnValue,
 } = require("@library/common");
 const { AdminCollection } = require("@resources/superadmin/AdminCollection");
@@ -42,6 +43,9 @@ exports.index = async (req, res) => {
     let condition = { role_id: adminRoleId };
 
     if (isDistributor(req)) {
+      let admin_id = await getUserColumnValue(req.userId, "parent_id");
+      condition.id = admin_id;
+    } else if(isSalesExecutive(req)){
       let admin_id = await getUserColumnValue(req.userId, "parent_id");
       condition.id = admin_id;
     } else {
