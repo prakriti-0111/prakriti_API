@@ -30,6 +30,7 @@ const {
   isManager,
   updateOrCreate,
   getRoleId,
+  getSuperAdminId,
   getUserColumnValue,
   avlStockUserIdsNew,
 } = require("@library/common");
@@ -91,6 +92,15 @@ exports.index = async (req, res) => {
       weight_in_gram: total_gram
     },{where: {id: allStockMaterials[i].id}});
   }*/
+
+  let superAdminRoleId = getRoleId("superadmin");
+    let adminRoleId = getRoleId("admin");
+    let distributorRoleId = getRoleId("distributor");
+    let retailerRoleId = getRoleId("retailer");
+    let supplierRoleId = getRoleId("supplier");
+    let customerRoleId = getRoleId("customer");
+    let sales_executiveRoleId = getRoleId("sales_executive");
+    let superAdminId = await getSuperAdminId();
 
   //update stock purity_id which product is material
   if (req.query.search == "update_all_stock_priority") {
@@ -204,11 +214,54 @@ exports.index = async (req, res) => {
         let managerUsersIds = arrayColumn(managerUsers, "id");
         conditions.user_id = { [Op.in]: managerUsersIds };
       } else if (own_se == 1) {
+        let se_parent_ids = [];
+        // all own admin
+        let ownAdmins = await UserModel.findAll({
+          attributes: ["id"],
+          where: { role_id: adminRoleId, own: true, parent_id: superAdminId },
+        });
+        let ownAdminIds = arrayColumn(ownAdmins, "id");
+        se_parent_ids = se_parent_ids.concat(ownAdminIds);
+        // all own distributors
+        let ownDistributorsOfAdmins = await UserModel.findAll({
+          attributes: ["id"],
+          where: {
+            role_id: distributorRoleId,
+            own: true,
+            parent_id: { [Op.in]: ownAdminIds },
+          },
+        });
+        let ownDistributorOfAdminsIds = arrayColumn(
+          ownDistributorsOfAdmins,
+          "id"
+        );
+        se_parent_ids = se_parent_ids.concat(ownDistributorOfAdminsIds);
+        let ownDistributors = await UserModel.findAll({
+          attributes: ["id"],
+          where: {
+            role_id: distributorRoleId,
+            own: true,
+            parent_id: superAdminId,
+          },
+        });
+        let ownDistributorsIds = arrayColumn(ownDistributors, "id");
+        se_parent_ids = se_parent_ids.concat(ownDistributorsIds);
+
         let se = await UserModel.findAll({
           attributes: ["id"],
-          where: { role_id: seRoleId },
+          where: {
+            role_id: sales_executiveRoleId,
+            parent_id: { [Op.in]: se_parent_ids },
+          },
         });
         let seIds = arrayColumn(se, "id");
+
+
+        // let se = await UserModel.findAll({
+        //   attributes: ["id"],
+        //   where: { role_id: seRoleId },
+        // });
+        //let seIds = arrayColumn(se, "id");
         conditions.user_id = { [Op.in]: seIds };
       }
     } else if (isAdmin(req)) {
@@ -343,7 +396,7 @@ exports.index = async (req, res) => {
       console.log(sCond);
       conditions = { ...conditions, [Op.or]: sCond };
     }
-    console.log(conditions);
+    console.log("conditions =====: ", conditions);
 
     if(typeof material_id != "undefined" && material_id != null && material_id != "") {
       conditions.material_id = material_id;
