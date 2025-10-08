@@ -324,7 +324,7 @@ exports.bestRetailerView = async (req, res) => {
             district_name: item.district_name || '',
             landmark: item.landmark || '',
             city: item.city || '',
-            state_name: state.name || '',
+            state_name: state?state.name:'',
             email: item.email || '',
             mobile: item.mobile || '',
             since: 1990,
