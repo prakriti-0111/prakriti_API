@@ -105,6 +105,55 @@ exports.index = async (req, res) => {
 exports.store = async (req, res) => {
   let data = req.body;
 
+  // Check for duplicate certificate number if provided
+  if (!isEmpty(data.certificate_no)) {
+    // Check if certificate already exists in current user's cart
+    let existingCartWithCert = await cartsModel.findOne({
+      where: {
+        user_id: req.userId,
+        certificate_no: data.certificate_no,
+        type: 'sale'
+      }
+    });
+
+    if (existingCartWithCert) {
+      return res.status(errorCodes.default).send(formatErrorResponse("Certificate number " + data.certificate_no + " already exists in cart."));
+    }
+
+    // Check if certificate exists in stocks
+    let existingStock = await stockModel.findOne({
+      where: {
+        certificate_no: data.certificate_no,
+        user_id: req.userId
+      }
+    });
+
+    if (existingStock) {
+      return res.status(errorCodes.default).send(formatErrorResponse("Certificate number " + data.certificate_no + " already exists in stocks."));
+    }
+  }
+
+  // Check if cart item already exists with same stock, product, and size
+  let existingCart = await cartsModel.findOne({
+    where: {
+      user_id: req.userId,
+      stock_id: data.stock_id,
+      product_id: data.product_id,
+      size_id: data.size_id || null,
+      type: 'sale'
+    }
+  });
+
+  if (existingCart) {
+    // Update existing cart quantity
+    let newQuantity = (existingCart.quantity || 0) + (data.quantity || 1);
+    await cartsModel.update(
+      { quantity: newQuantity },
+      { where: { id: existingCart.id } }
+    );
+    return res.send(formatResponse([], "Cart updated successfully."));
+  }
+
   let cart = await cartsModel.create({
     user_id: req.userId,
     stock_id: data.stock_id,
@@ -112,8 +161,10 @@ exports.store = async (req, res) => {
     size_id: data.size_id || null,
     quantity: data.quantity || null,
     total_weight: data.total_weight || null,
+    certificate_no: data.certificate_no || null,
     type: 'sale'
   });
+  
   for(let x = 0; x < data.materials.length; x++){
     let material = data.materials[x];
     await cartMaterialsModel.create({
