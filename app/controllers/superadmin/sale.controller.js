@@ -462,12 +462,15 @@ exports.store = async (req, res) => {
           },
         };
         let resData = await PurchaseProductModel.findAll(query);
-        console.log("--------sales ", resData[0].current_image);
+        let current_image =
+          resData && resData.length > 0 && resData[0].current_image
+            ? resData[0].current_image
+            : null;
 
         let thisObj2 = {
           purchase_id: purchase.id,
           product_id: thisItem.product_id,
-          current_image: resData[0].current_image,
+          current_image: current_image,
           size_id: thisItem.size_id || null,
           certificate_no: thisItem.certificate_no,
           total_weight: weightFormat(thisItem.total_weight),
@@ -1669,23 +1672,23 @@ exports.returnSale = async (req, res) => {
           }
         } else {
           // console.log("req =============== 2", return_data);
-
-          let query = {
+         
+        let query = {
             where: {
               certificate_no: {
                 [Op.like]: `${return_data.products[i].certificate_no}`,
               },
             },
           };
-          let resData = await PurchaseProductModel.findAll(query);
-
+            let resData=  await PurchaseProductModel.findAll(query)
+            let current_image = (resData && resData.length > 0 && resData[0].current_image) ? resData[0].current_image : null;
           stock = await StockModel.create(
             {
               product_id: return_data.products[i].product_id,
               size_id: return_data.products[i].size_id || null,
               certificate_no: return_data.products[i].certificate_no,
               quantity: 1,
-              current_image: resData[0].current_image,
+              current_image: current_image,
               total_weight: weight_in_gram,
               user_id: req.userId,
               type: stock_type,
@@ -2316,15 +2319,15 @@ exports.returnSaleNew = async (req, res) => {
               },
             },
           };
-          let resData = await PurchaseProductModel.findAll(query);
-
+            let resData=  await PurchaseProductModel.findAll(query)
+            let current_image = (resData && resData.length > 0 && resData[0].current_image) ? resData[0].current_image : null;
           stock = await StockModel.create(
             {
               product_id: return_data.products[i].product_id,
               size_id: return_data.products[i].size_id || null,
               certificate_no: return_data.products[i].certificate_no,
               quantity: 1,
-              current_image: resData[0].current_image,
+              current_image: current_image,
               total_weight: weight_in_gram,
               user_id: req.userId,
               type: stock_type,
