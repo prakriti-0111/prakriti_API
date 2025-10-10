@@ -1,6 +1,7 @@
 # Use Node.js official image
 FROM node:18
 
+
 # Install dependencies required by Puppeteer
 RUN apt-get update && apt-get install -y \
     ca-certificates \

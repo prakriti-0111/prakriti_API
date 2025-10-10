@@ -61,11 +61,11 @@ exports.index = async (req, res) => {
  */
 exports.store = async (req, res) => {
   let data = req.body;
-
+  console.log("======DATA=====", data); //return false;
   /*if('payment_type' in data && data.payment_type == "advance"){
     return res.status(errorCodes.default).send("Advance payment is currently disabled.");
   }*/
-
+  
   try {
 
     data.payment_mode = isEmpty(data.payment_mode) ? 'cash' : data.payment_mode;
@@ -108,11 +108,13 @@ exports.store = async (req, res) => {
             payment_by: req.userId,
             amount: amount,
             payment_mode: data.payment_mode,
+            payment_type: data.payment_mode == "metal"?"gold":"wallet",
             table_type: data.table_type,
             remaining_balance: 0,
             notes: data.notes || null,
             cheque_no: data.cheque_no || null,
             txn_id: data.txn_id || null,
+            weight: data.effective_weight || null,
             status: (data.payment_mode != "cheque") ? "success" : "pending",
             payment_date: moment(data.payment_date).format("YYYY-MM-DD"),
             payment_belongs: currentUserID,
@@ -140,11 +142,13 @@ exports.store = async (req, res) => {
               payment_by: req.userId,
               amount: amount,
               payment_mode: data.payment_mode,
+              payment_type: data.payment_mode == "metal"?"gold":"wallet",
               table_type: "purchase",
               remaining_balance: 0,
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
+              weight: data.effective_weight || null,
               status: (data.payment_mode != "cheque") ? "success" : "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: data.user_id,
@@ -161,6 +165,7 @@ exports.store = async (req, res) => {
         } else {
 
           if (data.table_type == "sale") {
+            console.log("======sale=====");
             let tableData = await SaleModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, sale_by: currentUserID } });
 
             for (let i = 0; i < tableData.length; i++) {
@@ -178,7 +183,12 @@ exports.store = async (req, res) => {
                 payment_amount = amount;
                 amount = 0;
               }
-
+              
+              console.log("======AMOUNT=====", amount);
+              console.log("======DUE AMOUNT=====", due_amount);
+              console.log("======PAID AMOUNT=====", paid_amount);
+              console.log("======STATUS=====", status);
+              console.log("======PAYMENT AMOUNT=====", payment_amount);
               if (data.payment_mode != "cheque") {
                 await SaleModel.update({
                   due_amount: due_amount,
@@ -214,10 +224,12 @@ exports.store = async (req, res) => {
                 payment_by: req.userId,
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
+                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
@@ -239,10 +251,12 @@ exports.store = async (req, res) => {
                 payment_by: req.userId,
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
+                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: "purchase",
@@ -300,10 +314,12 @@ exports.store = async (req, res) => {
                 payment_by: req.userId,
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
+                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date).format("YYYY-MM-DD"),
                 table_type: data.table_type,
@@ -336,11 +352,13 @@ exports.store = async (req, res) => {
               payment_by: req.userId,
               amount: amount,
               payment_mode: data.payment_mode,
+              payment_type: data.payment_mode == "metal"?"gold":"wallet",
               table_type: "send_money",
               remaining_balance: 0,
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
+              weight: data.effective_weight || null,
               status: "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: data.user_id,
@@ -360,10 +378,12 @@ exports.store = async (req, res) => {
               table_type: "send_money",
               amount: amount,
               payment_mode: data.payment_mode,
+              payment_type: data.payment_mode == "metal"?"gold":"wallet",
               remaining_balance: 0,
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
+              weight: data.effective_weight || null,
               status: "success",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
@@ -394,11 +414,13 @@ exports.store = async (req, res) => {
                 payment_by: req.userId,
                 amount: amount,
                 payment_mode: data.payment_mode,
+                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 table_type: "sale",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 payment_belongs: data.user_id,
@@ -430,10 +452,12 @@ exports.store = async (req, res) => {
               table_type: data.table_type,
               amount: amount,
               payment_mode: data.payment_mode,
+              payment_type: data.payment_mode == "metal"?"gold":"wallet",
               remaining_balance: 0,
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
+              weight: data.effective_weight || null,
               status: paymentStatus,
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
@@ -462,10 +486,12 @@ exports.store = async (req, res) => {
                 amount: amount,
                 table_type: "purchase",
                 payment_mode: data.payment_mode,
+                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 payment_belongs: data.user_id,
@@ -536,10 +562,12 @@ exports.store = async (req, res) => {
                 payment_by: req.userId,
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
+                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
@@ -561,10 +589,12 @@ exports.store = async (req, res) => {
                 payment_by: req.userId,
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
+                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: "purchase",
@@ -584,6 +614,7 @@ exports.store = async (req, res) => {
             }
 
           } else if (data.table_type == "purchase") {
+            console.log("======purchase=====");
             let tableData = await PurchaseModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, user_id: currentUserID } });
             let user = await UserModel.findByPk(data.user_id);
             let isPaymentToSuperAdmin = false;
@@ -606,7 +637,14 @@ exports.store = async (req, res) => {
                 payment_amount = amount;
                 amount = 0;
               }
-
+              console.log("======isPaymentToSuperAdmin=====", isPaymentToSuperAdmin);
+              console.log("======AMOUNT=====", amount);
+              console.log("======DUE AMOUNT=====", due_amount);
+              console.log("======PAID AMOUNT=====", paid_amount);
+              console.log("======STATUS=====", status);
+              console.log("======PAYMENT AMOUNT=====", payment_amount);
+              //return false;
+              //if ((!isPaymentToSuperAdmin && data.payment_mode != "cheque") || data.payment_mode == "metal") {
               if (!isPaymentToSuperAdmin && data.payment_mode != "cheque") {
                 await PurchaseModel.update({
                   due_amount: due_amount,
@@ -631,10 +669,12 @@ exports.store = async (req, res) => {
                   payment_by: req.userId,
                   amount: payment_amount,
                   payment_mode: data.payment_mode,
+                  payment_type: data.payment_mode == "metal"?"gold":"wallet",
                   remaining_balance: 0,
                   notes: data.notes || null,
                   cheque_no: data.cheque_no || null,
                   txn_id: data.txn_id || null,
+                  weight: data.effective_weight || null,
                   status: "pending",
                   payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                   table_type: "sale",
@@ -654,10 +694,12 @@ exports.store = async (req, res) => {
                 payment_by: req.userId,
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
+                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: paymentStatus,
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
@@ -695,6 +737,7 @@ exports.store = async (req, res) => {
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
+              weight: data.effective_weight || null,
               status: "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: data.user_id,
@@ -718,6 +761,7 @@ exports.store = async (req, res) => {
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
+              weight: data.effective_weight || null,
               status: "success",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
@@ -752,6 +796,7 @@ exports.store = async (req, res) => {
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 payment_belongs: data.user_id,
@@ -781,6 +826,7 @@ exports.store = async (req, res) => {
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
+              weight: data.effective_weight || null,
               status: paymentStatus,
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
@@ -852,6 +898,7 @@ exports.store = async (req, res) => {
                   notes: data.notes || null,
                   cheque_no: data.cheque_no || null,
                   txn_id: data.txn_id || null,
+                  weight: data.effective_weight || null,
                   status: "pending",
                   payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                   table_type: "sale",
@@ -874,6 +921,7 @@ exports.store = async (req, res) => {
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: paymentStatus,
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
@@ -948,6 +996,7 @@ exports.store = async (req, res) => {
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
@@ -973,6 +1022,7 @@ exports.store = async (req, res) => {
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: "purchase",
@@ -1014,6 +1064,7 @@ exports.store = async (req, res) => {
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
+              weight: data.effective_weight || null,
               status: "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: data.user_id,
@@ -1037,6 +1088,7 @@ exports.store = async (req, res) => {
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
+              weight: data.effective_weight || null,
               status: "success",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
@@ -1063,6 +1115,7 @@ exports.store = async (req, res) => {
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
+              weight: data.effective_weight || null,
               status: (data.payment_mode != "cheque") ? "success" : "pending",
               payment_date: moment(data.payment_date).format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
@@ -1135,6 +1188,7 @@ exports.store = async (req, res) => {
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
@@ -1160,6 +1214,7 @@ exports.store = async (req, res) => {
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
+                weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: "purchase",

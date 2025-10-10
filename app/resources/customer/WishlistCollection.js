@@ -76,6 +76,7 @@ const getModelObject = async(data, role) => {
     let total_price_without_dis = priceFormat(price_sub_total);
 
     let image = data.product && !isEmpty(data.product.main_image) ? getFileAbsulatePath(data.product.main_image) : '';
+    let current_image = data.stock && !isEmpty(data.stock.current_image) ? getFileAbsulatePath(data.stock.current_image) : '';
    
     return {        
         id: data.id,
@@ -90,7 +91,7 @@ const getModelObject = async(data, role) => {
         product_slug: !isEmpty(data.product) ? data.product.slug : '',
         category_id: !isEmpty(data.product) ? data.product.category_id : '',
         sub_category_id: !isEmpty(data.product) ? data.product.sub_category_id : '',
-        certificate_no: !isEmpty(data.certificate_no) ? data.certificate_no : '',
+        certificate_no: data.stock && !isEmpty(data.stock.certificate_no) ? data.stock.certificate_no : '',
         product_image: image,
         wishlist_material: wishlistMaterials,
         sub_total: priceFormat(sub_total),
@@ -106,7 +107,7 @@ const getModelObject = async(data, role) => {
         total_price_without_dis_display: displayAmount(total_price_without_dis),
         have_offer: total_price_without_dis > total_price ? true : false,
         making_charge_dis_percent: priceFormat(making_charge_discount_percent, true),
-        current_image: data.current_image
+        current_image: current_image
     }
 }
 

@@ -50,6 +50,7 @@ const {
 const {
   PaymentCollection,
 } = require("@resources/superadmin/PaymentCollection");
+const { PurityCollection } = require("@resources/superadmin/PurityCollection");
 const { Op, where } = require("sequelize");
 const { isSalesExecutive } = require("../../library/common");
 const sequelize = db.sequelize;
@@ -109,6 +110,17 @@ exports.index = async (req, res) => {
   is_assigned = is_assigned === undefined ? false : true;
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let addedBy = userID;
+  let isAddedByUser = false;
+  /* check for manager/worker and other roles */
+  if(![1, 2, 3, 4, 5, 6, 7, 8, 11].includes(req.role)){
+    addedBy = req.userId;
+    isAddedByUser = true;
+    /* check parent and assign as user id */
+    let user = await UserModel.findByPk(addedBy);
+    userID = user.parent_id;
+  }
+  console.log("userID : ",userID);
   let conditions = { type: { [Op.ne]: "order_purchase" } };
   if (all_purchase == 1) {
     conditions = {
@@ -118,11 +130,20 @@ exports.index = async (req, res) => {
       sale_id: { [Op.is]: null },
     };
   } else {
-    conditions = {
-      user_id: userID,
-      is_assigned: is_assigned,
-      is_approval: is_approval,
-    };
+    if(isAddedByUser){
+      conditions = {
+        //user_id: userID,
+        added_by: addedBy,
+        is_assigned: is_assigned,
+        is_approval: is_approval,
+      };
+    } else {
+      conditions = {
+        user_id: userID,
+        is_assigned: is_assigned,
+        is_approval: is_approval,
+      };
+    }
   }
 
   if (status !== undefined && status != "") {
@@ -154,6 +175,7 @@ exports.index = async (req, res) => {
     distinct: true,
   })
     .then(async (data) => {
+      console.log("data.count : ",data.count);
       let result = {
         items: await PurchaseListCollection(data.rows, load_payments),
         total: data.count,
@@ -174,7 +196,8 @@ exports.index = async (req, res) => {
 exports.store = async (req, res) => {
   // console.log("------------this data is purchases",req)
   let data = req.body;
-  // console.log(data);
+  console.log("purchase store payload : ", data);
+  //return false;
   if (!isEmpty(data.invoice_number)) {
     let purchaseData = await PurchaseModel.findOne({
       where: { invoice_number: data.invoice_number },
@@ -194,6 +217,15 @@ exports.store = async (req, res) => {
   }
 
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let addedBy = userID;
+  /* check for manager/worker and other roles */
+  if(![1, 2, 3, 4, 5, 6, 7, 8, 11].includes(req.role)){
+    addedBy = req.userId;
+    /* check parent and assign as user id */
+    let user = await UserModel.findByPk(addedBy);
+    userID = user.parent_id;
+  }
+
   if (priceFormat(data.paid_amount) > 0) {
     let wallet_balance = await getWalletBalance(userID, data.payment_mode);
     if (priceFormat(data.paid_amount) > wallet_balance) {
@@ -244,6 +276,7 @@ exports.store = async (req, res) => {
     let purchaseObj = {
       supplier_id: data.supplier_id,
       user_id: userID,
+      added_by: addedBy,
       invoice_number: invoice_number,
       invoice_date: moment(data.invoice_date).format("YYYY-MM-DD"), //, "MM/DD/YYYY"
       notes: data.notes,
@@ -357,6 +390,7 @@ exports.store = async (req, res) => {
           rate: thisItem.materials[x].rate,
           amount: thisItem.materials[x].amount,
         };
+        console.log("thisMObj : ", thisMObj);
         await PurchaseProductMaterialModel.create(thisMObj);
 
         if (!isEmpty(worker_id)) {
@@ -365,6 +399,7 @@ exports.store = async (req, res) => {
             to_user_id: req.userId,
             material_id: thisItem.materials[x].material_id,
             weight: weightFormat(thisItem.materials[x].weight),
+            pakka_weight: weightFormat(thisItem.materials[x].pakka_weight),
             unit_id: thisItem.materials[x].unit_id,
             quantity: thisItem.materials[x].quantity,
             date: moment().format("YYYY-MM-DD"),
@@ -744,6 +779,7 @@ exports.statuschange = async (req, res) => {
 
   try {
     let sale_id = null;
+    let gold24kPurityId = 22;
     const trans = await sequelize.transaction(async (t) => {
       if (data.approve_status != 4) {
         let purchaseObj = {
@@ -813,12 +849,14 @@ exports.statuschange = async (req, res) => {
                   total_weight: thisItem.total_weight,
                   user_id: userID, //isSuperAdmin(req) ? null : req.userId,
                   type: stock_type,
+                  purchase_id: purchase.id,
+                  purchase_product_id: thisItem.id
                 };
               if (purchase.type == "material") {
                 _wC.material_id = thisItem.material_id;
-                _wC.purity_id = thisItem.materials[0].purity_id;
+                _wC.purity_id = gold24kPurityId; //24K gold //thisItem.materials[0].purity_id;
                 _iu_data.material_id = thisItem.material_id;
-                _iu_data.purity_id = thisItem.materials[0].purity_id;
+                _iu_data.purity_id = gold24kPurityId; //thisItem.materials[0].purity_id;
               } else {
                 _wC.product_id = thisItem.product_id;
                 _iu_data.product_id = thisItem.product_id;
@@ -869,7 +907,9 @@ exports.statuschange = async (req, res) => {
                     to_user_id: userID,
                     material_id: thisItem.materials[x].material_id,
                     weight: weightFormat(thisItem.materials[x].weight),
+                    pakka_weight: weightFormat(thisItem.materials[x].pakka_weight),
                     unit_id: thisItem.materials[x].unit_id,
+                    purity_id: thisItem.materials[x].purity_id,
                     quantity: thisItem.materials[x].quantity || 1,
                     date: moment().format("YYYY-MM-DD"),
                     type: "debit",
@@ -900,6 +940,8 @@ exports.statuschange = async (req, res) => {
                     material_id: thisItem.materials[x].material_id,
                   },
                 });
+                let unit = await UnitModel.findByPk(thisItem.materials[x].unit_id);
+                let pakka_weight_in_gram = convertUnitToGram(unit.name, thisItem.materials[x].pakka_weight);
                 if (stockMaterial) {
                   let thisquantity = thisItem.materials[x].quantity
                     ? parseInt(stockMaterial.quantity) +
@@ -909,14 +951,14 @@ exports.statuschange = async (req, res) => {
                     {
                       weight: weightFormat(
                         parseFloat(stockMaterial.weight) +
-                          weightFormat(thisItem.materials[x].weight)
+                          weightFormat(thisItem.materials[x].pakka_weight)
                       ),
                       weight_in_gram: weightFormat(
                         parseFloat(stockMaterial.weight_in_gram) +
-                          weightFormat(thisItem.materials[x].weight_in_gram)
+                          weightFormat(pakka_weight_in_gram)
                       ),
                       quantity: thisquantity,
-                      purity_id: thisItem.materials[x].purity_id,
+                      purity_id: gold24kPurityId, //thisItem.materials[x].purity_id,
                       unit_id: thisItem.materials[x].unit_id,
                       category_id: category_id,
                     },
@@ -927,12 +969,12 @@ exports.statuschange = async (req, res) => {
                     {
                       stock_id: stock.id,
                       material_id: thisItem.materials[x].material_id,
-                      weight: weightFormat(thisItem.materials[x].weight),
+                      weight: weightFormat(thisItem.materials[x].pakka_weight),
                       weight_in_gram: weightFormat(
-                        thisItem.materials[x].weight_in_gram
+                        pakka_weight_in_gram
                       ),
                       quantity: thisItem.materials[x].quantity || 0,
-                      purity_id: thisItem.materials[x].purity_id,
+                      purity_id: gold24kPurityId, //thisItem.materials[x].purity_id,
                       unit_id: thisItem.materials[x].unit_id,
                       category_id: category_id,
                     },
@@ -1147,14 +1189,16 @@ exports.statuschange = async (req, res) => {
                     {
                       product_id: thisItem.product_id,
                       user_id: parentUserID,
-                      purity_id: thisItem.materials[0].purity_id,
+                      purity_id: gold24kPurityId // thisItem.materials[0].purity_id,
                     },
                     {
+                      purchase_id: purchase.id,
+                      purchase_product_id: thisItem.id,
                       product_id: thisItem.product_id,
                       quantity: quantity,
                       total_weight: thisItem.total_weight,
                       user_id: parentUserID,
-                      purity_id: thisItem.materials[0].purity_id,
+                      purity_id: gold24kPurityId //thisItem.materials[0].purity_id,
                     },
                     t,
                     ["quantity", "total_weight"]
@@ -1216,6 +1260,8 @@ exports.statuschange = async (req, res) => {
                         material_id: thisItem.materials[x].material_id,
                       },
                     });
+                    let unit = await UnitModel.findByPk(thisItem.materials[x].unit_id);
+                    let pakka_weight_in_gram = convertUnitToGram(unit.name, thisItem.materials[x].pakka_weight);
                     if (stockMaterial) {
                       let thisquantity = thisItem.materials[x].quantity
                         ? parseInt(stockMaterial.quantity) +
@@ -1225,14 +1271,14 @@ exports.statuschange = async (req, res) => {
                         {
                           weight: weightFormat(
                             parseFloat(stockMaterial.weight) +
-                              weightFormat(thisItem.materials[x].weight)
+                              weightFormat(thisItem.materials[x].pakka_weight)
                           ),
                           weight_in_gram: weightFormat(
                             parseFloat(stockMaterial.weight_in_gram) +
-                              weightFormat(thisItem.materials[x].weight_in_gram)
+                              weightFormat(pakka_weight_in_gram)
                           ),
                           quantity: thisquantity,
-                          purity_id: thisItem.materials[x].purity_id,
+                          purity_id: gold24kPurityId, //thisItem.materials[x].purity_id,
                           unit_id: thisItem.materials[x].unit_id,
                           category_id: product.category_id,
                         },
@@ -1243,12 +1289,12 @@ exports.statuschange = async (req, res) => {
                         {
                           stock_id: stock.id,
                           material_id: thisItem.materials[x].material_id,
-                          weight: weightFormat(thisItem.materials[x].weight),
+                          weight: weightFormat(thisItem.materials[x].pakka_weight),
                           weight_in_gram: weightFormat(
-                            thisItem.materials[x].weight_in_gram
+                            pakka_weight_in_gram
                           ),
                           quantity: thisItem.materials[x].quantity || 0,
-                          purity_id: thisItem.materials[x].purity_id,
+                          purity_id: gold24kPurityId, //thisItem.materials[x].purity_id,
                           unit_id: thisItem.materials[x].unit_id,
                           category_id: product.category_id,
                         },
@@ -1581,6 +1627,14 @@ exports.view = async (req, res) => {
           model: UserModel,
           as: "purchaseBy",
         },
+        {
+          model: UserModel,
+          as: "addedBy",
+        },
+        {
+          model: SaleModel,
+          as: "sale",
+        },
       ],
     });
     if (!purchase) {
@@ -1655,6 +1709,14 @@ exports.edit = async (req, res) => {
       {
         model: UserModel,
         as: "supplier",
+      },
+      {
+        model: UserModel,
+        as: "addedBy",
+      },
+      {
+        model: SaleModel,
+        as: "sale",
       },
     ],
   });
@@ -2618,6 +2680,10 @@ exports.downloadInvoiceInfo = async (req, res) => {
         model: UserModel,
         as: "purchaseBy",
       },
+      {
+        model: SaleModel,
+        as: "sale",
+      },
     ],
   });
   if (!purchase) {
@@ -2641,6 +2707,15 @@ exports.downloadInvoiceInfo = async (req, res) => {
     ],
   });
   payments = await PaymentCollection(payments);
+  /* 18k gold purity value */
+  let purity18K = await PurityModel.findOne({  
+    where: {
+      id: 1, //18K
+    },  
+  });
+
+  purity18K = await PurityCollection(purity18K);
+
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
   const logoUrl = `public/images/logo.png`;
@@ -3405,7 +3480,15 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                           </tr>
                                       </thead>
                                       <tbody>`;
+    let fine_metals = 0;                      
     for (let i = 0; i < purchaseData.subCatItems.length; i++) {
+      purchaseData.subCatItems[i].material
+        .map((itm) => {
+          if(itm.id == 1){
+            fine_metals += parseFloat(itm.weight);
+          } 
+        });
+
       let materialNames = purchaseData.subCatItems[i].material
         .map((itm) => itm.name)
         .join("<br/ >");
@@ -3491,84 +3574,104 @@ exports.downloadInvoiceInfo = async (req, res) => {
   
                                           </tr>`;
     }
+    let receive_metal = 0;
+    let metalExists = true;
+    payments.map((itm) => {
+      if(itm.payment_mode.toLowerCase() == "metal" && itm.weight != null){
+        metalExists = true;
+        receive_metal += parseFloat(itm.weight);
+      }
+    });
+    console.log("fine_metals before : ", fine_metals);
+    console.log("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
+    /* convert gold to 24k from 18k */
+    if(purity18K && purity18K.value != null){
+      fine_metals = (parseFloat(fine_metals)*parseFloat(purity18K.value))/100;
+    }
+    let rest_metal = fine_metals - receive_metal;
+    
+    let totalReportCharge = 0;
+    let taxOnReportCharge = 0;
+    let afterTaxTotalReportCharge = 0;
+    if(purchaseData.sale){ 
+      totalReportCharge = parseInt(purchaseData.sale.report_qty)*parseFloat(purchaseData.sale.report_charge);
+      taxOnReportCharge = (totalReportCharge*parseFloat(purchaseData.sale.report_tax_percentage))/100;
+      afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
+    }
+
     html += `<tr style="
-                                                      vertical-align: top;">
-                                                      <td colspan="6"
-                                                          style="
-                                                          border:none;">
-  
-                                                      </td>
-                                                      <!-- <td style="">
-                                                          <div>
-                                                              <h4 style="margin:
-                                                                  0;
-                                                                  text-align:
-                                                                  left; font-size:
-                                                                  12px;
-                                                                  font-weight:
-                                                                  600; display:
-                                                                  ;">
-                                                                  Total
-                                                                  Save <div>139000</div></h4>
-                                                          </div>
-                                                      </td> -->
-                                                      
-                                                      
-                                                      
-  
-                                                  </tr>
+                                      vertical-align: top;">
+                                      <td colspan="6"
+                                          style="
+                                          border:none;">
+
+                                      </td>
+                                  </tr>`;
+                                  if(purchaseData.sale && purchaseData.sale.report_qty > 0){
+                                    html += `<tr style="
+                                        vertical-align: top;
+                                        background-color: #0A8AB8;
+                                        font-size: 12px; 
+                                        font-weight:400;
+                                        color:#ffffff;
+                                        ">
+                                        <td colspan="2"></td>
+                                        <td colspan="3">Rate</td>
+                                        <td colspan="2">Total</td>
+                                        <td colspan="1">Tax(%)</td>
+                                        <td colspan="1">Tax</td>
+                                        <td colspan="2">Total</td>
+                                        
+                                    </tr>`;
+                                    html += `<tr style="
+                                        vertical-align: top;
+                                        font-size: 14px; 
+                                        font-weight:400;
+                                        ">
+                                        <td colspan="2" style="background-color: #C1BDBD;">Report Charges : </td>
+                                        <td colspan="3" style="background-color: #C1BDBD;">${purchaseData.sale.report_qty} Pics x ${parseFloat(purchaseData.sale.report_charge).toFixed(2)} = </td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${totalReportCharge.toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${parseFloat(purchaseData.sale.report_tax_percentage).toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${taxOnReportCharge.toFixed(2)}</td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${afterTaxTotalReportCharge.toFixed(2)}</td>
+                                        
+                                    </tr>`;
+                                  }
+                                  html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="6"
+                                          style="
+                                          border:none;">
+
+                                      </td>
+                                  </tr>`;
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Fine Metals : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${fine_metals.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Receive Fine Metal : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${receive_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Rest : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${rest_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
  
-                                                  <!-- <tr style="
-                                                      vertical-align: top;">
-                                                      <td colspan="8"
-                                                          style="
-                                                          border:none; padding: 0;">
-                                                      </td>
-                                                   
-                                                     
-                                                      
-                                                      <td colspan="3" style="margin: 0;
-                                                          text-align: left;
-                                                          font-size: 12px;
-                                                          font-weight: 600; padding: 4px;">
-                                                          <div>
-                                                              <h4 style="margin:
-                                                                  0;
-                                                                  text-align:
-                                                                  right; font-size:
-                                                                  12px;
-                                                                  font-weight:
-                                                                  600;">
-                                                                  Total <span style=""> <input type="text" value="139000" style="max-width: 80px;"></span></h4>
-                                                          </div>
-                                                      </td>
-  
-                                                  </tr>
-                                                  <tr style="
-                                                      vertical-align: top;">
-                                                      <td colspan="8"
-                                                          style="
-                                                          border:none; padding: 0;">
-  
-                                                      </td> 
-                                                      <td colspan="3" style="margin: 0;
-                                                          text-align: left;
-                                                          font-size: 12px;
-                                                          font-weight: 600; padding: 4px;">
-                                                          <div>
-                                                              <h4 style="margin:
-                                                                  0;
-                                                                  text-align:
-                                                                  right; font-size:
-                                                                  12px;
-                                                                  font-weight:
-                                                                  600;">
-                                                                  Total <span style=""> <input type="text" value="139000" style="max-width: 80px;"></span></h4>
-                                                          </div>
-                                                      </td>
-  
-                                                  </tr> -->
-                                              </tbody>
+                                                  
+                          html += `   </tbody>
                                           </table>`;
   }
   html += `
@@ -3659,7 +3762,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                                   400; font-size: 12px; text-align: left;"> Mode</th>
                                                               <th
                                                                   style="font-weight:
-                                                                  400; font-size: 12px; text-align: left;"> Payment</th>
+                                                                  400; font-size: 12px; text-align: left;"> Note</th>
                                                               <th
                                                                   style="font-weight:
                                                                   400; font-size: 12px; text-align: left;">Amount</th>
@@ -3689,13 +3792,12 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                                   style="border-right:
                                                                   none; font-size: 12px;">${
                                                                     payments[i]
-                                                                      .purpose[0]
+                                                                      .notes
                                                                   }</td>
                                                               <td
                                                                   style="border-right:
                                                                   none; font-size: 12px;">${
-                                                                    payments[i]
-                                                                      .amount
+                                                                    payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight:payments[i].amount
                                                                   }</td>
                                                              
                                                           </tr>`;

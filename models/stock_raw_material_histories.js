@@ -55,6 +55,7 @@ module.exports = (sequelize, DataTypes) => {
     batch_id: DataTypes.INTEGER,
     purchase_id: DataTypes.INTEGER,
     weight: DataTypes.DECIMAL(15, 3),
+    pakka_weight: DataTypes.DECIMAL(15, 3),
     outstanding_weight: DataTypes.DECIMAL(15, 3),
     outstanding_qty: DataTypes.INTEGER,
     outstanding_gram: DataTypes.DECIMAL(15, 3),

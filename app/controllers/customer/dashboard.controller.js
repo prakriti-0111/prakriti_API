@@ -6,15 +6,23 @@ const { getNextUserName, sendEmail } = require("@library/common");
 const moment = require('moment');
 const dbSequelize = db.sequelize;
 const UserModel = db.users;
+const HomepageSettingModel = db.homepage_settings;
 const BannerModel = db.banners;
 const PromocodeModel = db.promocodes;
+const NewArrivalModel = db.new_arrivals;
+const FestiveOfferModel = db.festive_offers;
+const StockProductSliderModel = db.stock_products_slider;
 const ProductModel = db.products;
 const SubscriberModel = db.subscribers;
 const stateModel = db.states;
 const CategoryModel = db.categories;
 const SubCategoryModel = db.sub_categories;
+const {HomepageSettingCollection} = require("@resources/superadmin/HomepageSettingCollection");
 const {BannerCollection} = require("@resources/superadmin/BannerCollection");
 const {PromocodeCollection} = require("@resources/customer/PromocodeCollection");
+const {NewArrivalCollection} = require("@resources/superadmin/NewArrivalCollection");
+const {FestiveOfferCollection} = require("@resources/customer/FestiveOfferCollection");
+const {StockProductSliderCollection} = require("@resources/customer/StockProductSliderCollection");
 
 /**
  * Customer Dashboard
@@ -29,6 +37,29 @@ exports.index = async (req, res) => {
     });
 
     res.send(formatResponse(UserCollection(user), "Dashboard"));
+}
+
+/**
+ * Homepage Settings
+ *
+ * @param req
+ * @param res
+ */
+exports.homepagesettings = async (req, res) => {
+    HomepageSettingModel.findAll({
+        where: {is_active: true},
+        order:[['order', 'ASC']]
+    }).then((data) => {
+        console.log(data);
+        let result = {
+            items: HomepageSettingCollection(data),
+            total: data.length
+        }
+        res.send(formatResponse(result));
+    })
+    .catch(err => {
+        res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
 }
 
 /**
@@ -88,13 +119,111 @@ exports.banners = async (req, res) => {
 }
 
 /**
+ * New Arrivals
+ *
+ * @param req
+ * @param res
+ */
+exports.new_arrivals = async (req, res) => {
+    NewArrivalModel.findAll({
+        order:[['id', 'DESC']]
+    }).then(async (data) => {
+        let result = {
+            items: NewArrivalCollection(data),
+            total: data.length
+        }
+        res.send(formatResponse(result));
+    })
+    .catch(err => {
+        res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
+}
+
+/**
+ * Festive Offers
+ *
+ * @param req
+ * @param res
+ */
+exports.festive_offers = async (req, res) => {
+    FestiveOfferModel.findAll({
+        order:[['id', 'DESC']],
+        include: [
+            {
+              model: CategoryModel,
+              as: 'category',
+              required: true
+            },
+            {
+              model: SubCategoryModel,
+              as: 'sub_category'
+            }
+        ]
+    }).then(async (data) => {
+        //console.log(data);
+        let result = {
+            items: FestiveOfferCollection(data),
+            total: data.length
+        }
+        
+        res.send(formatResponse(result));
+    })
+    .catch(err => {
+        res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
+}
+
+/**
+ * Stock Product Banners
+ *
+ * @param req
+ * @param res
+ */
+exports.stock_products_slider = async (req, res) => {
+    StockProductSliderModel.findAll({
+        order:[['id', 'DESC']],
+        include: [
+            {
+              model: CategoryModel,
+              as: 'category',
+              required: true
+            },
+            {
+              model: SubCategoryModel,
+              as: 'sub_category'
+            }
+        ]
+    }).then(async (data) => {
+        //console.log(data);
+        let result = {
+            items: StockProductSliderCollection(data),
+            total: data.length
+        }
+        
+        res.send(formatResponse(result));
+    })
+    .catch(err => {
+        res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    });
+}
+
+/**
  * Best Retailers
  *
  * @param req
  * @param res
  */
 exports.bestRetailers = async (req, res) => {
-    let query = "SELECT users.profile_image, users.name, users.city, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.id) WHERE users.role_id = 5 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL GROUP BY users.id ORDER BY total_amount DESC LIMIT 5";
+    let { state, city } = req.query;
+    let query = "SELECT users.id, users.profile_image, users.name, users.company_name, states.name as `state_name`, districts.name as `district_name`, users.city, users.mobile, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    if(state){
+        query += ` AND users.state_id='${state}'`;
+    }
+    if(city){
+        query += ` AND users.city LIKE '%${city}%'`;
+    }
+    query += " GROUP BY users.id ORDER BY total_amount DESC LIMIT 5";
+    console.log("bestRetailers query ===========:> ", query);
     const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
     let retailers = [];
     for(let item of users){
@@ -103,17 +232,111 @@ exports.bestRetailers = async (req, res) => {
         if(item.city){
             address.push(item.city);
         }
+        if(item.district_name){
+            address.push(item.district_name);
+        }
         if(state){
             address.push(state.name);
         }
         retailers.push({
+            id: item.id,
             name: item.name,
+            company_name: item.company_name || '',
+            district_name: item.district_name || '',
+            city: item.city || '',
+            state_name: state.name || '',
+            mobile: item.mobile || '',
             since: 1990,
             address: address.join(", "),
             image: (!isEmpty(item.profile_image)) ? getFileAbsulatePath(item.profile_image) : logoImage()
         })
     }
     res.send(formatResponse(retailers));
+}
+
+exports.bestRetailerStates = async (req, res) => {
+    /* let { state } = req.query; */
+    let query = "SELECT DISTINCT states.id, states.name FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    /* if(state){
+        query += ` AND states.name LIKE '%${state}%'`;
+    } */
+    query += " GROUP BY states.id ORDER BY states.name ASC";
+    console.log("bestRetailer states query ===========:> ", query);
+    const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
+    let retailers = [];
+    for(let item of users){
+        retailers.push({
+            id: item.id,
+            name: item.name || ''
+        });
+    }
+    res.send(formatResponse(retailers));
+}
+
+exports.bestRetailerCities = async (req, res) => {
+    let { state } = req.query;
+    let query = "SELECT DISTINCT users.city FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    if(state){
+        query += ` AND users.state_id='${state}'`;
+    }
+    query += " GROUP BY users.city ORDER BY users.city ASC";
+    console.log("bestRetailer cities query ===========:> ", query);
+    const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
+    let retailers = [];
+    let c = 0;
+    for(let item of users){
+        c++;
+        retailers.push({
+            id: c,
+            name: item.city || ''
+        });
+    }
+    res.send(formatResponse(retailers));
+}
+
+exports.bestRetailerView = async (req, res) => {
+    let { id } = req.query;
+
+    let query = "SELECT users.id, users.profile_image, users.name, users.company_name, states.name as `state_name`, districts.name as `district_name`, users.city, users.landmark, users.mobile, users.email, users.gst, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    if(id){
+        query += ` AND users.id = '${id}'`;
+    }
+    query += "";
+    console.log("bestRetailer view query ===========:> ", query);
+    const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
+    let retailers = [];
+    for(let item of users){
+        let state = await stateModel.findOne({where: {id: item.state_id}});
+        let address = [];
+        if(item.city){
+            address.push(item.city);
+        }
+        if(item.district_name){
+            address.push(item.district_name);
+        }
+        if(state){
+            address.push(state.name);
+        }
+        retailers.push({
+            id: item.id,
+            name: item.name,
+            company_name: item.company_name || '',
+            district_name: item.district_name || '',
+            landmark: item.landmark || '',
+            city: item.city || '',
+            state_name: state?state.name:'',
+            email: item.email || '',
+            mobile: item.mobile || '',
+            since: 1990,
+            address: address.join(", "),
+            gst: item.gst || '',
+            image: (!isEmpty(item.profile_image)) ? getFileAbsulatePath(item.profile_image) : logoImage()
+        });
+    }
+    if(!retailers.length){
+        return res.status(errorCodes.default).send(formatErrorResponse("Retailer not found."));
+    }
+    res.send(formatResponse(retailers[0]));
 }
 
 /**
