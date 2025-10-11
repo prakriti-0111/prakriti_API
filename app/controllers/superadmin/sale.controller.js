@@ -260,9 +260,11 @@ exports.store = async (req, res) => {
     //const trans = await sequelize.transaction(async (t) => {
     //upload banner
     let image = null;
-    let uploadResult = await base64FileUpload(data.image_file, "sales");
-    if (uploadResult) {
-      image = uploadResult.path;
+    if(data.image_file && data.image_file != ""){
+      let uploadResult = await base64FileUpload(data.image_file, "sales");
+      if (uploadResult) {
+        image = uploadResult.path;
+      }
     }
     //insert into sale table
     let invoice_number = data.invoice_number || null;
