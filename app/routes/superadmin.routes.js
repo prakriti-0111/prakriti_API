@@ -40,6 +40,7 @@ const {
   SizeUpdate,
   PurityCreate,
   PurityUpdate,
+  ReportChargeUpdate,
   LeaveApplicationCreate,
   SalaryCreate,
   SalaryUpdate,
@@ -68,6 +69,7 @@ const supplierController = require("@controllers/superadmin/supplier.controller"
 const workerController = require("@controllers/superadmin/worker.controller");
 const sizeController = require("@controllers/superadmin/size.controller");
 const purityController = require("@controllers/superadmin/purity.controller");
+const reportChargeController = require("@controllers/superadmin/reportCharge.controller");
 const materialPriceController = require("@controllers/superadmin/materialPrice.controller");
 const leaveApplicationController = require("@controllers/superadmin/leaveApplication.controller");
 const purchaseController = require("@controllers/superadmin/purchase.controller");
@@ -90,6 +92,9 @@ const notificationController = require("@controllers/superadmin/notification.con
 const retailerVisitController = require("@controllers/superadmin/retailerVisit.controller");
 const bannerController = require("@controllers/superadmin/banner.controller");
 const promocodeController = require("@controllers/superadmin/promocode.controller");
+const newArrivalController = require("@controllers/superadmin/new-arrival.controller");
+const festiveOffersController = require("@controllers/superadmin/festiveOffer.controller");
+const stockProductSliderController = require("@controllers/superadmin/stockProductSlider.controller");
 const myPerformanceController = require("@controllers/superadmin/myPerformance.controller");
 const searchController = require("@controllers/superadmin/search.controller");
 const returnOrderController = require("@controllers/superadmin/returnOrder.controller");
@@ -97,6 +102,8 @@ const holidayController = require("@controllers/superadmin/holiday.controller");
 const stockMaterialHistoryController = require("@controllers/superadmin/stockMaterialHistory.controller");
 const salaryController = require("@controllers/superadmin/salary.controller");
 const subscriberController = require("@controllers/superadmin/subscriber.controller");
+const homepageSettingController = require("@controllers/superadmin/homepage-setting.controller");
+const productStockController = require("@controllers/superadmin/stockProduct.controller");
 
 module.exports = (app, express, io) => {
   var router = express.Router();
@@ -684,6 +691,12 @@ module.exports = (app, express, io) => {
     productController.delete
   );
 
+  router.get(
+    "/stock-product",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    productStockController.index
+  );
+
   //sizes
   router.get(
     "/sizes",
@@ -736,6 +749,18 @@ module.exports = (app, express, io) => {
     "/purities/delete/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     purityController.delete
+  );
+
+  // report charge
+  router.get(
+    "/report-charge",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    reportChargeController.index
+  );
+  router.post(
+    "/report-charge/update/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin, ReportChargeUpdate],
+    reportChargeController.update
   );
 
   //material price
@@ -1320,7 +1345,100 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     promocodeController.delete
   );
+  
+  //new arrival
+  router.get(
+    "/new-arrivals",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    newArrivalController.index
+  );
+  router.post(
+    "/new-arrivals/store",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    newArrivalController.store
+  );
+  router.post(
+    "/new-arrivals/update/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    newArrivalController.update
+  );
+  router.get(
+    "/new-arrivals/fetch/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    newArrivalController.fetch
+  );
+  router.delete(
+    "/new-arrivals/delete/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    newArrivalController.delete
+  );
 
+  //festive offers
+  router.get(
+    "/festiveoffers",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    festiveOffersController.index
+  );
+  router.post(
+    "/festiveoffers/store",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    festiveOffersController.store
+  );
+  router.post(
+    "/festiveoffers/update/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    festiveOffersController.update
+  );
+  router.get(
+    "/festiveoffers/fetch/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    festiveOffersController.fetch
+  );
+  router.delete(
+    "/festiveoffers/delete/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    festiveOffersController.delete
+  );
+
+  //stock products
+  router.get(
+    "/stockproducts",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockProductSliderController.index
+  );
+  router.post(
+    "/stockproducts/store",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockProductSliderController.store
+  );
+  router.post(
+    "/stockproducts/update/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockProductSliderController.update
+  );
+  router.get(
+    "/stockproducts/fetch/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockProductSliderController.fetch
+  );
+  router.delete(
+    "/stockproducts/delete/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockProductSliderController.delete
+  );
+
+  // homepage settings
+  router.get(
+    "/homepagesettings",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    homepageSettingController.index
+  );
+  router.post(
+    "/homepagesettings/update",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    homepageSettingController.update
+  );
+  
   //my performance
   router.get(
     "/my-performance",
@@ -1405,6 +1523,12 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     stockMaterialHistoryController.updateStatus
   );
+  router.post(
+    "/stock-material-history/transfer",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockMaterialHistoryController.transferStockMaterial
+  );
+  
 
   //salary
   router.get(

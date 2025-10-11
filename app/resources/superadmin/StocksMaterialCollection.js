@@ -1,5 +1,6 @@
 const { isObject, isEmpty, displayAmount, priceFormat, weightFormat, noImage } = require("@helpers/helper");
 const {StockProductCollection} = require("@resources/superadmin/StockProductCollection");
+const {PurityCollection} = require("@resources/superadmin/PurityCollection");
 const {calculateProductPriceCart, getSuperAdminId, canStockAddCart} = require("@library/common");
 const { Op, QueryTypes } = require("sequelize");
 const db = require("@models");
@@ -31,6 +32,7 @@ const getModelObject = async (data, user_id) => {
         //let str = item.material.name + ' <span style="padding-right: 18px; float: right;">' + weightFormat(item.weight) +(item.unit ? (' '+item.unit.name) : '') + '</span>';
         let str = item.material.name;
         materialItem.push({
+            stockMaterialId: item.id,
             material_id: item.material_id,
             material_name: item.material ? item.material.name : '',
             weight: item.weight,
@@ -38,7 +40,9 @@ const getModelObject = async (data, user_id) => {
             quantity: item.quantity,
             unit_id: item.unit_id,
             purity_id: item.purity_id,
-            purity_name: item.purity ? item.purity.name : ''
+            purity_name: item.purity ? item.purity.name : '',
+            purity_value: item.purity? item.purity.value : '',
+            purities: !isEmpty(data.material.purities) ? await PurityCollection(data.material.purities) : [],
         });
         purity_name = item.purity ? item.purity.name : '';
         materialString.push(str);

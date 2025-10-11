@@ -15,9 +15,20 @@ module.exports = (sequelize, DataTypes) => {
         as: "supplier"
       });
 
+      this.belongsTo(models.sales, {
+        foreignKey: "sale_id",
+        allowNull: true,
+        as: "sale"
+      });
+
       this.belongsTo(models.users, {
         foreignKey: "user_id",
         as: "purchaseBy"
+      });
+
+      this.belongsTo(models.users, {
+        foreignKey: "added_by",
+        as: "addedBy"
       });
 
       this.hasMany(models.purchase_products, {
@@ -33,6 +44,7 @@ module.exports = (sequelize, DataTypes) => {
   Purchase.init({
     supplier_id: DataTypes.INTEGER,
     user_id: DataTypes.INTEGER,
+    added_by: DataTypes.INTEGER,
     sale_id: DataTypes.INTEGER,
     return_id: DataTypes.INTEGER,
     invoice_number: DataTypes.STRING,

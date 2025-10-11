@@ -6,7 +6,9 @@ const {updateOrCreate} = require("@library/common");
 const { getPaginationOptions } = require('@helpers/paginator')
 const {ProductCollection} = require("@resources/customer/ProductCollection");
 const {ProductListCollection} = require("@resources/customer/ProductListCollection");
+const {NewProductListCollection} = require("@resources/customer/NewProductListCollection");
 const {ProductDetailsCollection} = require("@resources/customer/ProductDetailsCollection");
+const {NewProductDetailsCollection} = require("@resources/customer/NewProductDetailsCollection");
 const {CategoryCollection} = require("@resources/customer/CategoryCollection");
 const { Op, QueryTypes } = require("sequelize");
 const sequelize = db.sequelize;
@@ -26,6 +28,7 @@ const MaterialPricePurityModel = db.material_price_purities;
 const TaxSlabModel = db.tax_slabs;
 const RecentlyViewModel = db.recently_views;
 const ProductTagModel = db.product_tags;
+const UserModel = db.users;
 
 /**
  * Retrieve all product categories
@@ -35,31 +38,19 @@ const ProductTagModel = db.product_tags;
 exports.index = async (req, res) => {
   let { page, limit, category, subcategory, search, sort_by, is_featured, best_selling, offer, recent_view, cookie_id } = req.query;
   let conditions = {};
-  if(!isEmpty(search)){
-    conditions = {...conditions, [Op.or]: [{name: {[Op.like]: `%${search}%` }}, {'$tags.tag$': {[Op.like]: `%${search}%` }}, {'$category.name$': {[Op.like]: `%${search}%` }}, {'$sub_category.name$': {[Op.like]: `%${search}%` }}]};
-  }
   let orderBy = ['name', 'ASC'];
   if(sort_by == "whats_new"){
     orderBy = ['id', 'DESC'];
   }
+
+  if(!isEmpty(search)){
+    conditions = {...conditions, [Op.or]: [{name: {[Op.like]: `%${search}%` }}, {'$tags.tag$': {[Op.like]: `%${search}%` }}, {'$category.name$': {[Op.like]: `%${search}%` }}, {'$sub_category.name$': {[Op.like]: `%${search}%` }}]};
+  }
+
   if(is_featured == 1){
     conditions.is_featured = true;
   }else if(is_featured == 0){
     conditions.is_featured = false;
-  }
-  if(!isEmpty(offer)){
-    try {
-      offer = offer.split(",");
-      let ids = [];
-      for(let i = 0; i < offer.length; i++){
-        if(offer[i]){
-          ids.push(offer[i].trim());
-        }
-      }
-      conditions.id = {[Op.in]: ids};
-    } catch (error) {
-      
-    }
   }
 
   if(best_selling == 1){
@@ -110,10 +101,88 @@ exports.index = async (req, res) => {
     ],
     distinct: true,
     ...subQueryData
-  }).then(async (data) => {
+  })
 
+    /*if (type == "product" || type == "return") {
+      let productConditions = {};
+      
+
+      _include.push({
+        model: ProductModel,
+        as: "product",
+        required: true,
+        where: productConditions,
+        include: [
+          {
+            model: CategoryModel,
+            as: "category",
+            required: true,
+            where: (!isEmpty(category)) ? {slug: category} : {}
+          },
+          {
+            model: SubCategoryModel,
+            as: "sub_category",
+            required: true,
+            where: (!isEmpty(subcategory)) ? {slug: subcategory} : {}
+          },
+          {
+            model: CertificateModel,
+            as: "certificates",
+          },
+          {
+            model: TaxSlabModel,
+            as: "tax",
+          },
+          {
+            model: ProductTagModel,
+            as: 'tags',
+          }
+        ],
+      });
+    } else {
+      _include.push({
+        model: materialModel,
+        as: "material",
+        required: true,
+        where: productConditions,
+        include: [
+          {
+            model: CategoryModel,
+            as: "category",
+          },
+        ],
+      });
+    }*/
+    
+    /*if(!isEmpty(offer)){
+      try {
+        offer = offer.split(",");
+        let ids = [];
+        for(let i = 0; i < offer.length; i++){
+          if(offer[i]){
+            ids.push(offer[i].trim());
+          }
+        }
+        conditions.id = {[Op.in]: ids};
+      } catch (error) {
+        
+      }
+    }
+    StockModel
+      .findAndCountAll({
+        order: [["id", "DESC"]],
+        ...paginatorOptions,
+        where: conditions,
+        include: _include,
+        distinct: true,
+        ...subQueryData
+      })*/
+  
+  .then(async (data) => {
+    console.log(data.rows);
     let result = {
       items: await ProductListCollection(data.rows, req),
+      //items: await NewProductListCollection(data.rows, req),
       total: data.count
     }
     res.send(formatResponse(result, 'Products list'));
@@ -125,7 +194,6 @@ exports.index = async (req, res) => {
 
   
 };
-
 
 /**
  * View Product

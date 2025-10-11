@@ -52,7 +52,7 @@ const getModelObject = (data) => {
             total_weight = weightFormat(item.total_weight).toFixed(3);
         }
 
-        let total_weight_display = total_weight + ' ' + materials[0].unit_name;
+        let total_weight_display = materials.length > 0?total_weight + ' ' + materials[0].unit_name:total_weight + ' gm';
 
         total_sub_total += priceFormat(item.sub_price - item.total_discount);
 
@@ -146,6 +146,7 @@ const getModelObject = (data) => {
                         subCatWiseProductMaterials[mItem.material_id] = {
                             "id" : mItem.material_id,
                             "name" : mItem.material_name,
+                            "quantity" : parseInt(mItem.quantity),
                             "weight" : parseFloat(mItem.weight),
                             "unit" : mItem.unit_name,
                             "rate" : mItem.rate,
@@ -154,6 +155,7 @@ const getModelObject = (data) => {
                     } else {
                         /* already exists in array */
                         subCatWiseProductMaterials[mItem.material_id].weight += parseFloat(mItem.weight);
+                        subCatWiseProductMaterials[mItem.material_id].quantity += parseInt(mItem.quantity);
                     }
                 }
             }
@@ -238,6 +240,7 @@ const getModelObject = (data) => {
             bank_name: (data.user && data.user.bank_name) ? data.user.bank_name : '',
             bank_account_no: (data.user && data.user.bank_account_no) ? data.user.bank_account_no : '',
             bank_ifsc: (data.user && data.user.bank_ifsc) ? data.user.bank_ifsc : '',
+            mobile: (data.user && data.user.mobile) ? data.user.mobile : '',
         },
         sale_by_id: data.sale_by,
         sale_by_name: data.saleBy ? data.saleBy.name : '',
@@ -258,6 +261,10 @@ const getModelObject = (data) => {
         invoice_date: formatDateTime(data.invoice_date, 8),
         //due_date: formatDateTime(data.due_date, 8),
         settlement_date: formatDateTime(data.settlement_date, 8),
+        report_qty: data.report_qty,
+        report_charge: priceFormat(data.report_charge),
+        report_charge_display: displayAmount(data.report_charge),
+        report_tax_percentage: priceFormat(data.report_tax_percentage),
         cgst_tax: priceFormat(data.cgst_tax),
         sgst_tax: priceFormat(data.sgst_tax),
         igst_tax: priceFormat(data.igst_tax),
@@ -273,6 +280,7 @@ const getModelObject = (data) => {
         transaction_no: data.transaction_no,
         notes: data.notes,
         taxable_amount: displayAmount(data.taxable_amount),
+        taxable_amount_raw: data.taxable_amount,
         bill_amount: displayAmount(data.bill_amount),
         total_payable: displayAmount(data.total_payable),
         return_amount: parseFloat(data.return_amount) > 0 ? displayAmount(data.return_amount) : "",

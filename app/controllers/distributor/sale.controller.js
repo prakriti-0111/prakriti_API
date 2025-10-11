@@ -6,6 +6,7 @@ const {isEmpty, getDateFromToWhere, priceFormat, displayAmount, addLog, weightFo
 const {updateOrCreate, removeMaterialFromStock} = require("@library/common");
 const { getPaginationOptions } = require('@helpers/paginator')
 const {SaleCollection} = require("@resources/superadmin/SaleCollection");
+const { PurityCollection } = require("@resources/superadmin/PurityCollection");
 const { Op } = require("sequelize");
 const sequelize = db.sequelize;
 const ProductModel = db.products;
@@ -130,6 +131,9 @@ exports.store = async (req, res) => {
         notes: data.notes,
         payment_mode: data.payment_mode,
         transaction_no: data.transaction_no,
+        report_qty: data.report_qty,
+        report_charge: data.report_charge_amount,
+        report_tax_percentage: reportCharge[0].tax,
         total_amount: priceFormat(data.total_amount),
         cgst_tax: priceFormat(data.cgst_tax),
         sgst_tax: priceFormat(data.sgst_tax),
@@ -1104,7 +1108,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
               {
                 model: taxSlabModel,
                 as: "tax",
-              }
+              },
             ],
           },
           {
@@ -1147,8 +1151,9 @@ exports.downloadInvoiceInfo = async (req, res) => {
         model: StockModel,
         as: "saleStocks",
         where: {
-          purchase_id: sequelize.col('purchase.id')
-        }
+          purchase_id: sequelize.col("purchase.id"),
+        },
+        required: false,
       },
       {
         model: UserModel,
@@ -1166,9 +1171,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
       .send(formatErrorResponse("Sale not found"));
   }
 
-
   let saleData = SaleCollection(sale);
-  
 
   let payments = await PaymentModel.findAll({
     where: {
@@ -1183,7 +1186,17 @@ exports.downloadInvoiceInfo = async (req, res) => {
     ],
   });
   payments = await PaymentCollection(payments);
-  
+
+  /* 18k gold purity value */
+  let purity18K = await PurityModel.findOne({  
+    where: {
+      id: 1, //18K
+    },  
+  });
+
+  purity18K = await PurityCollection(purity18K);
+
+  //console.log("payments : ",payments);
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
   const logoUrl = `public/images/logo.png`;
@@ -1191,7 +1204,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
   const bitmap = fs.readFileSync(logoUrl);
   const logo = bitmap.toString("base64");
-  
+
   let footerhtml = `
               <div class="invoice" style="width: 100%; margin: 0; padding: 15px; position: absolute; left:0px; bottom: 0px; background-color: #f9f9f9;">
                   <hr/>
@@ -1363,390 +1376,379 @@ exports.downloadInvoiceInfo = async (req, res) => {
           `;
 
   let html = `
-  <!DOCTYPE html>
-  <html lang="en">
-      <head>
-          <meta charset="UTF-8" />
-          <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <title>Bill</title>
-          <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin  />
-          <style>
-          html {
-            -webkit-print-color-adjust: exact;
-          }
-          </style>
-      </head>
-      <body style="box-sizing: border-box; padding: 0px; margin: 0px; font-family:
-          'Poppins', sans-serif;">
-          <div class="invoice" style="max-width: 1000px; margin: auto; padding:
-              15px;
-              background-color: #f9f9f9;">
-              <table cellpadding="0" cellspacing="0" width="100%">
-                <tbody>
-                    <tr>
-                        <td>
-                          <table cellspacing="0" cellpadding="0" border="0"
-                              align="center" width="100%">
-                              <h1 style="font-size: 14px; text-align:
-                                  center; margin-bottom: 5px; font-weight:
-                                  300;">SALE TAX INVOICE</h1>
-                          </table>
-                          <table cellspacing="0" cellpadding="0" border="0"
-                              align="center" width="100%">
-                              <div style="display: table; width: 100%;">
-                                  <div style="width: 65%; display: table-cell;
-                                      vertical-align: bottom;">
-                                      <img src="data:image/png;base64,${logo}" style="width:
-                                          220px; margin-left: 10px;" />
-                                      <h3 style="margin: 0; font-weight: 400;
-                                          font-size: 12px;">Corporate Office -
-                                          P210 Strand Bank Road Brabzar
-                                          Kolkata 700 011</h3>
-
-                                  </div>
-                                  <div style="width: 35%; display: table-cell;
-                                      vertical-align: middle; text-align:
-                                      left;">
-                                      <h3 style="margin: 0;">
-                                          <span style="font-size: 16px;
-                                              font-weight: 600;">Prakriti
-                                              Patna</span></h3>
-                                      <h3 style="margin: 0; font-weight: 400;
-                                          font-size: 14px;">GST No -
-                                          <span style="font-weight: 600;">10CIUPK2654L1ZY</span></h3>
-                                      <h3 style="margin: 0; font-weight: 400;
-                                          font-size: 12px;">User Id - <span>${saleData.sale_by_name}</span></h3>
-                                      <h3 style="margin: 0; font-weight: 400;
-                                          font-size: 12px;">Address - G100
-                                          RBI CPC Colony Kankarbagh Patna
-                                          Bihar 800 020</h3>
-                                      <h3 style="font-weight: 600; font-size:
-                                          12px; margin: 0;">
-                                          support@Prakriti.com, +91 98744
-                                          45878
-                                      </h3>
-                                  </div>
-                              </div>
-                          </table>
-                          <table cellspacing="0" cellpadding="5" border="0"
-                              align="center" width="100%">
-                              <tbody>
-                                  <tr>
-                                      <hr style="border: 1px solid #1e2746" />
-                                  </tr>
-                              </tbody>
-                          </table>
-                          <table cellspacing="0" cellpadding="5" border="0"
+      <!DOCTYPE html>
+      <html lang="en">
+          <head>
+              <meta charset="UTF-8" />
+              <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+              <title>Bill</title>
+              <link rel="preconnect" href="https://fonts.googleapis.com" />
+              <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin  />
+              <style>
+              html {
+                -webkit-print-color-adjust: exact;
+              }
+              </style>
+          </head>
+          <body style="box-sizing: border-box; padding: 0px; margin: 0px; font-family:
+              'Poppins', sans-serif;">
+              <div class="invoice" style="max-width: 1000px; margin: auto; padding:
+                  15px;
+                  background-color: #f9f9f9;">
+                  <table cellpadding="0" cellspacing="0" width="100%">
+                    <tbody>
+                        <tr>
+                            <td>
+                              <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
-                              <thead>
-                                  
-                              </thead>
-                              <tbody>
-                                  <tr>
-                                      <td style="padding: 0;">
-                                          <div class="comp-part-one">
-                                              <ul style="margin: 0;
-                                                  padding: 0; list-style:
-                                                  none; display: flex;
-                                                  gap: 15px;
-                                                  justify-content:
-                                                  space-between;">
-                                                  <li><span
-                                                          style="font-weight:
-                                                          400; font-size:
-                                                          12px; margin:
-                                                          0;">Company -</span>
-                                                      <span
-                                                          style="font-weight:
-                                                          600; font-size:
-                                                          12px; margin:
-                                                          0;">${saleData.user_details.company_name}</span></li>
-                                                  <li><span
-                                                          style="font-weight:
-                                                          400; font-size:
-                                                          12px; margin:
-                                                          0;">GST IN</span>
-                                                      <span
-                                                          style="font-weight:
-                                                          600; font-size:
-                                                          12px; margin:
-                                                          0;">${saleData.user_details.gst}</span></li>
-                                                  <li><span
-                                                          style="font-weight:
-                                                          400; font-size:
-                                                          12px; margin:
-                                                          0;">Cont -
-                                                      </span>
-                                                      <span
-                                                          style="font-weight:
-                                                          600; font-size:
-                                                          12px; margin:
-                                                          0;">${saleData.user_mobile}</span></li>
-                                                  <li><span
-                                                          style="font-weight:
-                                                          400; font-size:
-                                                          12px; margin:
-                                                          0;">Invoice Date
-                                                          -
-                                                      </span> <span
-                                                          style="font-weight:
-                                                          600; font-size:
-                                                          12px; margin:
-                                                          0;">${saleData.invoice_date}</span></li>
-                                                          
-                                              </ul>
-                                          </div>
-                                          <div class="comp-part-two">
-                                              <ul style="margin: 0;
-                                                  padding: 0; list-style:
-                                                  none; display: flex;
-                                                  gap: 15px;
-                                                  justify-content:
-                                                  space-between;">
-                                                  <li><span
-                                                          style="font-weight:
-                                                          400; font-size:
-                                                          12px; margin:
-                                                          0;">Address -</span>
-                                                      <span
-                                                          style="font-weight:
-                                                          500; font-size:
-                                                          12px; margin:
-                                                          0;">${saleData.user_details.address}</span></li>
-                                                  
-                                                  <li><span
-                                                          style="font-weight:
-                                                          400; font-size:
-                                                          12px; margin:
-                                                          0;">Invoice No -
-                                                      </span> <span
-                                                          style="font-weight:
-                                                          600; font-size:
-                                                          12px; margin:
-                                                          0;">${saleData.invoice_number}</span></li>
-                                              </ul>
-                                              <ul style="margin: 0;
-                                                  padding: 0;margin-left:52px; list-style:
-                                                  none; display: flex;
-                                                  gap: 15px;
-                                                  ">
-                                                <li><span
-                                                          style="font-weight:
-                                                          400; font-size:
-                                                          12px; margin:
-                                                          0;">City -</span>
-                                                      <span
-                                                          style="font-weight:
-                                                          500; font-size:
-                                                          12px; margin:
-                                                          0;">${saleData.user_details.city}</span></li>
-                                                  <li><span
-                                                          style="font-weight:
-                                                          400; font-size:
-                                                          12px; margin:
-                                                          0;">Pin -
-                                                      </span>
-                                                      <span
-                                                          style="font-weight:
-                                                          500; font-size:
-                                                          12px; margin:
-                                                          0;">${saleData.user_details.pincode}</span></li>
-                                              </ul>
-                                          </div>
-                                      </td>
-                                  </tr>
-                              </tbody>
-                          </table>`;
-                        if(saleData.subCatItems.length == 0){
-                          html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
-                            border="0"
-                            align="center" width="100%">
-                            <thead style="background-color: #1E2746;">
-                                <tr style="background-color: #1E2746;">
-                                    <th style="text-align: left; color:
-                                        #fff; border: 1px solid #1E2746;
-                                        font-size: 12px; font-weight:
-                                        400;background-color: #1E2746;">#</th>
-                                    <th style="text-align: left; color:
-                                        #fff; font-size: 12px;
-                                        font-weight: 400; width:
-                                        250px;">Product Name</th>
-                                    <th style="text-align: left; color:
-                                        #fff; font-size: 12px;
-                                        font-weight: 400; width: 50px;">Size</th>
-                                    <th style="text-align: left; color:
-                                        #fff; font-size: 12px;
-                                        font-weight: 400; width: 150px;">Product Id</th>
-                                    <th style="text-align: left; color:
-                                        #fff; font-size: 12px;
-                                        font-weight: 400;">Mtrl</th>
-                                    <th style="text-align: left; color:
-                                        #fff; font-size: 12px;
-                                        font-weight: 400; width: 70px">Making Etc</th>
-                                    <th style="text-align: left; color:
-                                        #fff; font-size: 12px;
-                                        font-weight: 400;">Tag Price</th>
-                                    <th style="text-align: left; color:
-                                        #fff; font-size: 12px;
-                                        font-weight: 400;">Dist Amt</th>
-                                    <th style="text-align: left; color:
-                                        #fff; font-size: 12px;
-                                        font-weight: 400;">Sub-Tot</th>
-                                    <th style="text-align: left; color:
-                                        #fff; font-size: 12px;
-                                        font-weight: 400;">Tax%</th>
-                                    <th style="text-align: left; color:
-                                        #fff; font-size: 12px;
-                                        font-weight: 400;">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-for (let i = 0; i < saleData.products.length; i++) {
-html += `<tr style="background-color: #C1BDBD;">
-                                    <td style="text-align: left;
-                                        font-size: 11px;
-                                        font-weight: 400;">
-                                        ${i + 1}
-                                    </td>
-                                    <td style="text-align: left;
-                                        font-size: 11px;
-                                        font-weight: 400;font-size: 10px;">
-                                        ${
-                                          saleData.products[i]
-                                            .product_name
-                                        } - ${
-saleData.products[i].product_code
-}
-                                    </td>
-                                    <td style="text-align: left;
-                                        font-size: 11px;
-                                        font-weight: 400;">
-                                        ${
-                                          saleData.products[i]
-                                            .size_name
-                                        }
-                                    </td>
-                                    <td colspan="8" style="text-align:
-                                        left; font-size: 11px;
-                                        font-weight: 400;">
-                                        ${
-                                          saleData.products[i]
-                                            .certificate_no
-                                        }
-                                    </td>
+                                  <h1 style="font-size: 14px; text-align:
+                                      center; margin-bottom: 5px; font-weight:
+                                      300;">SALE TAX INVOICE</h1>
+                              </table>
+                              <table cellspacing="0" cellpadding="0" border="0"
+                                  align="center" width="100%">
+                                  <div style="display: table; width: 100%;">
+                                      <div style="width: 65%; display: table-cell;
+                                          vertical-align: bottom;">
+                                          <img src="data:image/png;base64,${logo}" style="width:
+                                              220px; margin-left: 10px;" />
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">Corporate Office -
+                                              P210 Strand Bank Road Brabzar
+                                              Kolkata 700 011</h3>
 
-                                </tr>
-                                <tr style="background-color: #fff;
-                                    vertical-align: top;">
-                                    <td colspan="3"
-                                        style="border-bottom: 1px solid
-                                        #1E2746; width: 300px; text-align: left;">
-                                        <div style="max-width: 300px; text-align: left;">`;
-for (let x = 0; x < saleData.products[i].materials.length; x++) {
-saleData.products[i].materials[x].amount == "₹0.00"
-? null
-: (html += `<div style="display: flex;
-                                                flex-wrap: wrap;
-                                                justify-content: center;
-                                                margin: 0 -5px; text-align: left;">
-                                                <div style="flex-basis:
-                                                    calc(69% - 10px);
-                                                    margin: 0 5px
-                                                    0px; line-height:
-                                                    1;text-align: left;">
-                                                    <span
-                                                        style="text-align:
-                                                        left;font-size:
-                                                        10px;
-                                                        font-weight:
-                                                        400;text-align: left;">${saleData.products[i].materials[x].material_name} ${saleData.products[i].materials[x].weight} ${saleData.products[i].materials[x].unit_name}x${saleData.products[i].materials[x].rate}
-                                                    </span>
+                                      </div>
+                                      <div style="width: 35%; display: table-cell;
+                                          vertical-align: middle; text-align:
+                                          left;">
+                                          <h3 style="margin: 0;">
+                                              <span style="font-size: 16px;
+                                                  font-weight: 600;">Prakriti
+                                                  Patna</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 14px;">GST No -
+                                              <span style="font-weight: 600;">10CIUPK2654L1ZY</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">User Id - <span>${saleData.sale_by_name}</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">Address - G100
+                                              RBI CPC Colony Kankarbagh Patna
+                                              Bihar 800 020</h3>
+                                          <h3 style="font-weight: 600; font-size:
+                                              12px; margin: 0;">
+                                              support@Prakriti.com, +91 98744
+                                              45878
+                                          </h3>
+                                      </div>
+                                  </div>
+                              </table>
+                              <table cellspacing="0" cellpadding="5" border="0"
+                                  align="center" width="100%">
+                                  <tbody>
+                                      <tr>
+                                          <hr style="border: 1px solid #1E2757" />
+                                      </tr>
+                                  </tbody>
+                              </table>
+                              <table cellspacing="0" cellpadding="5" border="0"
+                                      align="center" width="100%">
+                                  <thead>
+                                      
+                                  </thead>
+                                  <tbody>
+                                      <tr>
+                                          <td style="padding: 0;">
+                                              <div class="comp-part-one">
+                                                  <ul style="margin: 0;
+                                                      padding: 0; list-style:
+                                                      none; display: flex;
+                                                      gap: 15px;
+                                                      justify-content:
+                                                      space-between;">
+                                                      <li><span
+                                                              style="font-weight:
+                                                              400; font-size:
+                                                              12px; margin:
+                                                              0;">Company -</span>
+                                                          <span
+                                                              style="font-weight:
+                                                              600; font-size:
+                                                              12px; margin:
+                                                              0;">${saleData.user_details.company_name}</span></li>
+                                                      <li><span
+                                                              style="font-weight:
+                                                              400; font-size:
+                                                              12px; margin:
+                                                              0;">GST IN</span>
+                                                          <span
+                                                              style="font-weight:
+                                                              600; font-size:
+                                                              12px; margin:
+                                                              0;">${saleData.user_details.gst}</span></li>
+                                                      <li><span
+                                                              style="font-weight:
+                                                              400; font-size:
+                                                              12px; margin:
+                                                              0;">Cont -
+                                                          </span>
+                                                          <span
+                                                              style="font-weight:
+                                                              600; font-size:
+                                                              12px; margin:
+                                                              0;">${saleData.user_mobile}</span></li>
+                                                      <li><span
+                                                              style="font-weight:
+                                                              400; font-size:
+                                                              12px; margin:
+                                                              0;">Invoice Date
+                                                              -
+                                                          </span> <span
+                                                              style="font-weight:
+                                                              600; font-size:
+                                                              12px; margin:
+                                                              0;">${saleData.invoice_date}</span></li>
+                                                              
+                                                  </ul>
+                                              </div>
+                                              <div class="comp-part-two">
+                                                  <ul style="margin: 0;
+                                                      padding: 0; list-style:
+                                                      none; display: flex;
+                                                      gap: 15px;
+                                                      justify-content:
+                                                      space-between;">
+                                                      <li><span
+                                                              style="font-weight:
+                                                              400; font-size:
+                                                              12px; margin:
+                                                              0;">Address -</span>
+                                                          <span
+                                                              style="font-weight:
+                                                              500; font-size:
+                                                              12px; margin:
+                                                              0;">${saleData.user_details.address}</span></li>
+                                                      
+                                                      <li><span
+                                                              style="font-weight:
+                                                              400; font-size:
+                                                              12px; margin:
+                                                              0;">Invoice No -
+                                                          </span> <span
+                                                              style="font-weight:
+                                                              600; font-size:
+                                                              12px; margin:
+                                                              0;">${saleData.invoice_number}</span></li>
+                                                  </ul>
+                                                  <ul style="margin: 0;
+                                                      padding: 0;margin-left:52px; list-style:
+                                                      none; display: flex;
+                                                      gap: 15px;
+                                                      ">
+                                                    <li><span
+                                                              style="font-weight:
+                                                              400; font-size:
+                                                              12px; margin:
+                                                              0;">City -</span>
+                                                          <span
+                                                              style="font-weight:
+                                                              500; font-size:
+                                                              12px; margin:
+                                                              0;">${saleData.user_details.city}</span></li>
+                                                      <li><span
+                                                              style="font-weight:
+                                                              400; font-size:
+                                                              12px; margin:
+                                                              0;">Pin -
+                                                          </span>
+                                                          <span
+                                                              style="font-weight:
+                                                              500; font-size:
+                                                              12px; margin:
+                                                              0;">${saleData.user_details.pincode}</span></li>
+                                                  </ul>
+                                              </div>
+                                          </td>
+                                      </tr>
+                                  </tbody>
+                              </table>`;
+  if (saleData.subCatItems.length == 0) {
+    html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+                                border="0"
+                                align="center" width="100%">
+                                <thead style="background-color: #1E2757;">
+                                    <tr style="background-color: #1E2757;">
+                                        <th style="text-align: left; color:
+                                            #fff; border: 1px solid #1E2757;
+                                            font-size: 12px; font-weight:
+                                            400;background-color: #1E2757;">#</th>
+                                        <th style="text-align: left; color:
+                                            #fff; font-size: 12px;
+                                            font-weight: 400; width:
+                                            250px;">Product Name</th>
+                                        <th style="text-align: left; color:
+                                            #fff; font-size: 12px;
+                                            font-weight: 400; width: 50px;">Size</th>
+                                        <th style="text-align: left; color:
+                                            #fff; font-size: 12px;
+                                            font-weight: 400; width: 150px;">Product Id</th>
+                                        <th style="text-align: left; color:
+                                            #fff; font-size: 12px;
+                                            font-weight: 400;">Mtrl</th>
+                                        <th style="text-align: left; color:
+                                            #fff; font-size: 12px;
+                                            font-weight: 400; width: 70px">Making Etc</th>
+                                        <th style="text-align: left; color:
+                                            #fff; font-size: 12px;
+                                            font-weight: 400;">Tag Price</th>
+                                        <th style="text-align: left; color:
+                                            #fff; font-size: 12px;
+                                            font-weight: 400;">Dist Amt</th>
+                                        <th style="text-align: left; color:
+                                            #fff; font-size: 12px;
+                                            font-weight: 400;">Sub-Tot</th>
+                                        <th style="text-align: left; color:
+                                            #fff; font-size: 12px;
+                                            font-weight: 400;">Tax%</th>
+                                        <th style="text-align: left; color:
+                                            #fff; font-size: 12px;
+                                            font-weight: 400;">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+    for (let i = 0; i < saleData.products.length; i++) {
+      let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
+      html += `<tr style="background-color: ${bgTrColor}">
+                                        <td style="text-align: left;
+                                            font-size: 11px;
+                                            font-weight: 400;">
+                                            ${i + 1}
+                                        </td>
+                                        <td style="text-align: left;
+                                            font-size: 11px;
+                                            font-weight: 400;font-size: 10px;">
+                                            ${
+                                              saleData.products[i].product_name
+                                            } - ${
+        saleData.products[i].product_code
+      }
+                                        </td>
+                                        <td style="text-align: left;
+                                            font-size: 11px;
+                                            font-weight: 400;">
+                                            ${saleData.products[i].size_name}
+                                        </td>
+                                        <td colspan="8" style="text-align:
+                                            left; font-size: 11px;
+                                            font-weight: 400;">
+                                            ${
+                                              saleData.products[i]
+                                                .certificate_no
+                                            }
+                                        </td>
 
-                                                </div>
+                                    </tr>
+                                    <tr style="background-color: #fff;
+                                        vertical-align: top;">
+                                        <td colspan="3"
+                                            style="border-bottom: 1px solid
+                                            #1E2757; width: 300px; text-align: left;">
+                                            <div style="max-width: 300px; text-align: left;">`;
+      for (let x = 0; x < saleData.products[i].materials.length; x++) {
+        saleData.products[i].materials[x].amount == "₹0.00"
+          ? null
+          : (html += `<div style="display: flex;
+                                                    flex-wrap: wrap;
+                                                    justify-content: center;
+                                                    margin: 0 -5px; text-align: left;">
+                                                    <div style="flex-basis:
+                                                        calc(69% - 10px);
+                                                        margin: 0 5px
+                                                        0px; line-height:
+                                                        1;text-align: left;">
+                                                        <span
+                                                            style="text-align:
+                                                            left;font-size:
+                                                            10px;
+                                                            font-weight:
+                                                            400;text-align: left;">${saleData.products[i].materials[x].material_name} ${saleData.products[i].materials[x].weight} ${saleData.products[i].materials[x].unit_name}x${saleData.products[i].materials[x].rate}
+                                                        </span>
 
-                                                <div
-                                                    style="flex-basis:
-                                                    calc(31% -
-                                                    10px);
-                                                    margin: 0 5px
-                                                    0px; line-height:
-                                                    1;">
-                                                    <span
-                                                        style="text-align:
-                                                        left; font-size:
-                                                        10px;
-                                                        font-weight:
-                                                        400;"> = ${saleData.products[i].materials[x].amount}</span>
-                                                </div>
+                                                    </div>
 
-                                            </div>`);
-}
+                                                    <div
+                                                        style="flex-basis:
+                                                        calc(31% -
+                                                        10px);
+                                                        margin: 0 5px
+                                                        0px; line-height:
+                                                        1;">
+                                                        <span
+                                                            style="text-align:
+                                                            left; font-size:
+                                                            10px;
+                                                            font-weight:
+                                                            400;"> = ${saleData.products[i].materials[x].amount}</span>
+                                                    </div>
 
-html += `</div>
+                                                </div>`);
+      }
+
+      html += `</div>
 
 
                                             </td>
                                             <td style="border-bottom:
-                                                1px solid #1E2746;">`;
-for (let x = 0; x < saleData.products[i].materials.length; x++) {
-html += `<div>`;
-if (isEmpty(saleData.products[i].materials[x].discount_amount)) {
-saleData.products[i].materials[x].amount == "₹0.00"
-? null
-: (html += `-`);
-} else {
-html += `<span
+                                                1px solid #1E2757;">`;
+      for (let x = 0; x < saleData.products[i].materials.length; x++) {
+        html += `<div>`;
+        if (isEmpty(saleData.products[i].materials[x].discount_amount)) {
+          saleData.products[i].materials[x].amount == "₹0.00"
+            ? null
+            : (html += `-`);
+        } else {
+          html += `<span
                                                         style="text-align:
                                                         left; font-size:
                                                         10px;
                                                         font-weight:
                                                         400;">@${removeBlankZero(
-                                                          saleData
-                                                            .products[
-                                                            i
-                                                          ].materials[
-                                                            x
-                                                          ]
+                                                          saleData.products[i]
+                                                            .materials[x]
                                                             .discount_percent
                                                         )}% ${
-saleData.products[i].materials[x].discount_amount_display
-}</span> 
-                      <!--<span
+            saleData.products[i].materials[x].discount_amount_display
+          }</span> 
+                                    <!--<span
                                                         style="text-align:
                                                         left; font-size:
                                                         10px;
                                                         font-weight:
                                                         400;">${
-                                                          saleData
-                                                            .products[
-                                                            i
-                                                          ].materials[
-                                                            x
-                                                          ]
+                                                          saleData.products[i]
+                                                            .materials[x]
                                                             .discount_amount_display
                                                         }</span>-->`;
-}
-html += `</div>`;
-}
-html += `</td>
+        }
+        html += `</div>`;
+      }
+      html += `</td>
                                             <td style="text-align: left;
                                                 font-size: 10px;
                                                 font-weight: 400;
                                                 border-bottom: 1px solid
-                                                #1E2746;">`;
-for (let x = 0; x < saleData.products[i].materials.length; x++) {
-saleData.products[i].materials[x].amount == "₹0.00"
-? null
-: (html += `<div>${saleData.products[i].materials[x].material_cost}</div>`);
-}
-html += `</td>
+                                                #1E2757;">`;
+      for (let x = 0; x < saleData.products[i].materials.length; x++) {
+        saleData.products[i].materials[x].amount == "₹0.00"
+          ? null
+          : (html += `<div>${saleData.products[i].materials[x].material_cost}</div>`);
+      }
+      html += `</td>
                                             <td style="text-align: left;
                                                 font-size: 10px;
                                                 font-weight: 400;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].making_charge}@${saleData.products[i].making_charge_discount}% = ${saleData.products[i].total_making_charge_discount}
                                             </td>
 
@@ -1754,41 +1756,41 @@ html += `</td>
                                                 left;font-size: 10px;
                                                 font-weight: 600;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].sub_price}
                                             </td>
                                             <td style="text-align:
                                                 left;font-size: 10px;
                                                 font-weight: 600;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].total_discount_display}
                                             </td>
                                             <td style="text-align:
                                                 left;font-size: 10px;
                                                 font-weight: 400;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].sub_total}
                                             </td>
                                             <td style="text-align:
                                                 left;font-size: 10px;
                                                 font-weight: 400;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].tax}
                                             </td>
                                             <td style="text-align:
                                                 left;font-size: 10px;
                                                 font-weight: 600;
                                                 border-bottom: 1px solid
-                                                #1E2746;">
+                                                #1E2757;">
                                                 ${saleData.products[i].total_display}
                                             </td>
 
                                         </tr>`;
-}
-html += `<tr style="
+      }
+      html += `<tr style="
                                             vertical-align: top;">
                                             <td colspan="6"
                                                 style="
@@ -1867,54 +1869,74 @@ html += `<tr style="
                                         </tr> -->
                                     </tbody>
                                 </table>`;
-                              } else {
-
-                        html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+  } else {
+    html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
                                       border="0"
                                       align="center" width="100%">
-                              <thead style="background-color: #1E2746;">
-                                  <tr style="background-color: #1E2746;">
+                              <thead style="background-color: #1E2757;">
+                                  <tr style="background-color: #1E2757;">
                                       <th style="text-align: left; color:
-                                          #fff; border: 1px solid #1E2746;
+                                          #fff; border: 1px solid #1E2757;
                                           font-size: 12px; font-weight:
-                                          400;background-color: #1E2746;">SL</th>
+                                          400;background-color: #1E2757; width: 50px;">SL</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400; width:
-                                          250px;">Product Name</th>
+                                          150px;">Product Name</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400; width: 50px;">QTY</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
-                                          font-weight: 400; width: 150px;">HSN</th>
+                                          font-weight: 400; width: 50px;">HSN</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
-                                          font-weight: 400;">Material</th>
+                                          font-weight: 400; width: 150px;"">Material</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
-                                          font-weight: 400; width: 70px">WT</th>
+                                          font-weight: 400; width: 50px">WT</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
-                                          font-weight: 400;">Unit</th>
+                                          font-weight: 400; width: 50px"">Unit</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
-                                          font-weight: 400;">Rate</th>
+                                          font-weight: 400; width: 50px"">Rate</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
-                                          font-weight: 400;">Tax@</th>
+                                          font-weight: 400; width: 50px"">Tax@</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
-                                          font-weight: 400;">Taxable Amt.</th>
+                                          font-weight: 400; width: 50px"">Taxable Amt.</th>
                                   </tr>
                               </thead>
                               <tbody>`;
-                              for (let i = 0; i < saleData.subCatItems.length; i++) {
-                                let materialNames = saleData.subCatItems[i].material.map((itm) => itm.name).join("<br/ >");
-                                let materialWts = saleData.subCatItems[i].material.map((itm) => itm.weight.toFixed(2)).join("<br/ >");
-                                let materialUnits = saleData.subCatItems[i].material.map((itm) => itm.unit).join("<br/ >");
-                                let materialRates = saleData.subCatItems[i].material.map((itm) => itm.rate.toFixed(2)).join("<br/ >");
-                          html += `<tr style="background-color: #C1BDBD;">
+    let fine_metals = 0;
+    for (let i = 0; i < saleData.subCatItems.length; i++) {
+      saleData.subCatItems[i].material
+        .map((itm) => {
+          if(itm.id == 1){
+            fine_metals += parseFloat(itm.weight);
+          } 
+        });
+
+      let materialNames = saleData.subCatItems[i].material
+        .map((itm) => itm.name)
+        .join("<br/ >");
+      let materialWts = saleData.subCatItems[i].material
+        .map((itm) => itm.weight.toFixed(2))
+        .join("<br/ >");
+      let materialUnits = saleData.subCatItems[i].material
+        .map((itm) => itm.unit)
+        .join("<br/ >");
+      let materialRates = saleData.subCatItems[i].material
+        .map((itm) => itm.rate.toFixed(2))
+        .join("<br/ >");
+      let materialCosts = saleData.subCatItems[i].material
+        .map((itm) => itm.material_cost.toFixed(2))
+        .join("<br/ >");
+      let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
+
+      html += `<tr style="background-color: ${bgTrColor};">
                                       <td style="text-align: left;
                                           font-size: 14px;
                                           font-weight: 400;">
@@ -1923,92 +1945,156 @@ html += `<tr style="
                                       <td style="text-align: left;
                                           font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            saleData.subCatItems[i]
-                                              .name
-                                          }
+                                          ${saleData.subCatItems[i].name}
                                       </td>
                                       <td style="text-align: left;
                                           font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            saleData.subCatItems[i]
-                                              .qty
-                                          }
+                                          ${saleData.subCatItems[i].qty}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
                                           ${
-                                            saleData.subCatItems[i]
-                                              .hsn
+                                            saleData.subCatItems[i].hsn
+                                              ? saleData.subCatItems[i].hsn
+                                              : ""
                                           }
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            materialNames
-                                          }
+                                          ${materialNames}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            materialWts
-                                          }
+                                          ${materialWts}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            materialUnits
-                                          }
+                                          ${materialUnits}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            materialRates
-                                          }
+                                          ${materialRates}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            saleData.subCatItems[i]
-                                              .tax
-                                          }
+                                          ${saleData.subCatItems[i].tax}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 14px;
                                           font-weight: 400;">
-                                          ${
-                                            saleData.subCatItems[i]
-                                              .taxableAmount.toFixed(2)
-                                          }
+                                          ${saleData.subCatItems[
+                                            i
+                                          ].taxableAmount.toFixed(2)}
                                       </td>
 
                                     </tr>`;
-                                  
-                              }
-                          html += `<tr style="
+    }
+    let receive_metal = 0;
+    let metalExists = true;
+    payments.map((itm) => {
+      if(itm.payment_mode.toLowerCase() == "metal" && itm.weight != null){
+        metalExists = true;
+        receive_metal += parseFloat(itm.weight);
+      }
+    });
+
+    console.log("fine_metals before : ", fine_metals);
+    console.log("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
+    /* convert gold to 24k from 18k */
+    if(purity18K && purity18K.value != null){
+      fine_metals = (parseFloat(fine_metals)*parseFloat(purity18K.value))/100;
+    }
+    let rest_metal = fine_metals - receive_metal;
+
+    let totalReportCharge = parseInt(saleData.report_qty)*parseFloat(saleData.report_charge);
+    let taxOnReportCharge = (totalReportCharge*parseFloat(saleData.report_tax_percentage))/100;
+    let afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
+    
+    html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="6"
                                           style="
                                           border:none;">
 
                                       </td>
-                                  </tr>
+                                  </tr>`;
+                                  if(saleData.report_qty > 0){
+                                    html += `<tr style="
+                                        vertical-align: top;
+                                        background-color: #0A8AB8;
+                                        font-size: 12px; 
+                                        font-weight:400;
+                                        color:#ffffff;
+                                        ">
+                                        <td colspan="2"></td>
+                                        <td colspan="3">Rate</td>
+                                        <td colspan="2">Total</td>
+                                        <td colspan="1">Tax(%)</td>
+                                        <td colspan="1">Tax</td>
+                                        <td colspan="2">Total</td>
+                                        
+                                    </tr>`;
+                                    html += `<tr style="
+                                        vertical-align: top;
+                                        font-size: 14px; 
+                                        font-weight:400;
+                                        ">
+                                        <td colspan="2" style="background-color: #C1BDBD;">Report Charges : </td>
+                                        <td colspan="3" style="background-color: #C1BDBD;">${saleData.report_qty} Pics x ${saleData.report_charge.toFixed(2)} = </td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${totalReportCharge.toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${saleData.report_tax_percentage.toFixed(2)}</td>
+                                        <td colspan="1" style="background-color: #C1BDBD;">${taxOnReportCharge.toFixed(2)}</td>
+                                        <td colspan="2" style="background-color: #C1BDBD;">${afterTaxTotalReportCharge.toFixed(2)}</td>
+                                        
+                                    </tr>`;
+                                  }
+                                  html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="6"
+                                          style="
+                                          border:none;">
 
+                                      </td>
+                                  </tr>`;
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Fine Metals : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${fine_metals.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Receive Fine Metal : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${receive_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
+                          if(metalExists){
+                            html += `<tr style="
+                                      vertical-align: top;">
+                                      <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Rest : </td>
+                                      <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${rest_metal.toFixed(2)} GM</td>
+                                      <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
+                                  </tr>`;
+                          }
                                           
-                              </tbody>
+                            html += ` </tbody>
                           </table>`;
-                        }
+  }
 
-                        html += `
+  html += `
                         <div class="table-footer-area" style="display: table; width:
-                            100%; position:absolute ; bottom: 340px">
+                            100%; position:absolute ; bottom: 400px">
                             <hr/>
                           </div>
                           <div
@@ -2040,11 +2126,25 @@ html += `<tr style="
                                     gap: 10px; 
                                     width: 80%;
                                     position:absolute; 
-                                    bottom:5px;
+                                    bottom:${
+                                      payments.length == 0
+                                        ? 100
+                                        : payments.length == 1
+                                        ? 130
+                                        : payments.length == 2
+                                        ? 120
+                                        : payments.length == 3
+                                        ? 110
+                                        : payments.length == 4
+                                        ? 95
+                                        : payments.length == 5
+                                        ? 80
+                                        : 180
+                                    }px;
                                 ">
                                     `;
-                                  if (payments.length) {
-                            html += `<table cellspacing="0"
+  if (payments.length) {
+    html += `<table cellspacing="0"
                                         cellpadding="3"
                                         rules="rows"
                                         align="left"
@@ -2052,7 +2152,7 @@ html += `<tr style="
                                         style=" margin-right:40px;">
                                         <tr
                                             style="background-color:
-                                            #1E2746;
+                                            #1E2757;
                                             color: #fff;">
                                             <th
                                                 style="font-weight:
@@ -2065,13 +2165,13 @@ html += `<tr style="
                                                 400; font-size: 12px; text-align: left;"> Mode</th>
                                             <th
                                                 style="font-weight:
-                                                400; font-size: 12px; text-align: left;"> Payment</th>
+                                                400; font-size: 12px; text-align: left;"> Note</th>
                                             <th
                                                 style="font-weight:
                                                 400; font-size: 12px; text-align: left;">Amount</th>
                                             `;
-                                      for (let i = 0; i < payments.length; i++) {
-                                html += `<tr
+    for (let i = 0; i < payments.length; i++) {
+      html += `<tr
                                             style=" ">
                                             <td
                                                 style="border-right:
@@ -2081,39 +2181,35 @@ html += `<tr style="
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i]
-                                                    .payment_date
+                                                  payments[i].payment_date
                                                 }</td>
                                             
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i]
-                                                    .payment_mode
+                                                  payments[i].payment_mode
                                                 }</td>
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i]
-                                                    .purpose[0]
+                                                  payments[i].notes
                                                 }</td>
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i]
-                                                    .amount
+                                                  payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight:payments[i].amount
                                                 }</td>
                                         </tr>`;
-                                      }
-                            html += `</table>`;
-                                  }
-                        html += `</div>
+    }
+    html += `</table>`;
+  }
+  html += `</div>
                             </div>
                             <div style="display:
                                 table-cell;
                                 width:26%;
                                 position:absolute ;
-                                bottom: 25px
+                                bottom: 50px
                                 "
                                 >
                                 <div style="display: inline-table;
@@ -2133,71 +2229,71 @@ html += `<tr style="
                                                 style="">
                                                 <input
                                                     type="text"
-                                                    value="${saleData.total_sub_total}"
+                                                    value="${saleData.taxable_amount}"
                                                     style="max-width:
                                                     80px;font-Weight:600"></span></h4>
                                     </div>`;
-if (saleData.is_same_state_trnx && saleData.cgst_tax) {
-                            html += `<div>
-                                        <h4 style="margin:
-                                            0;
-                                            text-align:
-                                            right;
-                                            font-size:
-                                            12px;
-                                            font-weight:
-                                            400; margin-bottom:
-                                            5px;margin-right:10px ;">
-                                            CGST Amt <span
-                                                style="">
-                                                <input
-                                                    type="text"
-                                                    value="${saleData.cgst_tax_display}"
-                                                    style="max-width:
-                                                    80px;"></span></h4>
-                                    </div>`;
-}
-if (saleData.is_same_state_trnx && saleData.sgst_tax) {
-                            html += `<div>
-                                        <h4 style="margin:
-                                            0;
-                                            text-align:
-                                            right;
-                                            font-size:
-                                            12px;
-                                            font-weight:
-                                            400; margin-bottom:
-                                            5px;margin-right:10px ;">
-                                            SGST Amt <span
-                                                style="">
-                                                <input
-                                                    type="text"
-                                                    value="${saleData.sgst_tax_display}"
-                                                    style="max-width:
-                                                    80px;"></span></h4>
-                                    </div>`;
-}
-if (!saleData.is_same_state_trnx && saleData.igst_tax) {
-                            html += `<div>
-                                        <h4 style="margin:
-                                            0;
-                                            text-align:
-                                            right;
-                                            font-size:
-                                            12px;
-                                            font-weight:
-                                            400; margin-bottom:
-                                            5px;margin-right:10px ;">
-                                            IGST Amt <span
-                                                style="">
-                                                <input
-                                                    type="text"
-                                                    value="${saleData.igst_tax_display}"
-                                                    style="max-width:
-                                                    80px;"></span></h4>
-                                    </div>`;
-}
-                            html += `<div>
+  if (saleData.is_same_state_trnx && saleData.cgst_tax) {
+    html += `<div>
+                                                          <h4 style="margin:
+                                                              0;
+                                                              text-align:
+                                                              right;
+                                                              font-size:
+                                                              12px;
+                                                              font-weight:
+                                                              400; margin-bottom:
+                                                              5px;margin-right:10px ;">
+                                                              CGST Amt <span
+                                                                  style="">
+                                                                  <input
+                                                                      type="text"
+                                                                      value="${saleData.cgst_tax_display}"
+                                                                      style="max-width:
+                                                                      80px;"></span></h4>
+                                                      </div>`;
+  }
+  if (saleData.is_same_state_trnx && saleData.sgst_tax) {
+    html += `<div>
+                                                          <h4 style="margin:
+                                                              0;
+                                                              text-align:
+                                                              right;
+                                                              font-size:
+                                                              12px;
+                                                              font-weight:
+                                                              400; margin-bottom:
+                                                              5px;margin-right:10px ;">
+                                                              SGST Amt <span
+                                                                  style="">
+                                                                  <input
+                                                                      type="text"
+                                                                      value="${saleData.sgst_tax_display}"
+                                                                      style="max-width:
+                                                                      80px;"></span></h4>
+                                                      </div>`;
+  }
+  if (!saleData.is_same_state_trnx && saleData.igst_tax) {
+    html += `<div>
+                                                          <h4 style="margin:
+                                                              0;
+                                                              text-align:
+                                                              right;
+                                                              font-size:
+                                                              12px;
+                                                              font-weight:
+                                                              400; margin-bottom:
+                                                              5px;margin-right:10px ;">
+                                                              IGST Amt <span
+                                                                  style="">
+                                                                  <input
+                                                                      type="text"
+                                                                      value="${saleData.igst_tax_display}"
+                                                                      style="max-width:
+                                                                      80px;"></span></h4>
+                                                      </div>`;
+  }
+  html += `<div>
                                         
                                     </div>
                                     <div>
@@ -2334,8 +2430,8 @@ if (!saleData.is_same_state_trnx && saleData.igst_tax) {
                                                       style="max-width:
                                                       80px;"></span></h4>
                                       </div>`;
-                                if (saleData.return_amount) {
-                              html += `<div>
+  if (saleData.return_amount) {
+    html += `<div>
                                           <h4 style="margin:
                                               0;
                                               text-align:
@@ -2349,13 +2445,17 @@ if (!saleData.is_same_state_trnx && saleData.igst_tax) {
                                                   style="">
                                                   <input
                                                       type="text"
-                                                      value="${saleData.return_amount}"
+                                                      value="${
+                                                        saleData.return_amount
+                                                          ? saleData.return_amount
+                                                          : "0.00"
+                                                      }"
                                                       style="max-width:
                                                       80px;"></span></h4>
                                       </div>`;
-                                  }
+  }
 
-                              html += `<div>
+  html += `<div>
                                           <h4 style="margin:
                                               0;
                                               text-align:
@@ -2387,33 +2487,33 @@ if (!saleData.is_same_state_trnx && saleData.igst_tax) {
   </html>
   `;
 
-  try{
+  try {
     let file_path = "public/invoices/" + saleData.invoice_number + "_info.pdf";
-    const options = { format: 'A4' };
+    const options = { format: "A4" };
 
     (async () => {
-        const file = { content: html };
-    
-        // Generate PDF
-        const pdfBuffer = await html_to_pdf.generatePdf(file, options);
-        
-        // Save PDF to file
-        fs.writeFileSync(file_path, pdfBuffer);
-        console.log('PDF generated successfully!');
+      const file = { content: html };
 
-        res.send(
-          formatResponse(
-            {
-              file_name: saleData.invoice_number + "_info.pdf",
-              url: getFileAbsulatePathPDF(file_path),
-              html,
-              sale,
-              saleData,
-              payments,
-            },
-            "Invoice pdf"
-          )
-        );
+      // Generate PDF
+      const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+
+      // Save PDF to file
+      fs.writeFileSync(file_path, pdfBuffer);
+      console.log("PDF generated successfully!");
+
+      res.send(
+        formatResponse(
+          {
+            file_name: saleData.invoice_number + "_info.pdf",
+            url: getFileAbsulatePathPDF(file_path),
+            html,
+            sale,
+            saleData,
+            payments,
+          },
+          "Invoice pdf"
+        )
+      );
     })();
   } catch (error) {
     return res

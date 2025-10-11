@@ -60,7 +60,7 @@ const getModelObject = async(data, req) => {
         if(materials.length == 1){
             total_weight = weightFormat(materials[0].weight).toFixed(3) + ' ' + materials[0].unit_name;
         }else{
-            total_weight = weightFormat(item.total_weight).toFixed(3) + materials[0].unit_name;
+            total_weight = materials.length > 0?weightFormat(item.total_weight).toFixed(3) + materials[0].unit_name: weightFormat(item.total_weight).toFixed(3) + ' gm';
         }
         let return_charge_percent = 0;
         if(isAdmin(req) || isDistributor(req)){
@@ -124,6 +124,19 @@ const getModelObject = async(data, req) => {
             pincode: (!isEmpty(supplier) && !isEmpty(supplier.pincode)) ? supplier.pincode : '',
         },
         //supplier_name: data.supplier ? data.supplier.name : '',
+        sale:data.sale,
+        added_by_details: {
+            id: data.added_by,
+            company_name: (data.addedBy && data.addedBy.company_name) ? data.addedBy.company_name : '',
+            gst: (data.addedBy && data.addedBy.gst) ? data.addedBy.gst : '',
+            address: (data.addedBy && data.addedBy.address) ? data.addedBy.address : '',
+            city: (data.addedBy && data.addedBy.city) ? data.addedBy.city : '',
+            pincode: (data.addedBy && data.addedBy.pincode) ? data.addedBy.pincode : '',
+            user_name: data.addedBy ? data.addedBy.name : '',
+            bank_name: (data.addedBy && data.addedBy.bank_name) ? data.addedBy.bank_name : '',
+            bank_account_no: (data.addedBy && data.addedBy.bank_account_no) ? data.addedBy.bank_account_no : '',
+            bank_ifsc: (data.addedBy && data.addedBy.bank_ifsc) ? data.addedBy.bank_ifsc : '',
+        },
         invoice_number: data.invoice_number,
         invoice_date: formatDateTime(data.invoice_date, 9),
         notes: data.notes,

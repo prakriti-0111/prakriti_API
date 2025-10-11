@@ -30,6 +30,7 @@ const {
   isManager,
   updateOrCreate,
   getRoleId,
+  getSuperAdminId,
   getUserColumnValue,
   avlStockUserIdsNew,
 } = require("@library/common");
@@ -92,6 +93,15 @@ exports.index = async (req, res) => {
     },{where: {id: allStockMaterials[i].id}});
   }*/
 
+  let superAdminRoleId = getRoleId("superadmin");
+    let adminRoleId = getRoleId("admin");
+    let distributorRoleId = getRoleId("distributor");
+    let retailerRoleId = getRoleId("retailer");
+    let supplierRoleId = getRoleId("supplier");
+    let customerRoleId = getRoleId("customer");
+    let sales_executiveRoleId = getRoleId("sales_executive");
+    let superAdminId = await getSuperAdminId();
+
   //update stock purity_id which product is material
   if (req.query.search == "update_all_stock_priority") {
     let stocksAll = await stocksModel.findAll({
@@ -140,6 +150,7 @@ exports.index = async (req, res) => {
       size,
       price,
       user_id,
+      material_id,
       type,
       own_distributor,
       own_admin,
@@ -203,11 +214,54 @@ exports.index = async (req, res) => {
         let managerUsersIds = arrayColumn(managerUsers, "id");
         conditions.user_id = { [Op.in]: managerUsersIds };
       } else if (own_se == 1) {
+        let se_parent_ids = [];
+        // all own admin
+        let ownAdmins = await UserModel.findAll({
+          attributes: ["id"],
+          where: { role_id: adminRoleId, own: true, parent_id: superAdminId },
+        });
+        let ownAdminIds = arrayColumn(ownAdmins, "id");
+        se_parent_ids = se_parent_ids.concat(ownAdminIds);
+        // all own distributors
+        let ownDistributorsOfAdmins = await UserModel.findAll({
+          attributes: ["id"],
+          where: {
+            role_id: distributorRoleId,
+            own: true,
+            parent_id: { [Op.in]: ownAdminIds },
+          },
+        });
+        let ownDistributorOfAdminsIds = arrayColumn(
+          ownDistributorsOfAdmins,
+          "id"
+        );
+        se_parent_ids = se_parent_ids.concat(ownDistributorOfAdminsIds);
+        let ownDistributors = await UserModel.findAll({
+          attributes: ["id"],
+          where: {
+            role_id: distributorRoleId,
+            own: true,
+            parent_id: superAdminId,
+          },
+        });
+        let ownDistributorsIds = arrayColumn(ownDistributors, "id");
+        se_parent_ids = se_parent_ids.concat(ownDistributorsIds);
+
         let se = await UserModel.findAll({
           attributes: ["id"],
-          where: { role_id: seRoleId },
+          where: {
+            role_id: sales_executiveRoleId,
+            parent_id: { [Op.in]: se_parent_ids },
+          },
         });
         let seIds = arrayColumn(se, "id");
+
+
+        // let se = await UserModel.findAll({
+        //   attributes: ["id"],
+        //   where: { role_id: seRoleId },
+        // });
+        //let seIds = arrayColumn(se, "id");
         conditions.user_id = { [Op.in]: seIds };
       }
     } else if (isAdmin(req)) {
@@ -342,7 +396,11 @@ exports.index = async (req, res) => {
       console.log(sCond);
       conditions = { ...conditions, [Op.or]: sCond };
     }
-    console.log(conditions);
+    console.log("conditions =====: ", conditions);
+
+    if(typeof material_id != "undefined" && material_id != null && material_id != "") {
+      conditions.material_id = material_id;
+    }
 
     /*if (!isEmpty(qty)) {
       stockMaterialConditions.quantity = qty;
@@ -366,16 +424,11 @@ exports.index = async (req, res) => {
     }
     let _include = [
       {
-        model: sizesModel,
-        as: "size",
-        where: sizeConditions,
-      },
-      {
         model: stock_materialsModel,
         as: "stockMaterials",
         required: true,
         where: stockMaterialConditions,
-        separate: true,
+        //separate: true,
         include: [
           {
             model: materialModel,
@@ -397,6 +450,11 @@ exports.index = async (req, res) => {
       },
     ];
     if (type == "product" || type == "return") {
+      _include.push({
+        model: sizesModel,
+        as: "size",
+        where: sizeConditions,
+      });
       _include.push({
         model: productsModel,
         as: "product",
@@ -432,10 +490,14 @@ exports.index = async (req, res) => {
             model: CategoryModel,
             as: "category",
           },
+          {
+            model: PurityModel,
+            as: 'purities',
+          }
         ],
       });
     }
-
+    console.log(_include);
     stocksModel
       .findAndCountAll({
         order: [["id", "DESC"]],
@@ -447,7 +509,7 @@ exports.index = async (req, res) => {
       })
       .then(async (data) => {
         //
-        // console.log("-------this is actual value ",data.rows[0]);
+        console.log("-------this is actual value ",data.rows);
         let result = {
           items:
             type == "product" || type == "return"
@@ -455,7 +517,7 @@ exports.index = async (req, res) => {
               : await StocksMaterialCollection(data.rows, userID),
           total: data.count,
         };
-
+        console.log("result : ", result);
         console.log("search : ", search);
         //if(!isNaN(search) && search != ""){
         let sArr = search.split(",");

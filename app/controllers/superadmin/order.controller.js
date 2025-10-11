@@ -22,6 +22,7 @@ const materialModel = db.materials;
 const orderProductModel = db.order_products;
 const UnitModel = db.units;
 const productModel = db.products;
+const StockModel = db.stocks;
 const sizeModel = db.sizes
 const PurityModel = db.purities;
 const UserModel = db.users;
@@ -163,6 +164,13 @@ exports.fetch = async (req, res) => {
                 model: CategoryModel,
                 as: 'category'
               }
+            ]
+          },
+          {
+            model: StockModel,
+            as: 'stock',
+            include: [
+              
             ]
           },
           {

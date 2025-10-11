@@ -34,6 +34,7 @@ module.exports = (sequelize, DataTypes) => {
     notes: DataTypes.STRING,
     cheque_no: DataTypes.STRING,
     txn_id: DataTypes.STRING,
+    weight: DataTypes.STRING,
     status: DataTypes.STRING,
     type: DataTypes.STRING,
     payment_type: DataTypes.STRING,
