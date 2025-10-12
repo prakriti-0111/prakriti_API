@@ -1445,7 +1445,7 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
     include: _include,
   });
 
-  // console.log("This is stock value :- " ,stocks);
+  console.log("This is stock value :- " ,stocks.map(s => s.id).join(", "));
 
   let total_price = 0,
     categories = [];
