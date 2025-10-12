@@ -524,7 +524,7 @@ exports.index = async (req, res) => {
       totalAvlStockPrice = await getTotalStockPriceByUser(null, stockUserIds);
 
       // let get all transfer pending stocks
-      console.log("stockUserIds in admin :--=====", userID);
+      console.log("stockIds in admin :--=====", totalAvlStock);
       
       let transferStockData = await getTransferSale(userID);
       totalAvlTransferStock = superAdminTotalTransferStock =
@@ -746,9 +746,9 @@ exports.index = async (req, res) => {
       );
       let stockUserIds = avl_stockUser_ids;
       //stockUserIds.push(userID);
-      totalAvlStock = await getTotalStockByUser(stockUserIds);
-      totalAvlStockPrice = await getTotalStockPriceByUser(null, stockUserIds);
-
+      totalAvlStock = await getTotalStockByUser(userID);
+      totalAvlStockPrice = await getTotalStockPriceByUser(null, userID);
+      console.log("stockIds in SE :--=====", totalAvlStock);
       // total avaliable stocks
       total_avl_stockUser_ids = await avlStockUserIdsNew(
         null,
