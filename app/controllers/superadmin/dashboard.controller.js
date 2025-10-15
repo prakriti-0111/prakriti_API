@@ -662,13 +662,22 @@ exports.index = async (req, res) => {
       /* total Retailer (admin-distributer-SE) */
       // parent distributor
       let distributor_id = await getUserColumnValue(req.userId, "parent_id");
+      let distributorRole = await getUserColumnValue(distributor_id, "role_id");
       //let distributorUser = await UserModel.findByPk(distributor_id);
       /* totalRetailer += await UserModel.count({
         where: { role_id: retailerRoleId, parent_id: distributor_id },
       }); */
-
+      console.log("distributor_id", distributor_id);
+      console.log("distributorRole", distributorRole);
+      let admin_id = null;
+      /* check if admin own SE or not */
+      if(distributorRole == adminRoleId){
+        admin_id = distributor_id;
+      } else {
+        admin_id = await getUserColumnValue(distributor_id, "parent_id");
+      }
+      console.log("admin_id", admin_id);
       // admin own created Retailer
-      let admin_id = await getUserColumnValue(distributor_id, "parent_id");
       totalRetailer += await UserModel.count({
         where: { role_id: retailerRoleId, parent_id: admin_id },
       });
@@ -746,8 +755,8 @@ exports.index = async (req, res) => {
       );
       let stockUserIds = avl_stockUser_ids;
       //stockUserIds.push(userID);
-      totalAvlStock = await getTotalStockByUser(userID);
-      totalAvlStockPrice = await getTotalStockPriceByUser(null, userID);
+      totalAvlStock = await getTotalStockByUser(stockUserIds);
+      totalAvlStockPrice = await getTotalStockPriceByUser(null, stockUserIds);
       console.log("stockIds in SE :--=====", totalAvlStock);
       // total avaliable stocks
       total_avl_stockUser_ids = await avlStockUserIdsNew(
