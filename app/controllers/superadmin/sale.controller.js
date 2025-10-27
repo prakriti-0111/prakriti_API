@@ -2239,6 +2239,7 @@ exports.returnSaleNew = async (req, res) => {
           where: {
             purchase_id: purchase.id,
             product_id: saleProduct.product_id,
+            certificate_no: saleProduct.certificate_no
           },
           include: [
             {
