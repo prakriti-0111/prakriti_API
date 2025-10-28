@@ -38,7 +38,8 @@ const {
   isAdmin,
   getWalletBalance,
   getOwnUserSaleProducts,
-  getUserColumnValue,
+  getUserColumnValue, 
+  avlStockUserIdsNew
 } = require("@library/common");
 const { getPaginationOptions } = require("@helpers/paginator");
 const { SaleCollection } = require("@resources/superadmin/SaleCollection");
@@ -137,6 +138,14 @@ exports.index = async (req, res) => {
       conditions.sale_by = userID;
     }
   }
+  
+  /* check get the selected user legs ids */
+  const userIds = await avlStockUserIdsNew(req);
+  console.log("sale_by userIds for sale list ::::::==================", userIds);
+  if(userIds.length > 0 && is_approval){
+    conditions.sale_by = { [Op.in]: userIds };
+  }
+
   if (!isEmpty(search)) {
     conditions.invoice_number = { [Op.like]: `%${search}%` };
   }
