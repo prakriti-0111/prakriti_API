@@ -516,6 +516,7 @@ exports.update = async (req, res) => {
 
   let data = req.body;
 
+  let product_code = data.product_code || null;
   //make unique
   /*let product_code = data.product_code || null;
   let haveCode = await ProductModel.findOne({
@@ -526,6 +527,7 @@ exports.update = async (req, res) => {
       .status(errorCodes.default)
       .send(formatErrorResponse("Product Code already in use."));
   }*/
+ 
   let haveName = await ProductModel.findOne({
     where: { name: data.name, id: { [Op.not]: req.params.id } },
   });
