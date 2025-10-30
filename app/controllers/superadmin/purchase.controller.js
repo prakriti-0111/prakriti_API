@@ -188,6 +188,126 @@ exports.index = async (req, res) => {
 };
 
 /**
+ * Retrive purchase txn ledger
+ */
+exports.txnLedger = async (req, res) => {
+  let { page, limit, supplier_id, search, date_from, date_to } = req.query;
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let conditions = { user_id: userID };
+  if (!isEmpty(supplier_id)) {
+    conditions.supplier_id = supplier_id;
+  }
+  if (!isEmpty(search)) {
+    conditions.invoice_number = { [Op.like]: `%${search}%` };
+  }
+  conditions = {
+    ...conditions,
+    ...getDateFromToWhere(date_from, date_to, "invoice_date"),
+  };
+  const paginatorOptions = getPaginationOptions(page, limit);
+  /* PurchaseModel.findAndCountAll({
+    order: [["id", "DESC"]],
+    offset: paginatorOptions.offset,
+    limit: paginatorOptions.limit,
+    where: conditions,
+    include: [
+      {
+        model: UserModel,
+        as: "supplier",
+      },
+    ],
+    distinct: true,
+  })
+    .then(async (data) => {
+      let result = {
+        items: await PurchaseListCollection(data.rows, false),
+        total: data.count,
+      };
+      res.send(formatResponse(result, "Purchase Txn Ledger"));
+    })
+    .catch((err) => {
+      res.status(errorCodes.default).send(formatErrorResponse(err));
+    }); */
+
+  try {
+    // Fetch all purchases with their related payments
+    const allPurchases = await PurchaseModel.findAll({
+      include: [
+        {
+          model: PaymentModel,
+          as: "payments",
+          required: false,
+        },
+      ],
+      order: [["invoice_date", "DESC"]],
+    });
+
+    // Flatten purchases and payments into a single table structure
+    let tableData = [];
+    allPurchases.forEach((purchase, index) => {
+      let due_amt = purchase.bill_amount;
+      // Add Purchase row
+      tableData.push({
+        id: purchase.id,
+        sl_no: null,
+        invoice_date: formatDateTime(purchase.invoice_date, 8),
+        invoice_number: purchase.invoice_number,
+        remarks: purchase.notes || "-",
+        bill_amount: displayAmount(purchase.bill_amount),
+        payment_date: null,
+        payment_amount: null,
+        payment_mode: purchase.payment_mode || "-",
+        type: "Purchase",
+        balance: displayAmount(due_amt),
+      });
+
+      // Add related payment rows
+      purchase.payments.forEach((pay, idx) => {
+        due_amt = due_amt - pay.amount;
+
+        tableData.push({
+          id: purchase.id,
+          sl_no: null,
+          invoice_date: null,
+          invoice_number: purchase.invoice_number,
+          remarks: pay.notes || "-",
+          bill_amount: null,
+          payment_date: formatDateTime(pay.payment_date, 8),
+          payment_amount: displayAmount(pay.amount),
+          payment_mode: pay.payment_mode,
+          type: "Payment",
+          balance: displayAmount(due_amt) //displayAmount(pay.remaining_balance),
+        });
+      });
+    });
+
+    // Sort all rows by date (invoice_date or payment_date)
+    tableData.sort((a, b) => {
+      const dateA = new Date(a.created_at || a.created_at);
+      const dateB = new Date(b.created_at || b.created_at);
+      return dateB - dateA; // descending
+    });
+
+    // add index
+    tableData = tableData.map((val, idx) => {
+      return {  
+        ...val,
+        sl_no : idx+1
+      };
+    });
+
+    let result = {
+      items: tableData,
+      total: tableData.length,
+    };
+    res.send(formatResponse(result, "Purchase Ledger List"));
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(errorCodes.default).send(formatErrorResponse(err));
+  }
+}
+
+/**
  * Store purchase
  *
  * @param {*} req

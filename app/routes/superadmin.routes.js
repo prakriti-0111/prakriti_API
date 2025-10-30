@@ -889,6 +889,11 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     purchaseController.index
   );
+  router.get(
+    "/purchases/txn-ledger",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    purchaseController.txnLedger
+  );
   router.post(
     "/purchases/store",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
