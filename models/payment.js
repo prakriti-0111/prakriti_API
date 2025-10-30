@@ -16,6 +16,12 @@ module.exports = (sequelize, DataTypes) => {
         as: 'user'
       });
 
+      this.belongsTo(models.purchases, {
+        foreignKey: "table_id",
+        constraints: false,
+        as: "purchase",
+      });
+
     }
   }
   payment.init({
