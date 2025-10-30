@@ -520,6 +520,7 @@ exports.index = async (req, res) => {
       avl_stockUser_ids = await avlStockUserIdsNew(req, adminRoleId);
       let stockUserIds = avl_stockUser_ids;
       //stockUserIds.push(userID);
+      console.log("stockUserIds in admin :--=====", stockUserIds);
       totalAvlStock = await getTotalStockByUser(stockUserIds);
       totalAvlStockPrice = await getTotalStockPriceByUser(null, stockUserIds);
 
