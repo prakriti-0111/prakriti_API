@@ -205,29 +205,6 @@ exports.txnLedger = async (req, res) => {
     ...getDateFromToWhere(date_from, date_to, "invoice_date"),
   };
   const paginatorOptions = getPaginationOptions(page, limit);
-  /* PurchaseModel.findAndCountAll({
-    order: [["id", "DESC"]],
-    offset: paginatorOptions.offset,
-    limit: paginatorOptions.limit,
-    where: conditions,
-    include: [
-      {
-        model: UserModel,
-        as: "supplier",
-      },
-    ],
-    distinct: true,
-  })
-    .then(async (data) => {
-      let result = {
-        items: await PurchaseListCollection(data.rows, false),
-        total: data.count,
-      };
-      res.send(formatResponse(result, "Purchase Txn Ledger"));
-    })
-    .catch((err) => {
-      res.status(errorCodes.default).send(formatErrorResponse(err));
-    }); */
 
   try {
     // Fetch all purchases with their related payments
@@ -239,66 +216,63 @@ exports.txnLedger = async (req, res) => {
           required: false,
         },
       ],
+      where: conditions,
       order: [["invoice_date", "DESC"]],
+      offset: paginatorOptions.offset,
+      limit: paginatorOptions.limit
     });
 
     // Flatten purchases and payments into a single table structure
     let tableData = [];
     allPurchases.forEach((purchase, index) => {
-      let due_amt = purchase.bill_amount;
       // Add Purchase row
       tableData.push({
         id: purchase.id,
-        sl_no: null,
-        invoice_date: formatDateTime(purchase.invoice_date, 8),
+        date: formatDateTime(purchase.invoice_date, 8),
+        txn_date: purchase.invoice_date,
         invoice_number: purchase.invoice_number,
         remarks: purchase.notes || "-",
         bill_amount: displayAmount(purchase.bill_amount),
-        payment_date: null,
+        txn_amount : parseFloat(purchase.bill_amount),
         payment_amount: null,
         payment_mode: purchase.payment_mode || "-",
-        type: "Purchase",
-        balance: displayAmount(due_amt),
+        type: "Purchase"
       });
 
       // Add related payment rows
       purchase.payments.forEach((pay, idx) => {
-        due_amt = due_amt - pay.amount;
-
         tableData.push({
           id: purchase.id,
-          sl_no: null,
-          invoice_date: null,
+          date: formatDateTime(pay.payment_date, 8),
+          txn_date: pay.payment_date,
           invoice_number: purchase.invoice_number,
           remarks: pay.notes || "-",
           bill_amount: null,
-          payment_date: formatDateTime(pay.payment_date, 8),
           payment_amount: displayAmount(pay.amount),
+          txn_amount : parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
-          type: "Payment",
-          balance: displayAmount(due_amt) //displayAmount(pay.remaining_balance),
+          type: "Payment"
         });
       });
     });
 
-    // Sort all rows by date (invoice_date or payment_date)
-    tableData.sort((a, b) => {
-      const dateA = new Date(a.created_at || a.created_at);
-      const dateB = new Date(b.created_at || b.created_at);
-      return dateB - dateA; // descending
-    });
+    // Sort transactions by txn_date descending
+    tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
 
-    // add index
-    tableData = tableData.map((val, idx) => {
-      return {  
-        ...val,
-        sl_no : idx+1
-      };
-    });
+    // Compute running balance (Due Amount)
+    let runningBalance = 0;
+    const passbook = tableData.reverse().map((tx, index) => {
+      if (tx.type === 'Purchase') {
+        runningBalance += tx.txn_amount;
+      } else if (tx.type === 'Payment') {
+        runningBalance -= tx.txn_amount;
+      }
+      return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: runningBalance };
+    }).reverse();
 
     let result = {
-      items: tableData,
-      total: tableData.length,
+      items: passbook,
+      total: passbook.length,
     };
     res.send(formatResponse(result, "Purchase Ledger List"));
   } catch (err) {
