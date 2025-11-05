@@ -973,6 +973,16 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     saleController.index
   );
+  router.get(
+    "/sales/txn-ledger",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    saleController.txnLedger
+  );
+  router.get(
+    "/sales/txn-ledger-download",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    saleController.downloadTxnLedger
+  );
   router.post(
     "/sales/store",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
