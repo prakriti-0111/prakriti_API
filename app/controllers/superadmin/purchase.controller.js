@@ -236,7 +236,7 @@ exports.txnLedger = async (req, res) => {
         txn_amount : parseFloat(purchase.bill_amount),
         payment_amount: null,
         payment_mode: purchase.payment_mode || "-",
-        type: "Purchase"
+        type: purchase.is_approval == "1"?"Purchase On Approval":"Purchase"
       });
 
       // Add related payment rows
@@ -262,7 +262,7 @@ exports.txnLedger = async (req, res) => {
     // Compute running balance (Due Amount)
     let runningBalance = 0;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Purchase') {
+      if (tx.type === 'Purchase' || tx.type === 'Purchase On Approval') {
         runningBalance += tx.txn_amount;
       } else if (tx.type === 'Payment') {
         runningBalance -= tx.txn_amount;
@@ -331,7 +331,7 @@ exports.downloadTxnLedger = async (req, res) => {
         txn_amount : parseFloat(purchase.bill_amount),
         payment_amount: null,
         payment_mode: purchase.payment_mode || "-",
-        type: "Purchase"
+        type: purchase.is_approval == "1"?"Purchase On Approval":"Purchase"
       });
 
       // Add related payment rows
@@ -357,7 +357,7 @@ exports.downloadTxnLedger = async (req, res) => {
     // Compute running balance (Due Amount)
     let runningBalance = 0;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Purchase') {
+      if (tx.type === 'Purchase' || tx.type === 'Purchase On Approval') {
         runningBalance += tx.txn_amount;
       } else if (tx.type === 'Payment') {
         runningBalance -= tx.txn_amount;
