@@ -19,6 +19,7 @@ const {
   convertUnitToGram,
   arrayColumn,
   removeBlankZero,
+  formatDateTime
 } = require("@helpers/helper");
 const {
   updateOrCreate,
@@ -38,7 +39,8 @@ const {
   isAdmin,
   getWalletBalance,
   getOwnUserSaleProducts,
-  getUserColumnValue,
+  getUserColumnValue, 
+  avlStockUserIdsNew
 } = require("@library/common");
 const { getPaginationOptions } = require("@helpers/paginator");
 const { SaleCollection } = require("@resources/superadmin/SaleCollection");
@@ -137,6 +139,14 @@ exports.index = async (req, res) => {
       conditions.sale_by = userID;
     }
   }
+  
+  /* check get the selected user legs ids */
+  const userIds = await avlStockUserIdsNew(req);
+  console.log("sale_by userIds for sale list ::::::==================", userIds);
+  if(userIds.length > 0 && is_approval){
+    conditions.sale_by = { [Op.in]: userIds };
+  }
+
   if (!isEmpty(search)) {
     conditions.invoice_number = { [Op.like]: `%${search}%` };
   }
@@ -201,6 +211,747 @@ exports.index = async (req, res) => {
 };
 
 /**
+ * Retrive purchase txn ledger
+ */
+exports.txnLedger = async (req, res) => {
+  let { page, limit, user_id, search, date_from, date_to, status, is_assigned, is_approval } = req.query;
+  /* is_assigned = is_assigned === undefined ? false : true;
+  is_approval = is_approval === undefined ? false : true; */
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let conditions = { /* is_assigned: is_assigned, is_approval: is_approval */ };
+  /* if (status !== undefined && status != "") {
+    conditions.is_approved = status;
+  } */
+  conditions.sale_by = userID;
+  if (!isEmpty(user_id)) {
+    conditions.user_id = user_id;
+  }
+  if (!isEmpty(search)) {
+    conditions.invoice_number = { [Op.like]: `%${search}%` };
+  }
+  conditions = {
+    ...conditions,
+    ...getDateFromToWhere(date_from, date_to, "invoice_date"),
+  };
+  const paginatorOptions = getPaginationOptions(page, limit);
+
+  try {
+    // Fetch all sales with their related payments
+    const allSales = await SaleModel.findAll({
+      include: [
+        {
+          model: PaymentModel,
+          as: "payments",
+          required: false,
+        },
+      ],
+      where: conditions,
+      order: [["invoice_date", "DESC"]],
+      offset: paginatorOptions.offset,
+      limit: paginatorOptions.limit
+    });
+
+    // Flatten sales and payments into a single table structure
+    let tableData = [];
+    allSales.forEach((sale, index) => {
+      // Add Purchase row
+      tableData.push({
+        id: sale.id,
+        date: formatDateTime(sale.invoice_date, 8),
+        txn_date: sale.invoice_date,
+        invoice_number: sale.invoice_number,
+        remarks: sale.notes || "-",
+        bill_amount: displayAmount(sale.bill_amount),
+        txn_amount : parseFloat(sale.bill_amount),
+        payment_amount: null,
+        payment_mode: sale.payment_mode || "-",
+        type: sale.is_approval == "1"?"Sale On Approval":"Sale"
+      });
+
+      // Add related payment rows
+      sale.payments.forEach((pay, idx) => {
+        tableData.push({
+          id: sale.id,
+          date: formatDateTime(pay.payment_date, 8),
+          txn_date: pay.payment_date,
+          invoice_number: sale.invoice_number,
+          remarks: pay.notes || "-",
+          bill_amount: null,
+          payment_amount: displayAmount(pay.amount),
+          txn_amount : parseFloat(pay.amount),
+          payment_mode: pay.payment_mode,
+          type: "Payment"
+        });
+      });
+    });
+
+    // Sort transactions by txn_date descending
+    tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
+
+    // Compute running balance (Due Amount)
+    let runningBalance = 0;
+    const passbook = tableData.reverse().map((tx, index) => {
+      if (tx.type === 'Sale' || tx.type === 'Sale On Approval') {
+        runningBalance += tx.txn_amount;
+      } else if (tx.type === 'Payment') {
+        runningBalance -= tx.txn_amount;
+      }
+      return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
+    }).reverse();
+
+    let result = {
+      items: passbook,
+      total: passbook.length,
+    };
+    res.send(formatResponse(result, "Sale Ledger List"));
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(errorCodes.default).send(formatErrorResponse(err));
+  }
+}
+
+/**
+ * Retrive purchase txn ledger pdf
+ */
+exports.downloadTxnLedger = async (req, res) => {
+  let { page, limit, user_id, search, date_from, date_to, status, is_assigned, is_approval } = req.query;
+  /* is_assigned = is_assigned === undefined ? false : true;
+  is_approval = is_approval === undefined ? false : true; */
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let user = await UserModel.findByPk(userID);
+  let conditions = { /* is_assigned: is_assigned, is_approval: is_approval */ };
+  /* if (status !== undefined && status != "") {
+    conditions.is_approved = status;
+  } */
+  conditions.sale_by = userID;
+  
+  if (!isEmpty(user_id)) {
+    conditions.user_id = user_id;
+  }
+  if (!isEmpty(search)) {
+    conditions.invoice_number = { [Op.like]: `%${search}%` };
+  }
+  conditions = {
+    ...conditions,
+    ...getDateFromToWhere(date_from, date_to, "invoice_date"),
+  };
+  //const paginatorOptions = getPaginationOptions(page, limit);
+
+  try {
+    // Fetch all sales with their related payments
+    const allSales = await SaleModel.findAll({
+      include: [
+        {
+          model: PaymentModel,
+          as: "payments",
+          required: false,
+        },
+      ],
+      where: conditions,
+      order: [["invoice_date", "DESC"]],
+      //offset: paginatorOptions.offset,
+      //limit: paginatorOptions.limit
+    });
+
+    // Flatten sales and payments into a single table structure
+    let tableData = [];
+    allSales.forEach((sale, index) => {
+      // Add Sale row
+      tableData.push({
+        id: sale.id,
+        date: formatDateTime(sale.invoice_date, 8),
+        txn_date: sale.invoice_date,
+        invoice_number: sale.invoice_number,
+        remarks: sale.notes || "-",
+        bill_amount: displayAmount(sale.bill_amount),
+        txn_amount : parseFloat(sale.bill_amount),
+        payment_amount: null,
+        payment_mode: sale.payment_mode || "-",
+        type: sale.is_approval == "1"?"Sale On Approval":"Sale"
+      });
+
+      // Add related payment rows
+      sale.payments.forEach((pay, idx) => {
+        tableData.push({
+          id: sale.id,
+          date: formatDateTime(pay.payment_date, 8),
+          txn_date: pay.payment_date,
+          invoice_number: sale.invoice_number,
+          remarks: pay.notes || "-",
+          bill_amount: null,
+          payment_amount: displayAmount(pay.amount),
+          txn_amount : parseFloat(pay.amount),
+          payment_mode: pay.payment_mode,
+          type: "Payment"
+        });
+      });
+    });
+
+    // Sort transactions by txn_date descending
+    tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
+
+    // Compute running balance (Due Amount)
+    let runningBalance = 0;
+    const passbook = tableData.reverse().map((tx, index) => {
+      if (tx.type === 'Sale' || tx.type === 'Sale On Approval') {
+        runningBalance += tx.txn_amount;
+      } else if (tx.type === 'Payment') {
+        runningBalance -= tx.txn_amount;
+      }
+      return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
+    }).reverse();
+
+    /* let result = {
+      items: passbook,
+      total: passbook.length,
+    }; */
+    //res.send(formatResponse(result, "Purchase Ledger List"));
+
+    const logoUrl = `public/images/logo.png`;
+    // const logoUrl = process.env.BASE_URL + "public/images/logo.png";
+
+    const bitmap = fs.readFileSync(logoUrl);
+    const logo = bitmap.toString("base64");
+
+    let footerhtml = `
+                <div class="invoice" style="width: 1000px; padding:15px; margin: 0px; position: absolute; bottom: 0px; background-color: #f9f9f9;">
+                    <hr/>
+                    <table cellpadding="0" cellspacing="1" width="1000px" style="margin:auto;" >
+                        <tbody>
+                            <tr>
+                                <td><table cellspacing="0" cellpadding="0"
+                                      border="0"
+                                      align="center" width="90%">
+                                      <div style="display: table; width:
+                                          100%; font-size: 11px;">
+                                          <div style="display: table-cell;
+                                              width: 65%;">
+                                              <h5 style="margin: 0px;
+                                                  font-size: 11px;
+                                                  font-weight:
+                                                  600; text-transform:
+                                                  uppercase;">NOTE</h5>
+                                              <ul style="margin: 0;
+                                                  padding: 0px;
+                                                  list-style: none;">
+                                                  <span style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400; ">*
+                                                      Goods once sold will
+                                                      be taken back with
+                                                      condition</span>
+
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">Returning
+                                                      minimum product
+                                                      value of Rs 5000/-
+                                                      above</li>
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">Returning
+                                                      product taken back
+                                                      Less than 20-30% of
+                                                      my billing amount</li>
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">If any Damage
+                                                      charge as per making
+                                                      cost only</li>
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">No Charges
+                                                      taken on Sale
+                                                      product returning
+                                                      within 7 days from
+                                                      bill date</li>
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">All disputes
+                                                      are subject to Patna
+                                                      Juridiction only</li>
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">Charges may
+                                                      be appling cancel of
+                                                      order product making
+                                                      only</li>
+
+                                              </ul>
+                                          </div>
+                                          <div style="display: table-cell;
+                                              width: 35%;">
+                                              <div style="display: flex;
+                                                  
+                                                  justify-content:
+                                                  space-between;">
+                                                  <!---<div>
+                                                      <h4 style="margin:
+                                                          0px;
+                                                          text-align:
+                                                          center;
+                                                          font-size:
+                                                          11px;">Customer
+                                                          Signature</h4>
+                                                      <input type="text"
+                                                          style="display:
+                                                          block;
+                                                          margin: auto;
+                                                          height:
+                                                          36px; min-width:
+                                                          142px; ">
+
+                                                  </div> -->
+                                                  <!-- <div style="display:flex ; align-items: center;">
+                                                      <h4 style="margin-right:
+                                                          5px;
+                                                          text-align:
+                                                          center;
+                                                          font-size:
+                                                          11px;">Returning%
+                                                      </h4>
+                                                      <div
+                                                          style="position:
+                                                          relative;">
+                                                          <input
+                                                              type="text"
+                                                              style="display:
+                                                              block;
+                                                              margin:
+                                                              auto;
+                                                              height:
+                                                              16px;
+                                                              min-width:
+                                                              24px; width:64px; ">
+                                                          <div
+                                                              style="position:
+                                                              absolute;
+                                                              right:
+                                                              12px; top:
+                                                              4px;
+                                                              font-size:
+                                                              11px;">%</div>
+                                                      </div>
+                                                  </div> -->
+
+                                              </div>
+                                              
+                                          </div>
+                                      </div>
+                                  </table></td>
+                          </tr>
+                      </tbody>
+                  </table>
+              </div>
+            `;
+
+    let html = `<!DOCTYPE html>
+    <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta http-equiv="X-UA-Compatible" content="IE=edge">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Bill</title>
+            <link rel="preconnect" href="https://fonts.googleapis.com">
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+            <style>
+            html {
+              -webkit-print-color-adjust: exact;
+            }
+            </style>
+        </head>
+        <body style="box-sizing: border-box; padding: 0px; margin: 0px; font-family:
+            'Poppins', sans-serif;">
+            <div class="invoice" style="max-width: 1000px; margin: auto; padding:
+                15px;
+                background-color: #f9f9f9;">
+                <table cellpadding="0" cellspacing="0" width="100%">
+                    <tbody>
+                        <tr>
+                            <td>
+                                <table cellspacing="0" cellpadding="0" border="0"
+                                    align="center" width="100%">
+                                    <h1 style="font-size: 14px; text-align:
+                                        center; margin-bottom: 5px; font-weight:
+                                        300;">SALE TRANSACTION LEDGER</h1>
+                                </table>
+                                <table cellspacing="0" cellpadding="0" border="0"
+                                    align="center" width="100%">
+                                    <div style="display: table; width: 100%;">
+                                        <div style="width: 65%; display: table-cell;
+                                            vertical-align: bottom;">
+                                            <img src="data:image/png;base64,${logo}" style="width:
+                                                220px; margin-left: 10px;">
+                                            <h3 style="margin: 0; font-weight: 400;
+                                                font-size: 12px;">Corporate Office -
+                                                P210 Strand Bank Road Brabzar
+                                                Kolkata 700 011</h3>
+    
+                                        </div>
+                                        <div style="width: 35%; display: table-cell;
+                                            vertical-align: middle; text-align:
+                                            left;">
+                                            <h3 style="margin: 0;">
+                                                <span style="font-size: 16px;
+                                                    font-weight: 600;">Prakriti
+                                                    Patna</span></h3>
+                                            <h3 style="margin: 0; font-weight: 400;
+                                                font-size: 14px;">GST No -
+                                                <span style="font-weight: 600;">10CIUPK2654L1ZY</span></h3>
+                                            <h3 style="margin: 0; font-weight: 400;
+                                                font-size: 12px;">User Id - <span>${user.name}</span></h3>
+                                            <h3 style="margin: 0; font-weight: 400;
+                                                font-size: 12px;">Address - G100
+                                                RBI CPC Colony Kankarbagh Patna
+                                                Bihar 800 020</h3>
+                                            <h3 style="font-weight: 600; font-size:
+                                                12px; margin: 0;">
+                                                support@Prakriti.com, +91 98744
+                                                45878
+                                            </h3>
+                                        </div>
+                                    </div>
+                                </table>
+                                <table cellspacing="0" cellpadding="5" border="0"
+                                    align="center" width="100%">
+                                    <tbody>
+                                        <tr>
+                                            <hr style="border: 1px solid #1E2757">
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <table cellspacing="0" cellpadding="5" border="0"
+                                    align="center" width="100%">
+                                    <thead>
+                                        <!-- <tr style="background-color: #000;">
+                                            <th style="text-align: left; color:
+                                                #fff;">Company: Ratn Alankar
+                                                Jewellers</th>
+                                            <th style="text-align: left; color:
+                                                #fff;">Name: Mukund Singhaindi</th>
+                                            <th style="text-align: left; color:
+                                                #fff;">Cont: 91919191919</th>
+                                            <th style="text-align: left; color:
+                                                #fff;">City: Muzaffarpur</th>
+                                        </tr>
+                                    </thead> -->
+                                        <tbody>
+                                            <!-- <tr style="background-color: #fff;">
+                                            <td style="">
+                                                <span style="font-weight: 600;"> GST
+                                                    IN ${user.gst != null?user.gst:""} </span>
+                                            </td>
+                                            <td style="">
+                                                Ad:
+                                            </td>
+                                            <td style="">
+    
+                                            </td>
+                                            <td style="">
+                                                Pin Code: 800 020
+                                            </td>
+                                        </tr> -->
+                                            <tr>
+                                                <td style="padding: 0;">
+                                                    <div class="comp-part-one">
+                                                        <ul style="margin: 0;
+                                                            padding: 0; list-style:
+                                                            none; display: flex;
+                                                            gap: 15px;
+                                                            justify-content:
+                                                            space-between;">
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Company -</span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    600; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.company_name}</span></li>
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">GST IN</span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    600; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.gst != null?user.gst:""}</span></li>
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Cont -
+                                                                </span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    600; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.mobile}</span>
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Invoice Date
+                                                                    -
+                                                                </span> </li>
+                                                                    
+                                                        </ul>
+                                                    </div>
+                                                    <div class="comp-part-two">
+                                                        <ul style="margin: 0;
+                                                            padding: 0; list-style:
+                                                            none; display: flex;
+                                                            gap: 15px;
+                                                            justify-content:
+                                                            space-between;">
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Address -</span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    500; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.address != null?user.address:""}</span></li>
+                                                          
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Invoice No -
+                                                                </span> </li>
+                                                        </ul>
+                                                        <ul style="margin: 0;
+                                                            padding: 0;margin-left:52px; list-style:
+                                                            none; display: flex;
+                                                            gap: 15px;
+                                                          ">
+                                                        <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">City -</span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    500; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.city != null?user.city:""}</span></li>
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Pin -
+                                                                </span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    500; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.pincode != null?user.pincode:""}</span></li>
+                                                                    </ul>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>`;
+    if (passbook.length > 0) {
+      html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+                              border="0"
+                              align="center" width="100%">
+                              <thead style="background-color: #1E2757;">
+                                  <tr style="background-color: #1E2757;">
+                                      <th style="text-align: left; color:
+                                          #fff; border: 1px solid #1E2757;
+                                          font-size: 12px; font-weight:
+                                          400;background-color: #1E2757;">#</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400; ">Date</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400; ">Invoice No</th>
+                                      <th  style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400; ">Remarks</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400;">Bill Amt</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400; ">Payment Amt</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400;">Mode</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400;">Type</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400;">Balance(Due)</th>
+                                  </tr>
+                              </thead>
+                              <tbody>`;
+      for (let i = 0; i < passbook.length; i++) {
+        let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
+        html += `<tr style="background-color: ${bgTrColor}">
+                                      <td style="text-align: left;
+                                          font-size: 11px;
+                                          font-weight: 400;">
+                                          ${passbook[i].sl_no}
+                                      </td>
+                                      <td style="text-align: left;
+                                          font-size: 11px;
+                                          font-weight: 400;font-size: 10px;">
+                                          ${
+                                            passbook[i].txn_date
+                                          }
+                                      </td>
+                                      <td style="text-align: left;
+                                          font-size: 11px;
+                                          font-weight: 400;">
+                                          ${passbook[i].invoice_number}
+                                      </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .remarks
+                                          }
+                                      </td>
+                                      <td  style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .bill_amount != null?passbook[i]
+                                              .bill_amount:""
+                                          }
+                                      </td>
+                                      <td  style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .payment_amount != null?passbook[i]
+                                              .payment_amount:""
+                                          }
+                                      </td>
+                                      <td  style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .payment_mode
+                                          }
+                                      </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .type
+                                          }
+                                      </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .balance
+                                          }
+                                      </td>
+                                  </tr>`
+                                  
+      }
+      html += `
+                                      </tbody>
+                                  </table>`;
+    } 
+    
+
+    html += `
+                                            <!-- Footer -->
+                                            
+                                            ${footerhtml}
+                                        </td>
+                                    </tr>
+    
+                                </tbody>
+                            </table>
+                        </div>
+                    </body>
+                </html>`;
+
+    try {
+      let filename = user.name.replace(" ", "_") + "_" + (new Date().getTime()) + "_ledger.pdf";
+      let file_path =
+        "public/sales/" + filename ;
+      const options = { format: "A4" };
+
+      (async () => {
+        const file = { content: html };
+
+        // Generate PDF
+        const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+
+        // Save PDF to file
+        fs.writeFileSync(file_path, pdfBuffer);
+        console.log("PDF generated successfully!");
+
+        res.send(
+          formatResponse(
+            {
+              file_name: filename,
+              url: getFileAbsulatePathPDF(file_path),
+              items: passbook,
+              total: passbook.length,
+            },
+            "Ledger pdf"
+          )
+        );
+      })();
+    } catch (error) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse(error.toString()));
+    }
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(errorCodes.default).send(formatErrorResponse(err));
+  }
+}
+
+/**
  * Store sale
  *
  * @param {*} req
@@ -208,7 +959,7 @@ exports.index = async (req, res) => {
  */
 exports.store = async (req, res) => {
   let data = req.body;
-
+  console.log("sale store payload : ", data);
   let reportCharge = await ReportChargeModel.findAll({ 
     order:[['amount', 'ASC']],
     where: {}
@@ -260,9 +1011,11 @@ exports.store = async (req, res) => {
     //const trans = await sequelize.transaction(async (t) => {
     //upload banner
     let image = null;
-    let uploadResult = await base64FileUpload(data.image_file, "sales");
-    if (uploadResult) {
-      image = uploadResult.path;
+    if(data.image_file && data.image_file != ""){
+      let uploadResult = await base64FileUpload(data.image_file, "sales");
+      if (uploadResult) {
+        image = uploadResult.path;
+      }
     }
     //insert into sale table
     let invoice_number = data.invoice_number || null;
@@ -341,6 +1094,7 @@ exports.store = async (req, res) => {
       status: status,
       image: image,
     };
+    console.log("sale create : ", saleObj);
     let sale = await SaleModel.create(saleObj);
 
     let purchase = null;
@@ -374,6 +1128,7 @@ exports.store = async (req, res) => {
         is_approved: is_approved,
         image: image,
       };
+      console.log("purchase create : ", purchaseObj);
       purchase = await PurchaseModel.create(purchaseObj);
     }
     //}
@@ -415,6 +1170,7 @@ exports.store = async (req, res) => {
           ? thisItem.order_product_id
           : null,
       };
+      console.log("sale product create : ", thisObj);
       let saleProduct = await SaleProductModel.create(thisObj);
       let product = await ProductModel.findByPk(thisItem.product_id);
       let sale_product_id = null;
@@ -481,11 +1237,12 @@ exports.store = async (req, res) => {
           total: priceFormat(thisItem.total),
           total_discount: priceFormat(thisItem.total_discount),
         };
+        console.log("purchase product create : ", thisObj2);
         purchaseProduct = await PurchaseProductModel.create(thisObj2);
         req_data_for_purchase.products[i].id = purchaseProduct.id;
       }
       //}
-
+      console.log("remove stock : ", thisItem.stock_id);
       //remove stock
       if (isEmpty(sale_product_id) && product.type != "material") {
         await StockModel.destroy({ where: { id: thisItem.stock_id } });
@@ -510,6 +1267,7 @@ exports.store = async (req, res) => {
           total_gram: thisItem.materials[x].total_gram,
           per_gram_price: thisItem.materials[x].per_gram_price,
         };
+        console.log("sale product material create : ", thisMObj);
         await SaleProductMaterialModel.create(thisMObj);
 
         //if(!isSuperAdmin(req)){
@@ -526,6 +1284,7 @@ exports.store = async (req, res) => {
             amount: thisItem.materials[x].amount,
             discount_amount: thisItem.materials[x].discount_amount,
           };
+          console.log("purchase product material create : ", thisMObj2);
           await PurchaseProductMaterialModel.create(thisMObj2);
         }
         //}
@@ -560,6 +1319,7 @@ exports.store = async (req, res) => {
                   parseFloat(thisItem.materials[x].weight) <=
                 0
               ) {
+                console.log("stock material delete : ", thisItem.stock_id);
                 await StockModel.destroy({ where: { id: thisItem.stock_id } });
               } else {
                 let stock = await StockModel.findOne({
@@ -817,6 +1577,7 @@ exports.store = async (req, res) => {
       !isEmpty(data.on_approval_id) &&
       parseInt(data.on_approval_id) > 0
     ) {
+      console.log("restore into stock .................");
       let saleApproval = await SaleModel.findOne({
         where: { id: data.on_approval_id },
         include: [
@@ -848,8 +1609,13 @@ exports.store = async (req, res) => {
           },
           { where: { id: saleApproval.id } }
         );
-
+        console.log("saleOnApproval update : ", {
+            is_approved: 4,
+            accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
+          });
         let parentUserID = userID; //isSuperAdmin(req) ? null : req.userId;
+        console.log("parentUserId : ",parentUserID);
+        console.log("saleProductIds : ", saleProductIds);
         for (let i = 0; i < saleApproval.saleProducts.length; i++) {
           let thisItem = saleApproval.saleProducts[i];
           if (saleProductIds.includes(thisItem.id)) {
@@ -894,7 +1660,7 @@ exports.store = async (req, res) => {
               user_id: parentUserID,
             });
           }
-
+          console.log("stock created : ",stock.id);
           for (let x = 0; x < thisItem.saleMaterials.length; x++) {
             let saleMaterial = thisItem.saleMaterials[x];
             /**
@@ -933,8 +1699,19 @@ exports.store = async (req, res) => {
                   },
                   { where: { id: stockMaterial.id } }
                 );
+                console.log("stock material updated : ", stockMaterial.id);
               } else {
                 await StockMaterialModel.create({
+                  stock_id: stock.id,
+                  material_id: saleMaterial.material_id,
+                  weight: weightFormat(saleMaterial.weight),
+                  weight_in_gram: weightFormat(weight_in_gram),
+                  quantity: saleMaterial.quantity || 0,
+                  purity_id: saleMaterial.purity_id,
+                  unit_id: saleMaterial.unit_id,
+                  category_id: product.category_id,
+                });
+                console.log("stock material created : ", {
                   stock_id: stock.id,
                   material_id: saleMaterial.material_id,
                   weight: weightFormat(saleMaterial.weight),
@@ -947,6 +1724,16 @@ exports.store = async (req, res) => {
               }
             } else {
               await StockMaterialModel.create({
+                stock_id: stock.id,
+                material_id: saleMaterial.material_id,
+                weight: weightFormat(saleMaterial.weight),
+                weight_in_gram: weightFormat(weight_in_gram),
+                quantity: saleMaterial.quantity || 0,
+                purity_id: saleMaterial.purity_id,
+                unit_id: saleMaterial.unit_id,
+                category_id: product.category_id,
+              });
+              console.log("stock material created for type product : ", {
                 stock_id: stock.id,
                 material_id: saleMaterial.material_id,
                 weight: weightFormat(saleMaterial.weight),
@@ -2237,6 +3024,7 @@ exports.returnSaleNew = async (req, res) => {
           where: {
             purchase_id: purchase.id,
             product_id: saleProduct.product_id,
+            certificate_no: saleProduct.certificate_no
           },
           include: [
             {

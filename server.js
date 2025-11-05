@@ -34,6 +34,8 @@ app.use('/public/uploads', express.static('public/uploads'));
 app.use('/public/uploads/products', express.static('public/uploads/products'));
 app.use('/public/user_image', express.static('public/user_image'));
 app.use('/public/invoices', express.static('public/invoices'));
+app.use('/public/purchases', express.static('public/purchases'));
+app.use('/public/sales', express.static('public/sales'));
 app.use('/public/images', express.static('public/images'));
 app.use('/public/salaries', express.static('public/salaries'));
 

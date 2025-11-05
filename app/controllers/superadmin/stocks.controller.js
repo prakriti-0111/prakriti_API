@@ -314,17 +314,23 @@ exports.index = async (req, res) => {
     } else if (isSalesExecutive(req)) {
       if (by_specific == 1 && total_avl_stock == 1) {
         let distributor_id = await getUserColumnValue(req.userId, "parent_id");
-        let admin_id = await getUserColumnValue(distributor_id, "parent_id");
+        let distributorRole = await getUserColumnValue(distributor_id, "role_id");
+        let admin_id = null;
+        if(distributorRole == adminRoleId){
+          admin_id = distributor_id;
+        } else {
+          admin_id = await getUserColumnValue(distributor_id, "parent_id");
+        }
         //let ownUserIds = await avlStockUserIdsNew(req, sales_executiveRoleId);
         let ownUserIds = await avlStockUserIdsNew(
           { userId: admin_id, role: adminRoleId },
           adminRoleId
         );
-        ownUserIds.push(userID);
+        //ownUserIds.push(userID);
         conditions.user_id = { [Op.in]: ownUserIds };
       } else if (total_avl_stock == 1) {
         let ownUserIds = await avlStockUserIdsNew(req, superAdminRoleId);
-        ownUserIds.push(userID);
+        //ownUserIds.push(userID);
         conditions.user_id = { [Op.in]: ownUserIds };
       }
     }
@@ -347,11 +353,11 @@ exports.index = async (req, res) => {
     let sCond = [];
     if (!isEmpty(search) && isNaN(search)) {
       let sArr = search.split(",");
-      console.log(sArr);
+      /* console.log(sArr); */
       for (let i = 0; i < sArr.length; i++) {
-        console.log("sArr : ", sArr[i]);
+        /* console.log("sArr : ", sArr[i]); */
         let s = sArr[i].trim().toLowerCase();
-        console.log("s : ", s);
+        /* console.log("s : ", s); */
         if (s.indexOf("gm") !== -1) {
           s = s.replace("gm", "").trim();
           sCond.push({ total_weight: { [Op.lte]: `${s}` } });
@@ -368,16 +374,16 @@ exports.index = async (req, res) => {
           }
         }
       }
-      console.log(sCond);
+      /* console.log(sCond); */
       conditions = { ...conditions, [Op.or]: sCond };
     } 
     if(search.length>=8) {
       let sArr = search.split(",");
-      console.log(sArr);
+      /* console.log(sArr); */
       for (let i = 0; i < sArr.length; i++) {
-        console.log("sArr : ", sArr[i]);
+        /* console.log("sArr : ", sArr[i]); */
         let s = sArr[i].trim().toLowerCase();
-        console.log("s : ", s);
+        /* console.log("s : ", s); */
         if (s.indexOf("gm") !== -1) {
           s = s.replace("gm", "").trim();
           sCond.push({ total_weight: { [Op.lte]: `${s}` } });
@@ -394,10 +400,10 @@ exports.index = async (req, res) => {
           }
         }
       }
-      console.log(sCond);
+      /* console.log(sCond); */
       conditions = { ...conditions, [Op.or]: sCond };
     }
-    console.log("conditions =====: ", conditions);
+    /* console.log("conditions =====: ", conditions); */
 
     if(typeof material_id != "undefined" && material_id != null && material_id != "") {
       conditions.material_id = material_id;
@@ -498,7 +504,7 @@ exports.index = async (req, res) => {
         ],
       });
     }
-    console.log(_include);
+    /* console.log(_include); */
     stocksModel
       .findAndCountAll({
         order: [["id", "DESC"]],
@@ -510,7 +516,7 @@ exports.index = async (req, res) => {
       })
       .then(async (data) => {
         //
-        console.log("-------this is actual value ",data.rows);
+        /* console.log("-------this is actual value ",data.rows); */
         let result = {
           items:
             type == "product" || type == "return"
@@ -518,20 +524,20 @@ exports.index = async (req, res) => {
               : await StocksMaterialCollection(data.rows, userID),
           total: data.count,
         };
-        console.log("result : ", result);
-        console.log("search : ", search);
+        /* console.log("result : ", result);
+        console.log("search : ", search); */
         //if(!isNaN(search) && search != ""){
         let sArr = search.split(",");
         for (let i = 0; i < sArr.length; i++) {
           let s = sArr[i].trim().toLowerCase();
           /* price search */
           if (!isNaN(s) && s != "") {
-            console.log("price search ...");
+            /* console.log("price search ..."); */
             search = parseFloat(s.trim());
-            console.log("search : ", s);
+            /* console.log("search : ", s); */
             //console.log(result.items);
             let fItems = result.items.filter((itm) => {
-              console.log(itm.mrp);
+              /* console.log(itm.mrp); */
               return itm.mrp <= s;
             });
 
@@ -790,12 +796,14 @@ exports.getStockPriceByCategory = async (req, res) => {
   let {
     user_id,
     type,
+    by_specific,
     own_distributor,
     own_admin,
     own_se,
     total_avl_stock,
     manager,
   } = req.query;
+  console.log("by_specific : ", by_specific);
   type = isEmpty(type) ? "product" : type;
   let userID = null;
   if (!isEmpty(user_id)) {
@@ -807,7 +815,7 @@ exports.getStockPriceByCategory = async (req, res) => {
       : await getWorkingUserID(req)
     : userID;
   let userIdArr = [];
-
+  let superAdminRoleId = getRoleId("superadmin");
   let adminRoleId = getRoleId("admin");
   let distributorRoleId = getRoleId("distributor");
   let bySpecific = false;
@@ -882,7 +890,32 @@ exports.getStockPriceByCategory = async (req, res) => {
       bySpecific = true;
     }
   } else if (isSalesExecutive(req)) {
-    if (total_avl_stock == 1) {
+    if(total_avl_stock == 1 && own_admin == 1){
+      let distributor_id = await getUserColumnValue(req.userId, "parent_id");
+      let distributorRole = await getUserColumnValue(distributor_id, "role_id");
+      let admin_id = null;
+      if(distributorRole == adminRoleId){
+        admin_id = distributor_id;
+      } else {
+        admin_id = await getUserColumnValue(distributor_id, "parent_id");
+      }
+      /* let thisCon = { role_id: adminRoleId, id: admin_id };
+      let admins = await UserModel.findAll({
+        attributes: ["id"],
+        where: thisCon,
+      }); */
+      const stockUserIds = await avlStockUserIdsNew(
+        { userId: admin_id, role: adminRoleId },
+        adminRoleId
+      );
+  
+      userIdArr = stockUserIds;
+      bySpecific = true;
+    } else if(by_specific === "0"){ 
+      let ownUserIds = await avlStockUserIdsNew(req, superAdminRoleId);
+      userIdArr = ownUserIds;
+      bySpecific = true;
+    } else if (total_avl_stock == 1) {
       let ownUserIds = await avlStockUserIdsNew(req);
       ownUserIds.push(userID);
       userIdArr = ownUserIds;
