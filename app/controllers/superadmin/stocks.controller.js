@@ -21,6 +21,7 @@ const {
   addLog,
   arrayColumn,
 } = require("@helpers/helper");
+const { base64FileUpload, removeFile } = require("@helpers/upload");
 const {
   getTotalStockPriceByUser,
   getWorkingUserID,
@@ -1060,4 +1061,390 @@ exports.moveToStock = async (req, res) => {
   }
 
   res.send(formatResponse("", "Moved to stock successfully."));
+};
+
+/**
+ * Update stock image by certificate number
+ *
+ * @param {*} req
+ * @param {*} res
+ */
+exports.updateImage = async (req, res) => {
+  try {
+    let data = req.body;
+    
+    // Validate certificate_no
+    if (isEmpty(data.certificate_no)) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Certificate number is required"));
+    }
+
+    // Validate image
+    if (isEmpty(data.image)) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Image is required"));
+    }
+
+    // Find stock by certificate_no
+    let stock = await stocksModel.findOne({
+      where: { certificate_no: data.certificate_no },
+    });
+
+    if (!stock) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Stock not found with the given certificate number"));
+    }
+
+    // Remove old image if exists
+    if (!isEmpty(stock.current_image)) {
+      removeFile(stock.current_image);
+    }
+
+    // Upload new image
+    let imageResult = await base64FileUpload(data.image, "products");
+    
+    if (!imageResult) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Failed to upload image"));
+    }
+
+    // Update stock with new image
+    await stocksModel.update(
+      { current_image: imageResult.path },
+      { where: { id: stock.id } }
+    );
+
+    // Fetch updated stock
+    let updatedStock = await stocksModel.findOne({
+      where: { id: stock.id },
+      include: [
+        {
+          model: productsModel,
+          as: "product",
+          include: [
+            {
+              model: CategoryModel,
+              as: "category",
+            },
+            {
+              model: SubCategoryModel,
+              as: "sub_category",
+            },
+            {
+              model: TaxSlabModel,
+              as: "tax",
+            },
+            {
+              model: CertificateModel,
+              as: "certificates",
+            },
+          ],
+        },
+        {
+          model: sizesModel,
+          as: "size",
+        },
+        {
+          model: stock_materialsModel,
+          as: "stockMaterials",
+          separate: true,
+          include: [
+            {
+              model: materialModel,
+              as: "material",
+            },
+            {
+              model: UnitModel,
+              as: "unit",
+            },
+            {
+              model: PurityModel,
+              as: "purity",
+            },
+          ],
+        },
+        {
+          model: UserModel,
+          as: "user",
+        },
+      ],
+    });
+
+    let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+    
+    res.send(
+      formatResponse(
+        await StocksCollection(updatedStock, userID),
+        "Stock image updated successfully!"
+      )
+    );
+  } catch (error) {
+    addLog("error: " + error.toString());
+    console.error("Error updating stock image:", error);
+    res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Failed to update stock image: " + error.message));
+  }
+};
+
+/**
+ * Update stock image by certificate number (from URL parameter)
+ *
+ * @param {*} req
+ * @param {*} res
+ */
+exports.updateImageByCertificateNo = async (req, res) => {
+  try {
+    let data = req.body;
+    let certificate_no = req.params.certificate_no;
+    
+    // Validate certificate_no from URL parameter
+    if (isEmpty(certificate_no)) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Certificate number is required"));
+    }
+
+    // Validate image
+    if (isEmpty(data.image)) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Image is required"));
+    }
+
+    // Find stock by certificate_no
+    let stock = await stocksModel.findOne({
+      where: { certificate_no: certificate_no },
+    });
+
+    if (!stock) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Stock not found with the given certificate number"));
+    }
+
+    // Remove old image if exists
+    if (!isEmpty(stock.current_image)) {
+      removeFile(stock.current_image);
+    }
+
+    // Upload new image
+    let imageResult = await base64FileUpload(data.image, "products");
+    
+    if (!imageResult) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Failed to upload image"));
+    }
+
+    // Update stock with new image
+    await stocksModel.update(
+      { current_image: imageResult.path },
+      { where: { id: stock.id } }
+    );
+
+    // Fetch updated stock
+    let updatedStock = await stocksModel.findOne({
+      where: { id: stock.id },
+      include: [
+        {
+          model: productsModel,
+          as: "product",
+          include: [
+            {
+              model: CategoryModel,
+              as: "category",
+            },
+            {
+              model: SubCategoryModel,
+              as: "sub_category",
+            },
+            {
+              model: TaxSlabModel,
+              as: "tax",
+            },
+            {
+              model: CertificateModel,
+              as: "certificates",
+            },
+          ],
+        },
+        {
+          model: sizesModel,
+          as: "size",
+        },
+        {
+          model: stock_materialsModel,
+          as: "stockMaterials",
+          separate: true,
+          include: [
+            {
+              model: materialModel,
+              as: "material",
+            },
+            {
+              model: UnitModel,
+              as: "unit",
+            },
+            {
+              model: PurityModel,
+              as: "purity",
+            },
+          ],
+        },
+        {
+          model: UserModel,
+          as: "user",
+        },
+      ],
+    });
+
+    let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+    
+    res.send(
+      formatResponse(
+        await StocksCollection(updatedStock, userID),
+        "Stock image updated successfully!"
+      )
+    );
+  } catch (error) {
+    addLog("error: " + error.toString());
+    console.error("Error updating stock image:", error);
+    res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Failed to update stock image: " + error.message));
+  }
+};
+
+/**
+ * Update stock image by stock ID (from URL parameter)
+ *
+ * @param {*} req
+ * @param {*} res
+ */
+exports.updateImageById = async (req, res) => {
+  try {
+    let data = req.body;
+    let stockId = req.params.id;
+    
+    // Validate stock ID from URL parameter
+    if (isEmpty(stockId)) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Stock ID is required"));
+    }
+
+    // Validate image
+    if (isEmpty(data.image)) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Image is required"));
+    }
+
+    // Find stock by ID
+    let stock = await stocksModel.findOne({
+      where: { id: stockId },
+    });
+
+    if (!stock) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Stock not found with the given ID"));
+    }
+
+    // Remove old image if exists
+    if (!isEmpty(stock.current_image)) {
+      removeFile(stock.current_image);
+    }
+
+    // Upload new image
+    let imageResult = await base64FileUpload(data.image, "products");
+    
+    if (!imageResult) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Failed to upload image"));
+    }
+
+    // Update stock with new image
+    await stocksModel.update(
+      { current_image: imageResult.path },
+      { where: { id: stock.id } }
+    );
+
+    // Fetch updated stock
+    let updatedStock = await stocksModel.findOne({
+      where: { id: stock.id },
+      include: [
+        {
+          model: productsModel,
+          as: "product",
+          include: [
+            {
+              model: CategoryModel,
+              as: "category",
+            },
+            {
+              model: SubCategoryModel,
+              as: "sub_category",
+            },
+            {
+              model: TaxSlabModel,
+              as: "tax",
+            },
+            {
+              model: CertificateModel,
+              as: "certificates",
+            },
+          ],
+        },
+        {
+          model: sizesModel,
+          as: "size",
+        },
+        {
+          model: stock_materialsModel,
+          as: "stockMaterials",
+          separate: true,
+          include: [
+            {
+              model: materialModel,
+              as: "material",
+            },
+            {
+              model: UnitModel,
+              as: "unit",
+            },
+            {
+              model: PurityModel,
+              as: "purity",
+            },
+          ],
+        },
+        {
+          model: UserModel,
+          as: "user",
+        },
+      ],
+    });
+
+    let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+    
+    res.send(
+      formatResponse(
+        await StocksCollection(updatedStock, userID),
+        "Stock image updated successfully!"
+      )
+    );
+  } catch (error) {
+    addLog("error: " + error.toString());
+    console.error("Error updating stock image:", error);
+    res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Failed to update stock image: " + error.message));
+  }
 };

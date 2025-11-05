@@ -106,7 +106,7 @@ const removeFile = (filepath) => {
     //   return false;
     // }
     const axios = require("axios");
-    let data = { filepath: filePath };
+    let data = { filepath: filepath };
 
     let config = {
       method: "post",

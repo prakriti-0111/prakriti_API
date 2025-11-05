@@ -1079,6 +1079,21 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     stocksController.moveToStock
   );
+  router.post(
+    "/stocks/update-image",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stocksController.updateImage
+  );
+  router.post(
+    "/stocks/update-image/:certificate_no",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stocksController.updateImageByCertificateNo
+  );
+  router.post(
+    "/stocks/update-image/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stocksController.updateImageById
+  );
 
   //loan
   router.get(
