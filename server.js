@@ -85,6 +85,48 @@ app.get("/", (req, res) => {
   res.json({ message: "Welcome to our PRAKRITI API application server."});
 });
 
+// File upload endpoint
+app.post("/public", (req, res) => {
+  try {
+    const { base64Image, pathName, fileName } = req.body;
+    
+    if (!base64Image || !pathName || !fileName) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: base64Image, pathName, fileName"
+      });
+    }
+
+    const fs = require("fs");
+    const fullDirPath = path.join(__dirname, pathName);
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(fullDirPath)) {
+      fs.mkdirSync(fullDirPath, { recursive: true });
+    }
+
+    // Write file
+    const filePath = path.join(fullDirPath, fileName);
+    const buffer = Buffer.from(base64Image, "base64");
+    fs.writeFileSync(filePath, buffer);
+
+    // Return relative path for storage in database (using forward slashes for consistency)
+    const relativePath = pathName.replace(/\\/g, "/") + "/" + fileName;
+    
+    res.json({
+      success: true,
+      file_name: fileName,
+      path: relativePath
+    });
+  } catch (error) {
+    console.error("Error uploading file:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to upload file: " + error.message
+    });
+  }
+});
+
 app.use(function(req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
   res.header('Access-Control-Allow-Methods', 'DELETE, PUT, POST, GET');
