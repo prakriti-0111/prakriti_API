@@ -214,9 +214,15 @@ exports.index = async (req, res) => {
  * Retrive purchase txn ledger
  */
 exports.txnLedger = async (req, res) => {
-  let { page, limit, user_id, search, date_from, date_to } = req.query;
+  let { page, limit, user_id, search, date_from, date_to, status, is_assigned, is_approval } = req.query;
+  /* is_assigned = is_assigned === undefined ? false : true;
+  is_approval = is_approval === undefined ? false : true; */
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let conditions = { sale_by: userID };
+  let conditions = { /* is_assigned: is_assigned, is_approval: is_approval */ };
+  /* if (status !== undefined && status != "") {
+    conditions.is_approved = status;
+  } */
+  conditions.sale_by = userID;
   if (!isEmpty(user_id)) {
     conditions.user_id = user_id;
   }
@@ -259,7 +265,7 @@ exports.txnLedger = async (req, res) => {
         txn_amount : parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
-        type: "Sale"
+        type: sale.is_approval == "1"?"Sale On Approval":"Sale"
       });
 
       // Add related payment rows
@@ -285,7 +291,7 @@ exports.txnLedger = async (req, res) => {
     // Compute running balance (Due Amount)
     let runningBalance = 0;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Sale') {
+      if (tx.type === 'Sale' || tx.type === 'Sale On Approval') {
         runningBalance += tx.txn_amount;
       } else if (tx.type === 'Payment') {
         runningBalance -= tx.txn_amount;
@@ -308,10 +314,17 @@ exports.txnLedger = async (req, res) => {
  * Retrive purchase txn ledger pdf
  */
 exports.downloadTxnLedger = async (req, res) => {
-  let { user_id, search, date_from, date_to } = req.query;
+  let { page, limit, user_id, search, date_from, date_to, status, is_assigned, is_approval } = req.query;
+  /* is_assigned = is_assigned === undefined ? false : true;
+  is_approval = is_approval === undefined ? false : true; */
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   let user = await UserModel.findByPk(userID);
-  let conditions = { sale_by: userID };
+  let conditions = { /* is_assigned: is_assigned, is_approval: is_approval */ };
+  /* if (status !== undefined && status != "") {
+    conditions.is_approved = status;
+  } */
+  conditions.sale_by = userID;
+  
   if (!isEmpty(user_id)) {
     conditions.user_id = user_id;
   }
@@ -354,7 +367,7 @@ exports.downloadTxnLedger = async (req, res) => {
         txn_amount : parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
-        type: "Sale"
+        type: sale.is_approval == "1"?"Sale On Approval":"Sale"
       });
 
       // Add related payment rows
@@ -380,7 +393,7 @@ exports.downloadTxnLedger = async (req, res) => {
     // Compute running balance (Due Amount)
     let runningBalance = 0;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Sale') {
+      if (tx.type === 'Sale' || tx.type === 'Sale On Approval') {
         runningBalance += tx.txn_amount;
       } else if (tx.type === 'Payment') {
         runningBalance -= tx.txn_amount;
