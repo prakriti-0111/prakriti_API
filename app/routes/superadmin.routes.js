@@ -973,6 +973,16 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     saleController.index
   );
+  router.get(
+    "/sales/txn-ledger",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    saleController.txnLedger
+  );
+  router.get(
+    "/sales/txn-ledger-download",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    saleController.downloadTxnLedger
+  );
   router.post(
     "/sales/store",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
@@ -1068,6 +1078,21 @@ module.exports = (app, express, io) => {
     "/stocks/return-stock/move-to-stock",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     stocksController.moveToStock
+  );
+  router.post(
+    "/stocks/update-image",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stocksController.updateImage
+  );
+  router.post(
+    "/stocks/update-image/:certificate_no",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stocksController.updateImageByCertificateNo
+  );
+  router.post(
+    "/stocks/update-image/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stocksController.updateImageById
   );
 
   //loan
