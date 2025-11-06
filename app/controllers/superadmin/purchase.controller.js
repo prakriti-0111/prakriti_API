@@ -1032,20 +1032,34 @@ exports.store = async (req, res) => {
     for (let i = 0; i < data.products.length; i++) {
       let thisItem = data.products[i];
       // console.log("--data.product[0].current_image",data.products[i].current_image)
-      let image_path = await base64FileUpload(
-        data.products[i].current_image,
-        "products"
-      );
+      let image_path = null;
+      let current_image = null;
+      // Prefer frontend-provided image if present; upload if base64
+      if (thisItem.current_image && typeof thisItem.current_image === 'string') {
+        if (thisItem.current_image.startsWith('data:') || thisItem.current_image.startsWith('iVBOR')) {
+          image_path = await base64FileUpload(thisItem.current_image, "products");
+          if (image_path && image_path.path) current_image = `${image_path.path}`;
+        } else {
+          current_image = thisItem.current_image; // already a stored path/URL
+        }
+      }
+      // Fallback to product main image if still empty
+      if (!current_image && thisItem.product_id) {
+        const fallbackProduct = await ProductModel.findByPk(thisItem.product_id);
+        if (fallbackProduct && fallbackProduct.main_image) {
+          current_image = fallbackProduct.main_image;
+        }
+      }
       // console.log(
       //   "image_path________________________________________________________",
       //   image_path
       // );
 
-      let current_image =
-        data.products[i].current_image == null ||
-        data.products[i].current_image === undefined
-          ? null
-          : `${image_path.path}`;
+      // let current_image =
+      //   data.products[i].current_image == null ||
+      //   data.products[i].current_image === undefined
+      //     ? null
+      //     : `${image_path.path}`;
       // console.log(current_image)
       // console.log("----------current image ",current_image )
       let worker_id = thisItem.worker_id || null;
@@ -1609,6 +1623,12 @@ exports.statuschange = async (req, res) => {
               let resData = await StockModel.findAll(query);
               let Current_image = await purchase.purchaseProducts[i]
                 .current_image;
+              if (!Current_image && thisItem.product_id) {
+                const fallbackProduct = await ProductModel.findByPk(thisItem.product_id);
+                if (fallbackProduct && fallbackProduct.main_image) {
+                  Current_image = fallbackProduct.main_image;
+                }
+              }
               stock = await StockModel.create(
                 {
                   purchase_id: purchase.id,
@@ -1934,15 +1954,30 @@ exports.statuschange = async (req, res) => {
                   stock = result.item;
                 } else {
                   // console.log("----else Stock 888",req_data.products[0].current_image)
-                  let current_image_path = await base64FileUpload(
-                    req_data.products[i].current_image,
-                    "products"
-                  );
+                  let resolved_image_path = null;
+                  let stock_current_image = null;
+                  const incomingImage = req_data.products[i] ? req_data.products[i].current_image : null;
+                  if (incomingImage && typeof incomingImage === 'string') {
+                    if (incomingImage.startsWith('data:') || incomingImage.startsWith('iVBOR')) {
+                      resolved_image_path = await base64FileUpload(incomingImage, "products");
+                      if (resolved_image_path && resolved_image_path.path) {
+                        stock_current_image = resolved_image_path.path;
+                      }
+                    } else {
+                      stock_current_image = incomingImage; // assume stored path/URL
+                    }
+                  }
+                  if (!stock_current_image && thisItem.product_id) {
+                    const fallbackProduct = await ProductModel.findByPk(thisItem.product_id);
+                    if (fallbackProduct && fallbackProduct.main_image) {
+                      stock_current_image = fallbackProduct.main_image;
+                    }
+                  }
 
                   stock = await StockModel.create(
                     {
                       purchase_id: purchase.id,
-                      current_image: current_image_path.path,
+                      current_image: stock_current_image,
                       purchase_product_id: thisItem.id,
                       product_id: thisItem.product_id,
                       size_id: thisItem.size_id || null,
@@ -2557,10 +2592,28 @@ exports.update = async (req, res) => {
           let worker_id = thisItem.worker_id || null;
           // console.log("----------------thisis purchases productv ",thisItem);
 
+          // Resolve current_image from frontend/base64 or fallback to product.main_image
+          let tx_current_image = null;
+          if (thisItem.current_image && typeof thisItem.current_image === 'string') {
+            if (thisItem.current_image.startsWith('data:') || thisItem.current_image.startsWith('iVBOR')) {
+              const uploaded = await base64FileUpload(thisItem.current_image, "products");
+              if (uploaded && uploaded.path) tx_current_image = uploaded.path;
+            } else {
+              tx_current_image = thisItem.current_image;
+            }
+          }
+          if (!tx_current_image && thisItem.product_id) {
+            const fallbackProduct2 = await ProductModel.findByPk(thisItem.product_id);
+            if (fallbackProduct2 && fallbackProduct2.main_image) {
+              tx_current_image = fallbackProduct2.main_image;
+            }
+          }
+
           let thisObj = {
             purchase_id: purchase.id,
             product_id: thisItem.product_id,
             worker_id: worker_id,
+            current_image: tx_current_image,
 
             size_id: thisItem.size_id || null,
             certificate_no: thisItem.certificate_no,
