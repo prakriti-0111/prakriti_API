@@ -50,6 +50,8 @@ const CertificateModel = db.certificates;
 const PurchaseProductModel = db.purchase_products;
 const PurchaseModel = db.purchases;
 const UserModel = db.users;
+const SaleModel = db.sales;
+const SaleProductModel = db.sale_products;
 
 /**
  * Retrieve all Unit
@@ -505,10 +507,36 @@ exports.index = async (req, res) => {
       });
     }
     /* console.log(_include); */
+
+    /* list should not show sale on approval stocks */
+    
+    /* get all sale on approval sale ids by user */
+    // const sales = await SaleModel.findAll({
+    //   attributes: ["id"],
+    //   where: { 
+    //     is_approval: "1",
+    //     sale_by: userID,
+    //     is_approved: "3"
+    //   }
+    // });
+    // let saleIds = arrayColumn(sales, "id");
+    // console.log("saleIds : =======================================>", saleIds);
+    // /* get all sale on approval sale products certificates by user */
+    // const saleProducts = await SaleProductModel.findAll({
+    //   attributes: ["certificate_no"],
+    //   where: { 
+    //     sale_id: { [Op.in]: saleIds }, 
+    //   },
+    // });
+    // let certidicates = arrayColumn(saleProducts, "certificate_no");
+    // console.log("certidicates : ====================================>", certidicates);
     stocksModel
       .findAndCountAll({
         order: [["id", "DESC"]],
-        where: conditions,
+        where: {
+          ...conditions,
+          //certificate_no: { [Op.notIn]: certidicates }, 
+        },
         ...limit_offset,
         include: _include,
         distinct: true,

@@ -176,7 +176,7 @@ const getFileAbsulatePath = (f) => {
 }
 
 const getFileAbsulatePathPDF = (f) => {
-  return process.env.BASE_URL_INVOICE + f;
+  return process.env.BASE_URL + f;
 }
 
 const ucWords = (text) => {

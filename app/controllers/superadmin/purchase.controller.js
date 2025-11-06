@@ -191,14 +191,24 @@ exports.index = async (req, res) => {
  * Retrive purchase txn ledger
  */
 exports.txnLedger = async (req, res) => {
-  let { page, limit, supplier_id, search, date_from, date_to } = req.query;
+  let { page, limit, supplier_id, search, is_assigned, is_approval, status, date_from, date_to } = req.query;
+  is_assigned = is_assigned === undefined ? false : true;
+  is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let conditions = { user_id: userID };
+  let conditions = { user_id: userID, is_assigned: is_assigned, is_approval: is_approval };
+  if (status !== undefined && status != "") {
+    conditions.is_approved = status;
+  }
   if (!isEmpty(supplier_id)) {
     conditions.supplier_id = supplier_id;
   }
-  if (!isEmpty(search)) {
-    conditions.invoice_number = { [Op.like]: `%${search}%` };
+  if (!isEmpty(search) && !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")) {
+    conditions[Op.or] = [
+      { invoice_number: { [Op.like]: `%${search}%` } },
+      { notes: { [Op.like]: `%${search}%` } },
+      { bill_amount: { [Op.like]: `%${search}%` } },
+      { payment_mode: { [Op.like]: `%${search}%` } },
+    ];
   }
   conditions = {
     ...conditions,
@@ -210,10 +220,19 @@ exports.txnLedger = async (req, res) => {
     // Fetch all purchases with their related payments
     const allPurchases = await PurchaseModel.findAll({
       include: [
-        {
+      {
           model: PaymentModel,
           as: "payments",
           required: false,
+          where: !isEmpty(search) && !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")
+            ? {
+                [Op.or]: [
+                  { amount: { [Op.like]: `%${search}%` } },
+                  { payment_mode: { [Op.like]: `%${search}%` } },
+                  { notes: { [Op.like]: `%${search}%` } },
+                ],
+              }
+            : undefined,
         },
       ],
       where: conditions,
@@ -236,7 +255,7 @@ exports.txnLedger = async (req, res) => {
         txn_amount : parseFloat(purchase.bill_amount),
         payment_amount: null,
         payment_mode: purchase.payment_mode || "-",
-        type: purchase.is_approval == "1"?"Purchase On Approval":"Purchase"
+        type: "Purchase"
       });
 
       // Add related payment rows
@@ -259,10 +278,14 @@ exports.txnLedger = async (req, res) => {
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
 
+    if(!isEmpty(search) && (search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")){
+      tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
+    }
+
     // Compute running balance (Due Amount)
     let runningBalance = 0;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Purchase' || tx.type === 'Purchase On Approval') {
+      if (tx.type === 'Purchase') {
         runningBalance += tx.txn_amount;
       } else if (tx.type === 'Payment') {
         runningBalance -= tx.txn_amount;
@@ -285,15 +308,26 @@ exports.txnLedger = async (req, res) => {
  * Retrive purchase txn ledger pdf
  */
 exports.downloadTxnLedger = async (req, res) => {
-  let { supplier_id, search, date_from, date_to } = req.query;
+  let { page, limit, supplier_id, search, is_assigned, is_approval, status, date_from, date_to } = req.query;
+  is_assigned = is_assigned === undefined ? false : true;
+  is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let conditions = { user_id: userID, is_assigned: is_assigned, is_approval: is_approval };
+  if (status !== undefined && status != "") {
+    conditions.is_approved = status;
+  }
   let user = await UserModel.findByPk(userID);
-  let conditions = { user_id: userID };
+  
   if (!isEmpty(supplier_id)) {
     conditions.supplier_id = supplier_id;
   }
-  if (!isEmpty(search)) {
-    conditions.invoice_number = { [Op.like]: `%${search}%` };
+  if (!isEmpty(search) && !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")) {
+    conditions[Op.or] = [
+      { invoice_number: { [Op.like]: `%${search}%` } },
+      { notes: { [Op.like]: `%${search}%` } },
+      { bill_amount: { [Op.like]: `%${search}%` } },
+      { payment_mode: { [Op.like]: `%${search}%` } },
+    ];
   }
   conditions = {
     ...conditions,
@@ -305,10 +339,19 @@ exports.downloadTxnLedger = async (req, res) => {
     // Fetch all purchases with their related payments
     const allPurchases = await PurchaseModel.findAll({
       include: [
-        {
+      {
           model: PaymentModel,
           as: "payments",
           required: false,
+          where: !isEmpty(search) && !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")
+            ? {
+                [Op.or]: [
+                  { amount: { [Op.like]: `%${search}%` } },
+                  { payment_mode: { [Op.like]: `%${search}%` } },
+                  { notes: { [Op.like]: `%${search}%` } },
+                ],
+              }
+            : undefined,
         },
       ],
       where: conditions,
@@ -331,7 +374,7 @@ exports.downloadTxnLedger = async (req, res) => {
         txn_amount : parseFloat(purchase.bill_amount),
         payment_amount: null,
         payment_mode: purchase.payment_mode || "-",
-        type: purchase.is_approval == "1"?"Purchase On Approval":"Purchase"
+        type: "Purchase"
       });
 
       // Add related payment rows
@@ -354,10 +397,14 @@ exports.downloadTxnLedger = async (req, res) => {
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
 
+    if(!isEmpty(search) && (search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")){
+      tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
+    }
+
     // Compute running balance (Due Amount)
     let runningBalance = 0;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Purchase' || tx.type === 'Purchase On Approval') {
+      if (tx.type === 'Purchase') {
         runningBalance += tx.txn_amount;
       } else if (tx.type === 'Payment') {
         runningBalance -= tx.txn_amount;

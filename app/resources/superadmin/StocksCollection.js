@@ -67,7 +67,7 @@ const getModelObject = async (data, user_id) => {
         total_weight_display = weightFormat(data.total_weight) + ' gm';
     }
     
-    let can_add_cart = await canStockAddCart(data.id, data.product.type, user_id);
+    let can_add_cart = await canStockAddCart(data.id, data.product.type, user_id, data.certificate_no);
     let stock_user_name = data.user ? (data.user.company_name ? data.user.company_name : data.user.name) : '';
     
     //console.log(productDetails);

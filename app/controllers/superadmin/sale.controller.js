@@ -215,19 +215,24 @@ exports.index = async (req, res) => {
  */
 exports.txnLedger = async (req, res) => {
   let { page, limit, user_id, search, date_from, date_to, status, is_assigned, is_approval } = req.query;
-  /* is_assigned = is_assigned === undefined ? false : true;
-  is_approval = is_approval === undefined ? false : true; */
+  is_assigned = is_assigned === undefined ? false : true;
+  is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let conditions = { /* is_assigned: is_assigned, is_approval: is_approval */ };
-  /* if (status !== undefined && status != "") {
+  let conditions = { is_assigned: is_assigned, is_approval: is_approval };
+  if (status !== undefined && status != "") {
     conditions.is_approved = status;
-  } */
+  }
   conditions.sale_by = userID;
   if (!isEmpty(user_id)) {
     conditions.user_id = user_id;
   }
-  if (!isEmpty(search)) {
-    conditions.invoice_number = { [Op.like]: `%${search}%` };
+  if (!isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")) {
+    conditions[Op.or] = [
+      { invoice_number: { [Op.like]: `%${search}%` } },
+      { notes: { [Op.like]: `%${search}%` } },
+      { bill_amount: { [Op.like]: `%${search}%` } },
+      { payment_mode: { [Op.like]: `%${search}%` } },
+    ];
   }
   conditions = {
     ...conditions,
@@ -243,6 +248,15 @@ exports.txnLedger = async (req, res) => {
           model: PaymentModel,
           as: "payments",
           required: false,
+          where: !isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")
+            ? {
+                [Op.or]: [
+                  { amount: { [Op.like]: `%${search}%` } },
+                  { payment_mode: { [Op.like]: `%${search}%` } },
+                  { notes: { [Op.like]: `%${search}%` } },
+                ],
+              }
+            : undefined,
         },
       ],
       where: conditions,
@@ -265,7 +279,7 @@ exports.txnLedger = async (req, res) => {
         txn_amount : parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
-        type: sale.is_approval == "1"?"Sale On Approval":"Sale"
+        type: "Sale"
       });
 
       // Add related payment rows
@@ -288,10 +302,14 @@ exports.txnLedger = async (req, res) => {
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
 
+    if(!isEmpty(search) && (search.toLowerCase() == "sale" || search.toLowerCase() == "payment")){
+      tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
+    }
+
     // Compute running balance (Due Amount)
     let runningBalance = 0;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Sale' || tx.type === 'Sale On Approval') {
+      if (tx.type === 'Sale') {
         runningBalance += tx.txn_amount;
       } else if (tx.type === 'Payment') {
         runningBalance -= tx.txn_amount;
@@ -315,21 +333,26 @@ exports.txnLedger = async (req, res) => {
  */
 exports.downloadTxnLedger = async (req, res) => {
   let { page, limit, user_id, search, date_from, date_to, status, is_assigned, is_approval } = req.query;
-  /* is_assigned = is_assigned === undefined ? false : true;
-  is_approval = is_approval === undefined ? false : true; */
+  is_assigned = is_assigned === undefined ? false : true;
+  is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   let user = await UserModel.findByPk(userID);
-  let conditions = { /* is_assigned: is_assigned, is_approval: is_approval */ };
-  /* if (status !== undefined && status != "") {
+  let conditions = { is_assigned: is_assigned, is_approval: is_approval };
+  if (status !== undefined && status != "") {
     conditions.is_approved = status;
-  } */
+  }
   conditions.sale_by = userID;
   
   if (!isEmpty(user_id)) {
     conditions.user_id = user_id;
   }
-  if (!isEmpty(search)) {
-    conditions.invoice_number = { [Op.like]: `%${search}%` };
+  if (!isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")) {
+    conditions[Op.or] = [
+      { invoice_number: { [Op.like]: `%${search}%` } },
+      { notes: { [Op.like]: `%${search}%` } },
+      { bill_amount: { [Op.like]: `%${search}%` } },
+      { payment_mode: { [Op.like]: `%${search}%` } },
+    ];
   }
   conditions = {
     ...conditions,
@@ -345,6 +368,15 @@ exports.downloadTxnLedger = async (req, res) => {
           model: PaymentModel,
           as: "payments",
           required: false,
+          where: !isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")
+            ? {
+                [Op.or]: [
+                  { amount: { [Op.like]: `%${search}%` } },
+                  { payment_mode: { [Op.like]: `%${search}%` } },
+                  { notes: { [Op.like]: `%${search}%` } },
+                ],
+              }
+            : undefined,
         },
       ],
       where: conditions,
@@ -367,7 +399,7 @@ exports.downloadTxnLedger = async (req, res) => {
         txn_amount : parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
-        type: sale.is_approval == "1"?"Sale On Approval":"Sale"
+        type: "Sale"
       });
 
       // Add related payment rows
@@ -390,10 +422,14 @@ exports.downloadTxnLedger = async (req, res) => {
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
 
+    if(!isEmpty(search) && (search.toLowerCase() == "sale" || search.toLowerCase() == "payment")){
+      tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
+    }
+
     // Compute running balance (Due Amount)
     let runningBalance = 0;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Sale' || tx.type === 'Sale On Approval') {
+      if (tx.type === 'Sale') {
         runningBalance += tx.txn_amount;
       } else if (tx.type === 'Payment') {
         runningBalance -= tx.txn_amount;
