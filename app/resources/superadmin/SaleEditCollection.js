@@ -1,10 +1,13 @@
-const { isObject, formatDateTime, ucWords, displayAmount, priceFormat, weightFormat } = require("@helpers/helper");
+const { isObject, formatDateTime, ucWords, displayAmount, priceFormat, weightFormat, isEmpty } = require("@helpers/helper");
 const db = require("@models");
 const moment = require('moment');
+const { Op } = require("sequelize");
 const SaleProductModel = db.sale_products;
 const ReturnPolicyModel = db.return_policy;
 const UserModel = db.users;
 const RoleModel = db.roles;
+const PurchaseProductModel = db.purchase_products;
+const StockModel = db.stocks;
 
 const SaleEditCollection = async(data, req) => {
     if(isObject(data)){
@@ -73,6 +76,38 @@ const getModelObject = async(data) => {
 
         let total_weight_display = materials.length > 0?total_weight + ' ' + materials[0].unit_name: total_weight + ' gm';
 
+        // Get current_image from PurchaseProduct or Stock by certificate_no
+        let current_image = null;
+        if (p_item.certificate_no) {
+          // First, try to get from PurchaseProduct
+          let purchaseProduct = await PurchaseProductModel.findOne({
+            where: {
+              certificate_no: {
+                [Op.like]: p_item.certificate_no
+              }
+            },
+            order: [['id', 'DESC']] // Get the most recent one
+          });
+          
+          if (purchaseProduct && purchaseProduct.current_image) {
+            current_image = purchaseProduct.current_image;
+          } else {
+            // Second, try to get from Stock
+            let stock = await StockModel.findOne({
+              where: {
+                certificate_no: {
+                  [Op.like]: p_item.certificate_no
+                }
+              },
+              order: [['id', 'DESC']] // Get the most recent one
+            });
+            
+            if (stock && stock.current_image) {
+              current_image = stock.current_image;
+            }
+          }
+        }
+
         let thisObj = {
             id: p_item.id,
             product_id: p_item.product_id,
@@ -106,7 +141,8 @@ const getModelObject = async(data) => {
             is_return: p_item.is_return,
             return_amount: 0,
             return_charge: 0,
-            return_charge_percent: return_charge_percent
+            return_charge_percent: return_charge_percent,
+            current_image: current_image
         }
         
 
