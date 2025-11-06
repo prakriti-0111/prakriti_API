@@ -1118,6 +1118,12 @@ exports.updateImage = async (req, res) => {
       { where: { id: stock.id } }
     );
 
+    // Update all PurchaseProduct records with the same certificate_no
+    await PurchaseProductModel.update(
+      { current_image: imageResult.path },
+      { where: { certificate_no: data.certificate_no } }
+    );
+
     // Fetch updated stock
     let updatedStock = await stocksModel.findOne({
       where: { id: stock.id },
@@ -1245,6 +1251,12 @@ exports.updateImageByCertificateNo = async (req, res) => {
     await stocksModel.update(
       { current_image: imageResult.path },
       { where: { id: stock.id } }
+    );
+
+    // Update all PurchaseProduct records with the same certificate_no
+    await PurchaseProductModel.update(
+      { current_image: imageResult.path },
+      { where: { certificate_no: certificate_no } }
     );
 
     // Fetch updated stock
@@ -1375,6 +1387,14 @@ exports.updateImageById = async (req, res) => {
       { current_image: imageResult.path },
       { where: { id: stock.id } }
     );
+
+    // Update all PurchaseProduct records with the same certificate_no
+    if (stock.certificate_no) {
+      await PurchaseProductModel.update(
+        { current_image: imageResult.path },
+        { where: { certificate_no: stock.certificate_no } }
+      );
+    }
 
     // Fetch updated stock
     let updatedStock = await stocksModel.findOne({

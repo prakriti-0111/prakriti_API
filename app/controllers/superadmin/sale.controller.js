@@ -1931,10 +1931,52 @@ exports.statuschange = async (req, res) => {
           );
           stock = result.item;
         } else {
+          // Try to get current_image from multiple sources
+          let current_image = null;
+          
+          if (thisItem.certificate_no) {
+            // First, check Stock records (most recent/updated - has the latest image)
+            let stockQuery = {
+              where: {
+                certificate_no: {
+                  [Op.like]: thisItem.certificate_no
+                }
+              },
+              order: [['id', 'DESC']] // Get the most recent one
+            };
+            let existingStock = await StockModel.findOne(stockQuery);
+            if (existingStock && existingStock.current_image) {
+              current_image = existingStock.current_image;
+            } else {
+              // Second, check PurchaseProduct by certificate_no (fallback)
+              let purchaseQuery = {
+                where: {
+                  certificate_no: {
+                    [Op.like]: thisItem.certificate_no
+                  }
+                },
+                order: [['id', 'DESC']] // Get the most recent one
+              };
+              let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery);
+              if (purchaseProduct && purchaseProduct.current_image) {
+                current_image = purchaseProduct.current_image;
+              } else if (thisItem.stock_id) {
+                // Third, check by stock_id if available
+                let stockById = await StockModel.findOne({
+                  where: { id: thisItem.stock_id }
+                });
+                if (stockById && stockById.current_image) {
+                  current_image = stockById.current_image;
+                }
+              }
+            }
+          }
+          
           stock = await StockModel.create({
             product_id: thisItem.product_id,
             size_id: thisItem.size_id || null,
             certificate_no: thisItem.certificate_no,
+            current_image: current_image,
             quantity: 1,
             total_weight: thisItem.total_weight,
             user_id: parentUserID,
@@ -2460,15 +2502,42 @@ exports.returnSale = async (req, res) => {
         } else {
           // console.log("req =============== 2", return_data);
          
-        let query = {
-            where: {
-              certificate_no: {
-                [Op.like]: `${return_data.products[i].certificate_no}`,
+          // Try to get current_image from multiple sources (prioritize most recent/updated image)
+          let current_image = null;
+          
+          // First, check if current_image is in return_data (if provided)
+          if (return_data.products[i] && return_data.products[i].current_image) {
+            current_image = return_data.products[i].current_image;
+          } else if (return_data.products[i].certificate_no) {
+            // Second, check Stock records first (most recent/updated - has the latest image)
+            let stockQuery = {
+              where: {
+                certificate_no: {
+                  [Op.like]: `${return_data.products[i].certificate_no}`,
+                },
               },
-            },
-          };
-            let resData=  await PurchaseProductModel.findAll(query)
-            let current_image = (resData && resData.length > 0 && resData[0].current_image) ? resData[0].current_image : null;
+              order: [['id', 'DESC']], // Get the most recent one
+            };
+            let existingStock = await StockModel.findOne(stockQuery, { transaction: t });
+            if (existingStock && existingStock.current_image) {
+              current_image = existingStock.current_image;
+            } else {
+              // Third, check PurchaseProduct records (fallback)
+              let purchaseQuery = {
+                where: {
+                  certificate_no: {
+                    [Op.like]: `${return_data.products[i].certificate_no}`,
+                  },
+                },
+                order: [['id', 'DESC']], // Get the most recent one
+              };
+              let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery, { transaction: t });
+              if (purchaseProduct && purchaseProduct.current_image) {
+                current_image = purchaseProduct.current_image;
+              }
+            }
+          }
+          
           stock = await StockModel.create(
             {
               product_id: return_data.products[i].product_id,
@@ -3100,15 +3169,42 @@ exports.returnSaleNew = async (req, res) => {
         } else {
           // console.log("req =============== 2", return_data);
 
-          let query = {
-            where: {
-              certificate_no: {
-                [Op.like]: `${return_data.products[i].certificate_no}`,
+          // Try to get current_image from multiple sources (prioritize most recent/updated image)
+          let current_image = null;
+          
+          // First, check if current_image is in return_data (if provided)
+          if (return_data.products[i] && return_data.products[i].current_image) {
+            current_image = return_data.products[i].current_image;
+          } else if (return_data.products[i].certificate_no) {
+            // Second, check Stock records first (most recent/updated - has the latest image)
+            let stockQuery = {
+              where: {
+                certificate_no: {
+                  [Op.like]: `${return_data.products[i].certificate_no}`,
+                },
               },
-            },
-          };
-            let resData=  await PurchaseProductModel.findAll(query)
-            let current_image = (resData && resData.length > 0 && resData[0].current_image) ? resData[0].current_image : null;
+              order: [['id', 'DESC']], // Get the most recent one
+            };
+            let existingStock = await StockModel.findOne(stockQuery, { transaction: t });
+            if (existingStock && existingStock.current_image) {
+              current_image = existingStock.current_image;
+            } else {
+              // Third, check PurchaseProduct records (fallback)
+              let purchaseQuery = {
+                where: {
+                  certificate_no: {
+                    [Op.like]: `${return_data.products[i].certificate_no}`,
+                  },
+                },
+                order: [['id', 'DESC']], // Get the most recent one
+              };
+              let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery, { transaction: t });
+              if (purchaseProduct && purchaseProduct.current_image) {
+                current_image = purchaseProduct.current_image;
+              }
+            }
+          }
+          
           stock = await StockModel.create(
             {
               product_id: return_data.products[i].product_id,
@@ -3331,13 +3427,67 @@ exports.returnSaleNew = async (req, res) => {
           }
 
           if (!stock) {
+            // Try to get current_image from multiple sources
+            let current_image = null;
+            
+            // First, check if image is provided in return_data (from frontend)
+            if (return_data.products[i] && return_data.products[i].current_image) {
+              // Check if it's a base64 string (needs upload) or a path (already uploaded)
+              if (return_data.products[i].current_image.startsWith('data:') || return_data.products[i].current_image.startsWith('iVBOR')) {
+                // It's a base64 string, upload it
+                let imageResult = await base64FileUpload(
+                  return_data.products[i].current_image,
+                  "products"
+                );
+                if (imageResult && imageResult.path) {
+                  current_image = imageResult.path;
+                }
+              } else {
+                // It's already a path
+                current_image = return_data.products[i].current_image;
+              }
+            } else if (return_data.products[i].certificate_no) {
+              // Second, check Stock records first (most recent/updated)
+              let stockQuery = {
+                where: {
+                  certificate_no: {
+                    [Op.like]: return_data.products[i].certificate_no
+                  }
+                },
+                order: [['id', 'DESC']]
+              };
+              let existingStock = await StockModel.findOne(stockQuery);
+              if (existingStock && existingStock.current_image) {
+                current_image = existingStock.current_image;
+              } else {
+                // Third, check PurchaseProduct by certificate_no
+                let purchaseQuery = {
+                  where: {
+                    certificate_no: {
+                      [Op.like]: return_data.products[i].certificate_no
+                    }
+                  },
+                  order: [['id', 'DESC']]
+                };
+                let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery);
+                if (purchaseProduct && purchaseProduct.current_image) {
+                  current_image = purchaseProduct.current_image;
+                } else if (return_data.products[i].id) {
+                  // Fourth, check PurchaseProduct by ID
+                  let purchaseProductById = await PurchaseProductModel.findOne({
+                    where: { id: return_data.products[i].id }
+                  });
+                  if (purchaseProductById && purchaseProductById.current_image) {
+                    current_image = purchaseProductById.current_image;
+                  }
+                }
+              }
+            }
+            
             stock = await StockModel.create(
               {
                 purchase_id: purchase.id,
-                current_image: base64FileUpload(
-                  return_data.products[i].current_image,
-                  "products"
-                ).path,
+                current_image: current_image,
                 purchase_product_id: return_data.products[i].id,
                 product_id: return_data.products[i].product_id,
                 size_id: return_data.products[i].size_id || null,
@@ -3469,13 +3619,67 @@ exports.returnSaleNew = async (req, res) => {
           });
 
           if (!stock) {
+            // Try to get current_image from multiple sources
+            let current_image = null;
+            
+            // First, check if image is provided in return_data (from frontend)
+            if (return_data.products[i] && return_data.products[i].current_image) {
+              // Check if it's a base64 string (needs upload) or a path (already uploaded)
+              if (return_data.products[i].current_image.startsWith('data:') || return_data.products[i].current_image.startsWith('iVBOR')) {
+                // It's a base64 string, upload it
+                let imageResult = await base64FileUpload(
+                  return_data.products[i].current_image,
+                  "products"
+                );
+                if (imageResult && imageResult.path) {
+                  current_image = imageResult.path;
+                }
+              } else {
+                // It's already a path
+                current_image = return_data.products[i].current_image;
+              }
+            } else if (return_data.products[i].certificate_no) {
+              // Second, check Stock records first (most recent/updated)
+              let stockQuery = {
+                where: {
+                  certificate_no: {
+                    [Op.like]: return_data.products[i].certificate_no
+                  }
+                },
+                order: [['id', 'DESC']]
+              };
+              let existingStock = await StockModel.findOne(stockQuery);
+              if (existingStock && existingStock.current_image) {
+                current_image = existingStock.current_image;
+              } else {
+                // Third, check PurchaseProduct by certificate_no
+                let purchaseQuery = {
+                  where: {
+                    certificate_no: {
+                      [Op.like]: return_data.products[i].certificate_no
+                    }
+                  },
+                  order: [['id', 'DESC']]
+                };
+                let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery);
+                if (purchaseProduct && purchaseProduct.current_image) {
+                  current_image = purchaseProduct.current_image;
+                } else if (return_data.products[i].id) {
+                  // Fourth, check PurchaseProduct by ID
+                  let purchaseProductById = await PurchaseProductModel.findOne({
+                    where: { id: return_data.products[i].id }
+                  });
+                  if (purchaseProductById && purchaseProductById.current_image) {
+                    current_image = purchaseProductById.current_image;
+                  }
+                }
+              }
+            }
+            
             stock = await StockModel.create(
               {
                 purchase_id: purchase.id,
-                current_image: base64FileUpload(
-                  return_data.products[i].current_image,
-                  "products"
-                ).path,
+                current_image: current_image,
                 purchase_product_id: return_data.products[i].id,
                 product_id: return_data.products[i].product_id,
                 size_id: return_data.products[i].size_id || null,
@@ -4124,6 +4328,7 @@ exports.returnStockTransfer = async (req, res) => {
         size_id: thisItem.size_id || null,
         certificate_no: thisItem.certificate_no,
         total_weight: weightFormat(thisItem.total_weight),
+        current_image: thisItem.current_image || null,
       };
       let purchaseProduct = await PurchaseProductModel.create(thisObj2);
 
@@ -4176,6 +4381,7 @@ exports.returnStockTransfer = async (req, res) => {
         size_id: thisItem.size_id,
         certificate_no: thisItem.certificate_no,
         total_weight: thisItem.total_weight,
+        current_image: thisItem.current_image || null,
         materials: reqDataM,
         worker_id: "",
       });
