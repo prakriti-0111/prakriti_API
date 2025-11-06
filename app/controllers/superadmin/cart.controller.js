@@ -21,6 +21,7 @@ const PurityModel = db.purities;
 const SubCategoryModel = db.sub_categories;
 const CategoryModel = db.categories;
 const SaleModel = db.sales;
+const SaleProductModel = db.sale_products;
 
 /**
  * Retrieve all Cart
@@ -190,6 +191,9 @@ exports.getCartItem = async (req, res) => {
   if(!isEmpty(req.query.stock_id)){
     conditions.stock_id = req.query.stock_id;
   }
+  
+  const certificate_no = req.query.certificate_no?req.query.certificate_no:null;
+  
   let stock = await stockModel.findOne({where: {id: req.query.stock_id, user_id: userID}});
   if(!stock){
     return res.status(errorCodes.default).send(formatErrorResponse('Stock not found.'));
@@ -204,6 +208,26 @@ exports.getCartItem = async (req, res) => {
     product_type = product.type;
   }else{
     product_type = 'material';
+  }
+
+  /* get all sale on approval sale ids by user */
+  const sales = await SaleModel.findAll({
+    attributes: ["id"],
+    where: { 
+      is_approval: "1",
+      sale_by: userID,
+      is_approved: "3"
+    }
+  });
+  let saleIds = arrayColumn(sales, "id");
+  const saleProductExists = await SaleProductModel.findOne({
+    where: { 
+      certificate_no: certificate_no,
+      sale_id: { [Op.in]: saleIds }, 
+    },
+  });
+  if(saleProductExists){
+    return res.status(errorCodes.default).send(formatErrorResponse('Sale record exists.'));
   }
 
   if(product_type == "material"){

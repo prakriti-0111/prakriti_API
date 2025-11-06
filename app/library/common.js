@@ -2967,7 +2967,7 @@ const getStockUserID = async (req, userID) => {
   return userID;
 };
 
-const canStockAddCart = async (stockId, productType, user_id) => {
+const canStockAddCart = async (stockId, productType, user_id, certificate_no = null) => {
   if (productType == "material") {
     let stock = await StockModel.findOne({
       where: { id: stockId, user_id: user_id },
@@ -2997,6 +2997,33 @@ const canStockAddCart = async (stockId, productType, user_id) => {
       can_add_cart = false;
     }
   }
+
+  /* check if already sold or in sale on approval state */
+  // if(certificate_no != null){
+  //   /* get all sale on approval sale ids by user */
+  //   const sales = await SaleModel.findAll({
+  //     attributes: ["id"],
+  //     where: { 
+  //       is_approval: "1",
+  //       sale_by: user_id,
+  //       is_approved: "3"
+  //     }
+  //   });
+  //   let saleIds = arrayColumn(sales, "id");
+  //   const saleProductExists = await SaleProductModel.findOne({
+  //     where: { 
+  //       certificate_no: certificate_no,
+  //       sale_id: { [Op.in]: saleIds }, 
+  //     },
+  //   });
+  //   console.log("---------------------->saleProductExists->>>>>>>>>", saleProductExists);
+  //   if (!saleProductExists) {
+  //     can_add_cart = true;
+  //   } else {
+  //     can_add_cart = false;
+  //   }
+  // }
+
   return can_add_cart;
 };
 
