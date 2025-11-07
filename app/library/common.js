@@ -1529,49 +1529,68 @@ const getWalletBalance = async (
   payment_type,
   paymentId
 ) => {
-  payment_type = payment_type === undefined ? "wallet" : payment_type;
-  let paymentIdQ = "";
-  if (paymentId) {
-    paymentIdQ = " AND id <= " + paymentId;
-  }
-  if (!payment_mode) {
-    let query =
-      "SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND payment_belongs = " +
-      userId +
-      " AND payment_type = '" +
-      payment_type +
-      "' AND deleted_at IS NULL" +
-      paymentIdQ;
-    const paymentObj = await dbSequelize.query(query, {
-      type: QueryTypes.SELECT,
-    });
-    let total_debit = 0,
-      total_credit = 0;
-    if (paymentObj.length) {
-      total_debit = parseFloat(paymentObj[0].total_debit);
-      total_credit = parseFloat(paymentObj[0].total_credit);
+  try{
+    payment_type = payment_type === undefined ? "wallet" : payment_type;
+    let paymentIdQ = "";
+    if (paymentId) {
+      paymentIdQ = " AND id <= " + paymentId;
     }
-    return priceFormat(total_credit - total_debit);
-  } else {
-    let query =
-      "SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND  payment_belongs = " +
-      userId +
-      " AND payment_mode = '" +
-      payment_mode +
-      "' AND payment_type = '" +
-      payment_type +
-      "' AND deleted_at IS NULL" +
-      paymentIdQ;
-    const paymentObj = await dbSequelize.query(query, {
-      type: QueryTypes.SELECT,
-    });
-    let total_debit = 0,
-      total_credit = 0;
-    if (paymentObj.length) {
-      total_debit = parseFloat(paymentObj[0].total_debit);
-      total_credit = parseFloat(paymentObj[0].total_credit);
-    }
-    return priceFormat(total_credit - total_debit);
+    console.log("payment_mode : ", payment_mode);
+    if (!payment_mode) {
+      let query =
+        "SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND payment_belongs = " +
+        userId +
+        " AND payment_type = '" +
+        payment_type +
+        "' AND deleted_at IS NULL" +
+        paymentIdQ;
+        console.log(query);
+      const paymentObj = await dbSequelize.query(query, {
+        type: QueryTypes.SELECT,
+      });
+      let total_debit = 0,
+        total_credit = 0;
+      if (paymentObj.length) {
+        total_debit = parseFloat(paymentObj[0].total_debit);
+        total_credit = parseFloat(paymentObj[0].total_credit);
+      }
+      return priceFormat(total_credit - total_debit);
+    } else {
+      let query = "";
+      if(payment_mode == "Advance"){
+        query =
+          "SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND  payment_belongs = " +
+          userId +
+          " AND is_advance = '1' AND payment_type = '" +
+          payment_type +
+          "' AND deleted_at IS NULL" +
+          paymentIdQ;
+      } else {
+        query =
+          "SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND  payment_belongs = " +
+          userId +
+          " AND payment_mode = '" +
+          payment_mode +
+          "' AND payment_type = '" +
+          payment_type +
+          "' AND deleted_at IS NULL" +
+          paymentIdQ;
+          
+      }
+      console.log(query);
+      const paymentObj = await dbSequelize.query(query, {
+        type: QueryTypes.SELECT,
+      });
+      let total_debit = 0,
+        total_credit = 0;
+      if (paymentObj.length) {
+        total_debit = parseFloat(paymentObj[0].total_debit);
+        total_credit = parseFloat(paymentObj[0].total_credit);
+      }
+      return priceFormat(total_credit - total_debit);
+    } 
+  } catch(err){
+    console.log(err);
   }
 };
 
