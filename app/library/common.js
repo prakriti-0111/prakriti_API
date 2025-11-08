@@ -1451,6 +1451,7 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
     categories = [];
   for (let i = 0; i < stocks.length; i++) {
     let stock = stocks[i];
+    
     let taxInfo = null;
     if (
       (stock.type == "product" || stock.type == "return") &&
@@ -1497,6 +1498,13 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
       (item) => item.category_id == category_id
     );
     let stockQ = !stock.quantity ? 1 : stock.quantity;
+
+    /* if stock does not have certificate_no then consider material qty */
+    
+    if(stock.certificate_no == ""){
+      stockQ = stock.stockMaterials && stock.stockMaterials.length > 0 && stock.stockMaterials[0].quantity?stock.stockMaterials[0].quantity:stockQ;
+    }
+
     if (index !== -1) {
       categories[index].total_amount = priceFormat(
         categories[index].total_amount + thisPrice
