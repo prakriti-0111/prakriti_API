@@ -152,6 +152,7 @@ const getModelObject = async (data, req) => {
         making_charge_discount_amount: making_charge_discount_amount,
         total_discount: total_discount,
         stock_id: data.stock_id,
+        quantity: data.quantity,
         sale_product_id: data.sale_product_id,
         category_id: !isEmpty(data.product) ? data.product.category_id : 0,
         sub_category_id: !isEmpty(data.product) ? data.product.sub_category_id : 0,
