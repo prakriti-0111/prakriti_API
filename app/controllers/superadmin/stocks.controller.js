@@ -405,7 +405,7 @@ exports.index = async (req, res) => {
       /* console.log(sCond); */
       conditions = { ...conditions, [Op.or]: sCond };
     }
-    /* console.log("conditions =====: ", conditions); */
+    
 
     if(typeof material_id != "undefined" && material_id != null && material_id != "") {
       conditions.material_id = material_id;
@@ -422,7 +422,7 @@ exports.index = async (req, res) => {
     if (!isEmpty(size)) {
       sizeConditions.id = size;
     }*/
-
+    console.log("STOCK LIST conditions =====: ", conditions);
     const paginatorOptions = getPaginationOptions(page, limit);
     let limit_offset = {
       offset: paginatorOptions.offset,
@@ -463,6 +463,7 @@ exports.index = async (req, res) => {
         model: sizesModel,
         as: "size",
         where: sizeConditions,
+        required: false
       });
       _include.push({
         model: productsModel,
@@ -506,7 +507,7 @@ exports.index = async (req, res) => {
         ],
       });
     }
-    /* console.log(_include); */
+    console.log(_include);
 
     /* list should not show sale on approval stocks */
     
@@ -544,7 +545,7 @@ exports.index = async (req, res) => {
       })
       .then(async (data) => {
         //
-        /* console.log("-------this is actual value ",data.rows); */
+        console.log("-------this is actual value ",data.rows.length);
         let result = {
           items:
             type == "product" || type == "return"
