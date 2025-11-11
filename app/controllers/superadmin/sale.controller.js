@@ -1279,8 +1279,11 @@ exports.store = async (req, res) => {
       }
       //}
       console.log("remove stock : ", thisItem.stock_id);
+      console.log("thisItem.certificate_no : ", thisItem.certificate_no);
+      console.log("!isEmpty(thisItem.certificate_no) : ", !isEmpty(thisItem.certificate_no));
       //remove stock
-      if (isEmpty(sale_product_id) && product.type != "material") {
+      if (isEmpty(sale_product_id) && product.type != "material" && !isEmpty(thisItem.certificate_no)) {
+        console.log("removed !");
         await StockModel.destroy({ where: { id: thisItem.stock_id } });
       }
 
@@ -1329,7 +1332,7 @@ exports.store = async (req, res) => {
          * remove from stock materials
          */
         if (isEmpty(sale_product_id)) {
-          if (product.type == "material" || thisItem.certificate_no == "") {
+          if (product.type == "material" || isEmpty(thisItem.certificate_no)) {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 material_id: thisItem.materials[x].material_id,
@@ -1349,7 +1352,7 @@ exports.store = async (req, res) => {
                 },
                 { where: { id: stockMaterial.id } }
               );
-
+              console.log("stockMaterial.weight : ", parseFloat(stockMaterial.weight), " - thisItem.materials[x].weight = ",thisItem.materials[x].weight);
               if (
                 parseFloat(stockMaterial.weight) -
                   parseFloat(thisItem.materials[x].weight) <=
@@ -1660,7 +1663,7 @@ exports.store = async (req, res) => {
 
           let product = await ProductModel.findByPk(thisItem.product_id);
           let stock = null;
-          if (product.type == "material" || thisItem.certificate_no == "") {
+          if (product.type == "material" || isEmpty(thisItem.certificate_no)) {
             let quantity = 0;
             for (let x = 0; x < thisItem.saleMaterials.length; x++) {
               quantity += thisItem.saleMaterials[x].quantity
@@ -1689,9 +1692,10 @@ exports.store = async (req, res) => {
             stock = await StockModel.create({
               product_id: thisItem.product_id,
               size_id: thisItem.size_id || null,
+              purity_id: thisItem.saleMaterials[0]?.purity_id || null,
               certificate_no: thisItem.certificate_no,
               current_image: thisItem.current_image,
-              quantity: thisItem.certificate_no != ""?1:thisItem.saleMaterials[0]?.quantity,
+              quantity: !isEmpty(thisItem.certificate_no)?1:thisItem.saleMaterials[0]?.quantity,
               total_weight: thisItem.total_weight,
               user_id: parentUserID,
             });
@@ -1706,7 +1710,7 @@ exports.store = async (req, res) => {
               saleMaterial.unit.name,
               saleMaterial.weight
             );
-            if (product.type == "material" || thisItem.certificate_no == "") {
+            if (product.type == "material" || isEmpty(thisItem.certificate_no)) {
               let stockMaterial = await StockMaterialModel.findOne({
                 where: {
                   stock_id: stock.id,
@@ -1941,7 +1945,7 @@ exports.statuschange = async (req, res) => {
 
         let product = await ProductModel.findByPk(thisItem.product_id);
         let stock = null;
-        if (product.type == "material" || thisItem.certificate_no == "") {
+        if (product.type == "material" || isEmpty(thisItem.certificate_no)) {
           let quantity = 0;
           for (let x = 0; x < thisItem.saleMaterials.length; x++) {
             quantity += thisItem.saleMaterials[x].quantity
@@ -2011,9 +2015,10 @@ exports.statuschange = async (req, res) => {
           stock = await StockModel.create({
             product_id: thisItem.product_id,
             size_id: thisItem.size_id || null,
+            purity_id: thisItem.saleMaterials[0]?.purity_id || null,
             certificate_no: thisItem.certificate_no,
             current_image: current_image,
-            quantity: thisItem.certificate_no != ""?1:thisItem.saleMaterials[0]?.quantity,
+            quantity: isEmpty(thisItem.certificate_no)?1:thisItem.saleMaterials[0]?.quantity,
             total_weight: thisItem.total_weight,
             user_id: parentUserID,
           });
@@ -2028,7 +2033,7 @@ exports.statuschange = async (req, res) => {
             saleMaterial.unit.name,
             saleMaterial.weight
           );
-          if (product.type == "material" || thisItem.certificate_no == "") {
+          if (product.type == "material" || isEmpty(thisItem.certificate_no)) {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 stock_id: stock.id,
@@ -2096,7 +2101,7 @@ exports.statuschange = async (req, res) => {
 
       for (let item of sale.saleProducts) {
         let quantity = 1;
-        if (item.product && item.product.type == "material" || item.certificate_no == "") {
+        if (item.product && item.product.type == "material" || isEmpty(item.certificate_no)) {
           quantity = item.saleMaterials[0].quantity;
         }
         let cart = await cartModel.create({
@@ -2485,11 +2490,11 @@ exports.returnSale = async (req, res) => {
           weight_in_gram = 0;
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           quantity +=
-            return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == ""
+            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == ""
+            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           weight_in_gram += convertUnitToGram(
@@ -2498,7 +2503,7 @@ exports.returnSale = async (req, res) => {
           );
         }
         let stock = null;
-        if (return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == "") {
+        if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
           if (return_status == "completed") {
             let result = await updateOrCreate(
               StockModel,
@@ -2604,11 +2609,11 @@ exports.returnSale = async (req, res) => {
         //insert into return product materials table
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           let thisQty =
-            return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == ""
+            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == ""
+            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           await ReturnProductMaterialModel.create(
@@ -2631,7 +2636,7 @@ exports.returnSale = async (req, res) => {
             return_data.products[i].materials[x].unit_name,
             thisWeight
           );
-          if (return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == "") {
+          if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 stock_id: stock.id,
@@ -2695,7 +2700,7 @@ exports.returnSale = async (req, res) => {
           (from_retailer_customer && return_status == "completed")
         ) {
           //update sale product is return and return weight & qty into sale product material table
-          if (return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == "") {
+          if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
             let total_return_weight =
               parseFloat(saleProduct.saleMaterials[0].return_weight) +
               parseFloat(return_data.products[i].materials[0].return_weight);
@@ -2909,7 +2914,7 @@ exports.returnSaleNew = async (req, res) => {
       }
 
       stockPurchse = null;
-      if (return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == "") {
+      if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
         if (!isEmpty(return_data.products[i].product_id)) {
           /* check for purchase record in stock */
           stockPurchse = await StockModel.findOne({
@@ -3152,11 +3157,11 @@ exports.returnSaleNew = async (req, res) => {
           weight_in_gram = 0;
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           quantity +=
-            return_data.products[i].product_type == "material"  || saleProduct.certificate_no == ""
+            return_data.products[i].product_type == "material"  || isEmpty(saleProduct.certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material"  || saleProduct.certificate_no == ""
+            return_data.products[i].product_type == "material"  || isEmpty(saleProduct.certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           weight_in_gram += convertUnitToGram(
@@ -3165,7 +3170,7 @@ exports.returnSaleNew = async (req, res) => {
           );
         }
         let stock = null;
-        if (return_data.products[i].product_type == "material" || saleProduct.certificate_no == "") {
+        if (return_data.products[i].product_type == "material" || isEmpty(saleProduct.certificate_no)) {
           if (return_status == "completed") {
             let result = await updateOrCreate(
               StockModel,
@@ -3273,11 +3278,11 @@ exports.returnSaleNew = async (req, res) => {
         //insert into return product materials table
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           let thisQty =
-            return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == ""
+            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == ""
+            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           await ReturnProductMaterialModel.create(
@@ -3302,7 +3307,7 @@ exports.returnSaleNew = async (req, res) => {
             return_data.products[i].materials[x].unit_name,
             thisWeight
           );
-          if (return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == "") {
+          if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 stock_id: stock.id,
@@ -3368,7 +3373,7 @@ exports.returnSaleNew = async (req, res) => {
           (from_retailer_customer && return_status == "completed")
         ) {
           //update sale product is return and return weight & qty into sale product material table
-          if (return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == "") {
+          if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
             let total_return_weight =
               parseFloat(saleProduct.saleMaterials[0].return_weight) +
               parseFloat(return_data.products[i].materials[0].return_weight);
@@ -3433,7 +3438,7 @@ exports.returnSaleNew = async (req, res) => {
         //if (purchase.is_approved == 1) {
         stock = null;
         stockPurchse = null;
-        if (return_data.products[i].product_type == "material" || return_data.products[i].certificate_no == "") {
+        if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
           if (!isEmpty(return_data.products[i].product_id)) {
             stock = await StockModel.findOne({
               where: {
@@ -4224,7 +4229,7 @@ exports.delete = async (req, res) => {
     for (let i = 0; i < sale.saleProducts.length; i++) {
       let product = sale.saleProducts[i].product;
       if (product) {
-        if (product.type == "material" || product.certificate_no == "") {
+        if (product.type == "material" || isEmpty(product.certificate_no)) {
           let stock2 = await StockModel.findOne({
             where: { product_id: product.id, user_id: sale.user_id },
           });
