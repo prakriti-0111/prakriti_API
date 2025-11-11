@@ -457,6 +457,13 @@ exports.index = async (req, res) => {
         model: UserModel,
         as: "user",
       },
+      
+      {
+        model: PurityModel,
+        as: 'purity',
+        required: false
+      }
+        
     ];
     if (type == "product" || type == "return") {
       _include.push({

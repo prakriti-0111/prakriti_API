@@ -32,9 +32,15 @@ module.exports = (sequelize, DataTypes) => {
         },
         as: 'stockMaterials'
       });
+
       this.belongsTo(models.users, {
         foreignKey: "user_id",
         as: "user"
+      });
+
+      this.belongsTo(models.purities, {
+        foreignKey: "purity_id",
+        as: "purity"
       });
 
     }

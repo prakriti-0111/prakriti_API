@@ -116,9 +116,10 @@ exports.store = async (req, res) => {
     return res.status(errorCodes.default).send(formatErrorResponse('Product not found.'));
   }
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-
-  if(product.type == "material"){
-    let stock = await stockModel.findOne({where: {id: data.stock_id, user_id: userID}});
+  console.log("cart store data ===============: ", data);
+  let stock = await stockModel.findOne({where: {id: data.stock_id, user_id: userID}});
+  if(product.type == "material" || isEmpty(stock.certificate_no)){
+    
     let query = "SELECT SUM(quantity) as total_quantity FROM carts WHERE stock_id = " + data.stock_id + " AND deleted_at IS NULL";
     const cart = await sequelize.query(query, { type: QueryTypes.SELECT });
     if(!(!stock || !cart.length || cart[0].total_quantity == null || parseInt(cart[0].total_quantity) < parseInt(stock.quantity))){

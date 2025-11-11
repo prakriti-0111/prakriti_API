@@ -1089,6 +1089,7 @@ const calculateProductPriceCart = async (
     total_material_discount = 0,
     total_mrp_price = 0,
     total_sale_price = 0;
+  console.log("materials : ", materials);
   for (let i = 0; i < materials.length; i++) {
     let materialPriceObj = await MaterialPriceModel.findOne({
       where: { material_id: materials[i].material_id },
@@ -1163,6 +1164,7 @@ const calculateProductPriceCart = async (
       total_gram: weightFormat(total_gram),
     });
   }
+  console.log("total_mrp_price : ", total_mrp_price);
   let total_making_charge = 0;
   let making_charge_type = sub_category ? sub_category.making_charge_type : "";
   let making_charge = sub_category ? sub_category.making_charge : 0;
@@ -1179,6 +1181,7 @@ const calculateProductPriceCart = async (
     (total_making_charge * making_charge_discount_percent) / 100
   );
   total_mrp_price += total_making_charge;
+  console.log("total_mrp_price after making charge : ", total_mrp_price);
   total_making_charge = priceFormat(total_making_charge - discount_amount);
   total_discount += discount_amount;
   total_sale_price += total_making_charge;
@@ -1193,6 +1196,7 @@ const calculateProductPriceCart = async (
       ? priceFormat((total_mrp_price * parseFloat(tax_info.sgst)) / 100, true)
       : 0;
     total_mrp_price += igst + cgst + sgst;
+    console.log("total_mrp_price after tax : ", total_mrp_price);
     total_tax = igst + cgst + sgst;
     total_sale_price += priceFormat(igst + cgst + sgst);
   }
