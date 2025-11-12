@@ -3355,6 +3355,7 @@ const getPurchaseProducts = async (params) => {
       is_approval: false,
       sale_id: { [Op.is]: null },
       //type: { [Op.in]: ["product", "order_purchase"] },
+      type: {[Op.ne]: "material"},
       user_id: { [Op.in]: managerIds },
     },
     order: [["createdAt", "DESC"]],
