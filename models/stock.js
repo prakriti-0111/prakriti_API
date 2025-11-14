@@ -40,7 +40,7 @@ module.exports = (sequelize, DataTypes) => {
 
       this.belongsTo(models.purities, {
         foreignKey: "purity_id",
-        as: "purity"
+        as: "spurity"
       });
 
     }

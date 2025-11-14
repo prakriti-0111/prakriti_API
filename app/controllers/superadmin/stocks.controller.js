@@ -372,6 +372,7 @@ exports.index = async (req, res) => {
             //conditions = { ...conditions, [Op.or]: [{ '$product.name$': { [Op.like]: `%${s}%` } }, { certificate_no: s }, { '$product.product_code$': { [Op.like]: `%${s}%` } }, /*{ '$user.name$': { [Op.like]: `%${search}%` } }, { '$user.company_name$': { [Op.like]: `%${search}%` } }*/] };
           } else {
             sCond.push({ "$material.name$": { [Op.like]: `%${s}%` } });
+            sCond.push({ "$spurity.name$": { [Op.like]: `%${s}%` } });
             //conditions = { ...conditions, [Op.or]: [{ '$material.name$': { [Op.like]: `%${s}%` } }] };
           }
         }
@@ -379,13 +380,13 @@ exports.index = async (req, res) => {
       /* console.log(sCond); */
       conditions = { ...conditions, [Op.or]: sCond };
     } 
-    if(search.length>=8) {
+    /* if(search.length>=8) {
       let sArr = search.split(",");
-      /* console.log(sArr); */
+      
       for (let i = 0; i < sArr.length; i++) {
-        /* console.log("sArr : ", sArr[i]); */
+        
         let s = sArr[i].trim().toLowerCase();
-        /* console.log("s : ", s); */
+       
         if (s.indexOf("gm") !== -1) {
           s = s.replace("gm", "").trim();
           sCond.push({ total_weight: { [Op.lte]: `${s}` } });
@@ -395,16 +396,17 @@ exports.index = async (req, res) => {
             sCond.push({ "$product.name$": { [Op.like]: `%${s}%` } });
             sCond.push({ certificate_no: s });
             sCond.push({ "$product.product_code$": { [Op.like]: `%${s}%` } });
-            conditions = { ...conditions, [Op.or]: [{ '$product.name$': { [Op.like]: `%${s}%` } }, { certificate_no: s }, { '$product.product_code$': { [Op.like]: `%${s}%` } }, /*{ '$user.name$': { [Op.like]: `%${search}%` } }, { '$user.company_name$': { [Op.like]: `%${search}%` } }*/] };
+            conditions = { ...conditions, [Op.or]: [{ '$product.name$': { [Op.like]: `%${s}%` } }, { certificate_no: s }, { '$product.product_code$': { [Op.like]: `%${s}%` } }] };
           } else {
             sCond.push({ "$material.name$": { [Op.like]: `%${s}%` } });
+            sCond.push({ "$purity.name$": { [Op.like]: `%${s}%` } });
             conditions = { ...conditions, [Op.or]: [{ '$material.name$': { [Op.like]: `%${s}%` } }] };
           }
         }
       }
-      /* console.log(sCond); */
+      
       conditions = { ...conditions, [Op.or]: sCond };
-    }
+    } */
     
 
     if(typeof material_id != "undefined" && material_id != null && material_id != "") {
@@ -460,8 +462,8 @@ exports.index = async (req, res) => {
       
       {
         model: PurityModel,
-        as: 'purity',
-        required: false
+        as: 'spurity',
+        required: true,
       }
         
     ];
@@ -515,7 +517,7 @@ exports.index = async (req, res) => {
       });
     }
     console.log(_include);
-
+    console.log(conditions);
     /* list should not show sale on approval stocks */
     
     /* get all sale on approval sale ids by user */
