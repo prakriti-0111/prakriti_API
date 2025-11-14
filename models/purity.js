@@ -11,6 +11,13 @@ module.exports = (sequelize, DataTypes) => {
      */
     static associate(models) {
       // define association here
+      this.hasMany(models.stock_materials, {
+        foreignKey: {
+          name: 'purity_id',
+          allowNull: true
+        },
+        as: 'stockMaterials'
+      });
     }
   }
   Purity.init({
