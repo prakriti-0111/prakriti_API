@@ -1554,7 +1554,7 @@ exports.statuschange = async (req, res) => {
 
   try {
     let sale_id = null;
-    let gold24kPurityId = 22;
+    let gold24kPurityId = 3;
     const trans = await sequelize.transaction(async (t) => {
       if (data.approve_status != 4) {
         let purchaseObj = {
@@ -1612,7 +1612,7 @@ exports.statuschange = async (req, res) => {
               stock_type = "material";
             }
             let stock = null;
-            if (product_type == "material" || isEmpty(thisItem.certificate_no)) {
+            if (product_type == "material" || (product_type != "material" && isEmpty(thisItem.certificate_no))) {
               let quantity = 0;
               for (let x = 0; x < thisItem.materials.length; x++) {
                 quantity += thisItem.materials[x].quantity
@@ -1635,9 +1635,9 @@ exports.statuschange = async (req, res) => {
                 };
               if (purchase.type == "material") {
                 _wC.material_id = thisItem.material_id;
-                _wC.purity_id = gold24kPurityId; //24K gold //thisItem.materials[0].purity_id;
+                _wC.purity_id = thisItem.material_id == "1" || thisItem.material_id == "2"?gold24kPurityId:thisItem.materials[0].purity_id; //24K gold //thisItem.materials[0].purity_id;
                 _iu_data.material_id = thisItem.material_id;
-                _iu_data.purity_id = gold24kPurityId; //thisItem.materials[0].purity_id;
+                _iu_data.purity_id = thisItem.material_id == "1" || thisItem.material_id == "2"?gold24kPurityId:thisItem.materials[0].purity_id; //thisItem.materials[0].purity_id;
               } else {
                 _wC.product_id = thisItem.product_id;
                 _iu_data.product_id = thisItem.product_id;
@@ -1669,8 +1669,9 @@ exports.statuschange = async (req, res) => {
                   purchase_product_id: thisItem.id,
                   product_id: thisItem.product_id || null,
                   size_id: thisItem.size_id || null,
+                  purity_id: thisItem.materials[0].purity_id || null,
                   certificate_no: thisItem.certificate_no,
-                  quantity: thisItem.certificate_no != ""?1:thisItem.materials[0]?.quantity,
+                  quantity: 1,
                   total_weight: thisItem.total_weight,
                   user_id: userID, //isSuperAdmin(req) ? null : req.userId,
                   type: stock_type,
@@ -1714,11 +1715,12 @@ exports.statuschange = async (req, res) => {
                * add to stock materials
                */
               // console.log("----stock is ",stockMaterial)
-              if (product_type == "material" || isEmpty(thisItem.certificate_no)) {
+              if (product_type == "material" || (product_type != "material" && isEmpty(thisItem.certificate_no))) {
                 let stockMaterial = await StockMaterialModel.findOne({
                   where: {
                     stock_id: stock.id,
                     material_id: thisItem.materials[x].material_id,
+                    purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id
                   },
                 });
                 let unit = await UnitModel.findByPk(thisItem.materials[x].unit_id);
@@ -1740,7 +1742,7 @@ exports.statuschange = async (req, res) => {
                           weightFormat(pakka_weight_in_gram)
                       ),
                       quantity: thisquantity,
-                      purity_id: isEmpty(thisItem.certificate_no)?thisItem.materials[x].purity_id:gold24kPurityId, 
+                      purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id, 
                       unit_id: thisItem.materials[x].unit_id,
                       category_id: category_id,
                     },
@@ -1756,7 +1758,7 @@ exports.statuschange = async (req, res) => {
                         pakka_weight_in_gram
                       ),
                       quantity: thisItem.materials[x].quantity || 0,
-                      purity_id: isEmpty(thisItem.certificate_no)?thisItem.materials[x].purity_id:gold24kPurityId, 
+                      purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id,
                       unit_id: thisItem.materials[x].unit_id,
                       category_id: category_id,
                     },
@@ -1959,7 +1961,7 @@ exports.statuschange = async (req, res) => {
 
                 let product = await ProductModel.findByPk(thisItem.product_id);
                 let stock = null;
-                if (product.type == "material" || isEmpty(thisItem.certificate_no)) {
+                if (product.type == "material" || (product_type != "material" && isEmpty(thisItem.certificate_no))) {
                   let quantity = 0;
                   for (let x = 0; x < thisItem.materials.length; x++) {
                     quantity += thisItem.materials[x].quantity
@@ -1971,7 +1973,7 @@ exports.statuschange = async (req, res) => {
                     {
                       product_id: thisItem.product_id,
                       user_id: parentUserID,
-                      purity_id: isEmpty(thisItem.certificate_no)?thisItem.materials[0].purity_id:gold24kPurityId 
+                      purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id
                     },
                     {
                       purchase_id: purchase.id,
@@ -1980,7 +1982,7 @@ exports.statuschange = async (req, res) => {
                       quantity: quantity,
                       total_weight: thisItem.total_weight,
                       user_id: parentUserID,
-                      purity_id: isEmpty(thisItem.certificate_no)?thisItem.materials[0].purity_id:gold24kPurityId
+                      purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id
                     },
                     t,
                     ["quantity", "total_weight"]
@@ -2000,8 +2002,9 @@ exports.statuschange = async (req, res) => {
                       purchase_product_id: thisItem.id,
                       product_id: thisItem.product_id,
                       size_id: thisItem.size_id || null,
+                      purity_id: thisItem.materials[0]?.purity_id || null,
                       certificate_no: thisItem.certificate_no,
-                      quantity: thisItem.certificate_no != ""?1:thisItem.materials[0]?.quantity,
+                      quantity: 1,
                       total_weight: thisItem.total_weight,
                       user_id: parentUserID,
                     },
@@ -2035,11 +2038,12 @@ exports.statuschange = async (req, res) => {
                   /**
                    * add to stock materials
                    */
-                  if (product.type == "material" || isEmpty(thisItem.certificate_no)) {
+                  if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
                     let stockMaterial = await StockMaterialModel.findOne({
                       where: {
                         stock_id: stock.id,
                         material_id: thisItem.materials[x].material_id,
+                        purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id
                       },
                     });
                     let unit = await UnitModel.findByPk(thisItem.materials[x].unit_id);
@@ -2061,7 +2065,7 @@ exports.statuschange = async (req, res) => {
                               weightFormat(pakka_weight_in_gram)
                           ),
                           quantity: thisquantity,
-                          purity_id: isEmpty(thisItem.certificate_no)?thisItem.materials[x].purity_id:gold24kPurityId,
+                          purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id,
                           unit_id: thisItem.materials[x].unit_id,
                           category_id: product.category_id,
                         },
@@ -2077,7 +2081,7 @@ exports.statuschange = async (req, res) => {
                             pakka_weight_in_gram
                           ),
                           quantity: thisItem.materials[x].quantity || 0,
-                          purity_id: gold24kPurityId, //thisItem.materials[x].purity_id,
+                          purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id,
                           unit_id: thisItem.materials[x].unit_id,
                           category_id: product.category_id,
                         },
@@ -2192,7 +2196,7 @@ exports.statuschange = async (req, res) => {
           });
 
           //update sale product is return and return weight & qty into sale product material table
-          if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
+          if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
             let total_return_weight =
               parseFloat(saleProduct.saleMaterials[0].return_weight) +
               parseFloat(return_data.products[i].materials[0].return_weight);
@@ -2844,7 +2848,7 @@ exports.returnProducts = async (req, res) => {
       });
 
       let stock = null;
-      if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
+      if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
         if (!isEmpty(return_data.products[i].product_id)) {
           stock = await StockModel.findOne({
             where: {
@@ -3043,11 +3047,11 @@ exports.returnProducts = async (req, res) => {
         //insert into return product materials table
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           let thisQty =
-            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           await ReturnProductMaterialModel.create(
@@ -3080,7 +3084,7 @@ exports.returnProducts = async (req, res) => {
         }
 
         //update purchase product is return and return weight & qty into purchase product material table
-        if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
+        if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
           let total_return_weight =
             parseFloat(purchaseProduct.purchaseMaterials[0].return_weight) +
             parseFloat(return_data.products[i].materials[0].return_weight);
@@ -3121,7 +3125,7 @@ exports.returnProducts = async (req, res) => {
          */
         if (purchase.is_approved == 1) {
           let stock = null;
-          if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
+          if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
             if (!isEmpty(return_data.products[i].product_id)) {
               stock = await StockModel.findOne({
                 where: {
