@@ -1724,7 +1724,7 @@ exports.statuschange = async (req, res) => {
                   },
                 });
                 let unit = await UnitModel.findByPk(thisItem.materials[x].unit_id);
-                let actualWeight = isEmpty(thisItem.certificate_no)?thisItem.materials[x].weight:thisItem.materials[x].pakka_weight;
+                let actualWeight = thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?thisItem.materials[x].pakka_weight:thisItem.materials[x].weight;
                 let pakka_weight_in_gram = isEmpty(thisItem.certificate_no)?convertUnitToGram(unit.name, actualWeight):convertUnitToGram(unit.name, actualWeight);
                 if (stockMaterial) {
                   let thisquantity = thisItem.materials[x].quantity
@@ -2047,7 +2047,7 @@ exports.statuschange = async (req, res) => {
                       },
                     });
                     let unit = await UnitModel.findByPk(thisItem.materials[x].unit_id);
-                    let actualWeight = isEmpty(thisItem.certificate_no)?thisItem.materials[x].weight:thisItem.materials[x].pakka_weight;
+                    let actualWeight = thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?thisItem.materials[x].pakka_weight:thisItem.materials[x].weight;
                     let pakka_weight_in_gram = convertUnitToGram(unit.name, actualWeight);
                     if (stockMaterial) {
                       let thisquantity = thisItem.materials[x].quantity
