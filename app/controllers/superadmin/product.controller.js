@@ -29,7 +29,7 @@ const {
 } = require("@resources/superadmin/CategoryCollection");
 const { Op } = require("sequelize");
 const order = require("../../../models/order");
-const { add } = require("lodash");
+const { add, conformsTo } = require("lodash");
 const sequelize = db.sequelize;
 const UserModel = db.users;
 const ProductModel = db.products;
@@ -370,6 +370,7 @@ exports.store = async (req, res) => {
           let mObject = {
             product_id: product.id,
             material_id: data.materials[i],
+            group: data.materialGroup && data.materialGroup[i] ? data.materialGroup[i] : null,
           };
           await ProductMaterialModel.create(mObject, { transaction: t });
         }
@@ -586,12 +587,15 @@ exports.update = async (req, res) => {
       //create product materials
       let mIds = [],
         pcertificatesIds = [];
+      console.log("data ============: ",data);
       if (data.type != "material") {
         for (let i = 0; i < data.materials.length; i++) {
           let mObject = {
             product_id: product.id,
             material_id: data.materials[i],
+            group: data.materialGroup && data.materialGroup[i] ? data.materialGroup[i] : null,
           };
+          console.log("mObject : ", mObject);
           //let result = await updateOrCreate(ProductMaterialModel, mObject, mObject, t);
           let result = await ProductMaterialModel.create(mObject, {
             transaction: t,
