@@ -23,17 +23,18 @@ module.exports = (sequelize, DataTypes) => {
     },
     product_id: DataTypes.INTEGER,
     material_id: DataTypes.INTEGER,
+    group: DataTypes.INTEGER,
     createdAt: {
       field: 'created_at',
       type: DataTypes.DATE,
     },
     updatedAt: {
-        field: 'updated_at',
-        type: DataTypes.DATE,
+      field: 'updated_at',
+      type: DataTypes.DATE,
     },
     deletedAt: {
-        field: 'deleted_at',
-        type: DataTypes.DATE,
+      field: 'deleted_at',
+      type: DataTypes.DATE,
     }
   }, {
     sequelize,

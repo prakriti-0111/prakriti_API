@@ -58,6 +58,13 @@ const getModelObject = async(data, params) => {
     let materialNames = arrayColumn(materials, 'name');
     let certificateNames = arrayColumn(certificates, 'name');
 
+    let marerialGroups = [];
+    for(let i = 0; i < materials.length; i++){
+        if(materials[i].id && materials[i].id != null){
+            marerialGroups[materials[i].id] = (materials[i].group);
+        }
+    }
+
     let taxInfo = null;
     if('tax' in data && data.tax){
         taxInfo = {
@@ -195,6 +202,7 @@ const getModelObject = async(data, params) => {
         video: video,
         sizes: sizes,
         materials: materials,
+        marerialGroups: marerialGroups,
         certificates: certificates,
         //certificate: data.certificate ? data.certificate.name : '',
         category: data.category ? data.category.name : '',
