@@ -3950,6 +3950,8 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
         materialString.push(str);
         if (product && product.type == "material") {
           weight_display.push(weightFormat(quantity));
+        } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+          weight_display.push(weightFormat(quantity));
         } else {
           weight_display.push(weightFormat(weight));
         }
@@ -4004,6 +4006,9 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
               ? materialItem[0].quantity
               : 0
             : 1;
+        if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+          stockQ = materialItem.length ? materialItem[0].quantity : 1;
+        }
         if (index !== -1) {
           categories[index].total_amount = priceFormat(
             categories[index].total_amount + priceFormat(pp.total)
