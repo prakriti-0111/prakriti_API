@@ -1815,59 +1815,60 @@ exports.store = async (req, res) => {
 exports.statuschange = async (req, res) => {
   let data = req.body;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let sale = await SaleModel.findOne({
-    where: { id: req.params.id, sale_by: userID },
-    include: [
-      {
-        model: SaleProductModel,
-        as: "saleProducts",
-        separate: true,
-        include: [
-          {
-            model: SaleProductMaterialModel,
-            as: "saleMaterials",
-            separate: true,
-            include: [
-              {
-                model: UnitModel,
-                as: "unit",
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  });
-  if (!sale) {
-    return res
-      .status(errorCodes.default)
-      .send(formatErrorResponse("Sale not found"));
-  }
-
-  let return_payment_mode = data.return_payment_mode
-    ? data.return_payment_mode
-    : "cash";
-  if (data.approve_status == 2 && data.decline_type == "return") {
-    let paidAmnt = parseFloat(sale.paid_amount);
-    let payment = await paymentModel.findOne({
-      where: { table_type: "sale", table_id: sale.id },
-    });
-    if (payment) {
-      if (payment.payment_mode == "cheque" && payment.status == "pending") {
-        paidAmnt = priceFormat(paidAmnt - parseFloat(payment.amount));
-      }
-    }
-    if (paidAmnt > 0) {
-      let walletBalance = await getWalletBalance(userID, return_payment_mode);
-      if (walletBalance < paidAmnt) {
-        return res
-          .status(errorCodes.default)
-          .send(formatErrorResponse("Insufficient wallet balance."));
-      }
-    }
-  }
-
+  console.log("status change data =================: ", data);
   try {
+    let sale = await SaleModel.findOne({
+      where: { id: req.params.id, sale_by: userID },
+      include: [
+        {
+          model: SaleProductModel,
+          as: "saleProducts",
+          separate: true,
+          include: [
+            {
+              model: SaleProductMaterialModel,
+              as: "saleMaterials",
+              separate: true,
+              include: [
+                {
+                  model: UnitModel,
+                  as: "unit",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    if (!sale) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Sale not found"));
+    }
+
+    let return_payment_mode = data.return_payment_mode
+      ? data.return_payment_mode
+      : "cash";
+    if (data.approve_status == 2 && data.decline_type == "return") {
+      let paidAmnt = parseFloat(sale.paid_amount);
+      let payment = await paymentModel.findOne({
+        where: { table_type: "sale", table_id: sale.id },
+      });
+      if (payment) {
+        if (payment.payment_mode == "cheque" && payment.status == "pending") {
+          paidAmnt = priceFormat(paidAmnt - parseFloat(payment.amount));
+        }
+      }
+      if (paidAmnt > 0) {
+        let walletBalance = await getWalletBalance(userID, return_payment_mode);
+        if (walletBalance < paidAmnt) {
+          return res
+            .status(errorCodes.default)
+            .send(formatErrorResponse("Insufficient wallet balance."));
+        }
+      }
+    }
+    
     if (data.approve_status != 4) {
       await SaleModel.update(
         {
@@ -2104,7 +2105,8 @@ exports.statuschange = async (req, res) => {
 
       for (let item of sale.saleProducts) {
         let quantity = 1;
-        if (item.product && item.product.type == "material" || (item.product.type != "material" && isEmpty(item.certificate_no))) {
+        let product = await ProductModel.findByPk(item.product_id);
+        if (product && product.type == "material" || (product.type != "material" && isEmpty(item.certificate_no))) {
           quantity = item.saleMaterials[0].quantity;
         }
         let cart = await cartModel.create({
@@ -2134,6 +2136,7 @@ exports.statuschange = async (req, res) => {
 
     res.send(formatResponse([], "Status Changed successfully!"));
   } catch (error) {
+    console.log("status change error: ", error);
     return res.status(errorCodes.default).send(formatErrorResponse(error));
   }
 };
