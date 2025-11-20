@@ -3484,6 +3484,8 @@ const getPurchaseProducts = async (params) => {
         if (product && product.type == "material") {
           //console.log(pm.quantity, pm.return_qty, product.name)
           weight_display.push(weightFormat(quantity));
+        } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){ 
+          weight_display.push(weightFormat(quantity));
         } else {
           weight_display.push(weightFormat(weight));
         }
@@ -3527,6 +3529,8 @@ const getPurchaseProducts = async (params) => {
         total_return_product += materialItem.length
           ? materialItem[0].return_qty
           : 0;
+      } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+        total_product += materialItem.length ? materialItem[0].quantity : 1;
       } else {
         total_product++;
         //total_return_product++;
@@ -3543,6 +3547,9 @@ const getPurchaseProducts = async (params) => {
               ? materialItem[0].quantity
               : 0
             : 1;
+        if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+          stockQ = materialItem.length?materialItem[0].quantity:1;
+        }
         if (index !== -1) {
           categories[index].total_amount = priceFormat(
             categories[index].total_amount + priceFormat(pp.total)
@@ -3709,6 +3716,8 @@ const getPurchaseProductsUser = async (req, params) => {
         if (product && product.type == "material") {
           //console.log(pm.quantity, pm.return_qty, product.name)
           weight_display.push(weightFormat(quantity));
+        } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){ 
+          weight_display.push(weightFormat(quantity));
         } else {
           weight_display.push(weightFormat(weight));
         }
@@ -3753,6 +3762,8 @@ const getPurchaseProductsUser = async (req, params) => {
         total_return_product += materialItem.length
           ? materialItem[0].return_qty
           : 0;
+      } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+        total_product += materialItem.length ? materialItem[0].quantity : 1;
       } else {
         total_product++;
         //total_return_product++;
@@ -3769,6 +3780,9 @@ const getPurchaseProductsUser = async (req, params) => {
               ? materialItem[0].quantity
               : 0
             : 1;
+        if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+          stockQ = materialItem.length?materialItem[0].quantity:1;
+        }    
         if (index !== -1) {
           categories[index].total_amount = priceFormat(
             categories[index].total_amount + priceFormat(pp.total)
@@ -3973,6 +3987,8 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
       }
       if (product && product.type == "material") {
         total_product += materialItem.length ? materialItem[0].quantity : 0;
+      } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+        total_product += materialItem.length ? materialItem[0].quantity : 1;
       } else {
         total_product++;
       }
