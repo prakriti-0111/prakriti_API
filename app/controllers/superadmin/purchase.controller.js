@@ -227,6 +227,7 @@ exports.txnLedger = async (req, res) => {
           where: !isEmpty(search) && !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")
             ? {
                 [Op.or]: [
+                  /* { invoice_number: { [Op.like]: `%${search}%` } }, */
                   { amount: { [Op.like]: `%${search}%` } },
                   { payment_mode: { [Op.like]: `%${search}%` } },
                   { notes: { [Op.like]: `%${search}%` } },
@@ -277,6 +278,10 @@ exports.txnLedger = async (req, res) => {
 
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
+    tableData.sort((a, b) => {
+      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
+    });
 
     if(!isEmpty(search) && (search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")){
       tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
@@ -292,6 +297,9 @@ exports.txnLedger = async (req, res) => {
       }
       return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
     }).reverse();
+    
+    
+    console.log("----------passbook----------", passbook);
 
     let result = {
       items: passbook,
@@ -346,6 +354,7 @@ exports.downloadTxnLedger = async (req, res) => {
           where: !isEmpty(search) && !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")
             ? {
                 [Op.or]: [
+                  /* { invoice_number: { [Op.like]: `%${search}%` } }, */
                   { amount: { [Op.like]: `%${search}%` } },
                   { payment_mode: { [Op.like]: `%${search}%` } },
                   { notes: { [Op.like]: `%${search}%` } },
@@ -396,6 +405,10 @@ exports.downloadTxnLedger = async (req, res) => {
 
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
+    tableData.sort((a, b) => {
+      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
+    });
 
     if(!isEmpty(search) && (search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")){
       tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
@@ -403,7 +416,7 @@ exports.downloadTxnLedger = async (req, res) => {
 
     // Compute running balance (Due Amount)
     let runningBalance = 0;
-    const passbook = tableData.reverse().map((tx, index) => {
+    let passbook = tableData.reverse().map((tx, index) => {
       if (tx.type === 'Purchase') {
         runningBalance += tx.txn_amount;
       } else if (tx.type === 'Payment') {
@@ -411,6 +424,12 @@ exports.downloadTxnLedger = async (req, res) => {
       }
       return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
     }).reverse();
+
+    passbook = passbook.sort((a, b) => {
+      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
+    });
+    console.log("----------passbook----------", passbook);
 
     /* let result = {
       items: passbook,
