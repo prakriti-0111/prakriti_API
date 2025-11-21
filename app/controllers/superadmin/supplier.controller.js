@@ -53,7 +53,7 @@ exports.index = async (req, res) => {
       })
       .then(async (data) => {
         let items = await SupplierCollection(data, currentUserId);
-        if (isAdmin(req) && page == 1) {
+        if (isAdmin(req)/*  && page == 1 */) {
           let user = await userModel.findOne({
             where: { role_id: getRoleId("superadmin") },
           });
@@ -62,8 +62,9 @@ exports.index = async (req, res) => {
             currentUserId,
             false
           );
+          console.log("------------------loged superAdminItem",superAdminItem);
           items = [superAdminItem].concat(items);
-        } else if (isDistributor(req) && page == 1) {
+        } else if (isDistributor(req)/*  && page == 1 */) {
           let user = await getDistributorAdmin(req.userId, null, true);
           let adminItem = await SupplierCollection(user, currentUserId, false);
           items = [adminItem].concat(items);
@@ -71,7 +72,7 @@ exports.index = async (req, res) => {
 
         let result = {
           items: items,
-          total: data.length,
+          total: items.length,
         };
         res.send(formatResponse(result, "All Supplier"));
       })
@@ -157,7 +158,7 @@ exports.index = async (req, res) => {
 
         let result = {
           items: items,
-          total: data.count,
+          total: items.length, /* data.count */
           total_purchase: priceFormat(total_purchase),
           total_purchase_due: priceFormat(total_purchase_due),
           total_purchase_paid: priceFormat(total_purchase_paid),

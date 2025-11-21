@@ -1599,7 +1599,11 @@ const getWalletBalance = async (
         total_debit = parseFloat(paymentObj[0].total_debit);
         total_credit = parseFloat(paymentObj[0].total_credit);
       }
-      return priceFormat(total_credit - total_debit);
+      if(payment_mode == "Advance"){
+        return priceFormat(total_credit);
+      } else {
+        return priceFormat(total_credit - total_debit);
+      }
     } 
   } catch(err){
     console.log(err);
