@@ -1526,7 +1526,7 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
   }
 
   // console.log(" Total_Prize :- ", + total_price);
-
+  console.log("By categories ---------------: ", categories);
   return byCategory ? categories : priceFormat(total_price);
 };
 
