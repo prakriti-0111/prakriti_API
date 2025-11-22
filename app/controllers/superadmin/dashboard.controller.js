@@ -698,13 +698,14 @@ exports.index = async (req, res) => {
       });
 
       // all SE by admin
-      let _cond_se_in_chain = await getAdminSEWhereCondition(distributors);
+      let uIdsArr_SE = distributorsIds.concat(admin_id);
+      let _cond_se_in_chain = await getAdminSEWhereCondition(uIdsArr_SE, null, true);
       let allSE = await UserModel.findAll({
         attributes: ["id"],
         where: _cond_se_in_chain,
       });
       let allSEIds = arrayColumn(allSE, "id");
-
+      console.log("==================== _cond_se_in_chain :", _cond_se_in_chain);
       totalRetailer += await UserModel.count({
         where: { role_id: retailerRoleId, parent_id: { [Op.in]: allSEIds } },
       });

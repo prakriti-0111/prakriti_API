@@ -921,6 +921,10 @@ exports.getStockPriceByCategory = async (req, res) => {
       });
       userIdArr = arrayColumn(distributors, "id");
       bySpecific = true;
+    } else if(by_specific === "0"){ 
+      let ownUserIds = await avlStockUserIdsNew(req, superAdminRoleId);
+      userIdArr = ownUserIds;
+      bySpecific = true;
     } else if (total_avl_stock == 1) {
       let ownUserIds = await avlStockUserIdsNew(req, adminRoleId);
       ownUserIds.push(userID);
