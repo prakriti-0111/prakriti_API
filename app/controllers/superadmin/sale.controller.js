@@ -3179,11 +3179,11 @@ exports.returnSaleNew = async (req, res) => {
           weight_in_gram = 0;
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           quantity +=
-            return_data.products[i].product_type == "material"  || isEmpty(saleProduct.certificate_no)
+            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material"  || isEmpty(saleProduct.certificate_no)
+            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           weight_in_gram += convertUnitToGram(
@@ -3192,7 +3192,7 @@ exports.returnSaleNew = async (req, res) => {
           );
         }
         let stock = null;
-        if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(saleProduct.certificate_no))) {
+        if (return_data.products[i].product_type == "material") {
           if (return_status == "completed") {
             let result = await updateOrCreate(
               StockModel,
@@ -3272,8 +3272,9 @@ exports.returnSaleNew = async (req, res) => {
             {
               product_id: return_data.products[i].product_id,
               size_id: return_data.products[i].size_id || null,
+              purity_id: return_data.products[i].materials[0].purity_id,
               certificate_no: return_data.products[i].certificate_no,
-              quantity: 1,
+              quantity: !isEmpty(return_data.products[i].certificate_no)?1:parseInt(return_data.products[i].materials[0].return_qty),
               current_image: current_image,
               total_weight: weight_in_gram,
               user_id: req.userId,
@@ -3300,11 +3301,11 @@ exports.returnSaleNew = async (req, res) => {
         //insert into return product materials table
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           let thisQty =
-            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           await ReturnProductMaterialModel.create(
@@ -3329,7 +3330,7 @@ exports.returnSaleNew = async (req, res) => {
             return_data.products[i].materials[x].unit_name,
             thisWeight
           );
-          if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
+          if (return_data.products[i].product_type == "material") {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 stock_id: stock.id,
@@ -3396,7 +3397,7 @@ exports.returnSaleNew = async (req, res) => {
           (from_retailer_customer && return_status == "completed")
         ) {
           //update sale product is return and return weight & qty into sale product material table
-          if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
+          if (return_data.products[i].product_type == "material") {
             let total_return_weight =
               parseFloat(saleProduct.saleMaterials[0].return_weight) +
               parseFloat(return_data.products[i].materials[0].return_weight);
@@ -3461,14 +3462,26 @@ exports.returnSaleNew = async (req, res) => {
         //if (purchase.is_approved == 1) {
         stock = null;
         stockPurchse = null;
-        if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
+        if (return_data.products[i].product_type == "material") {
           if (!isEmpty(return_data.products[i].product_id)) {
+            console.log("+++++++++++++++ product stock +++++++++++++++");
+            console.log({
+                product_id: return_data.products[i].product_id,
+                user_id: req.userId,
+
+              });
             stock = await StockModel.findOne({
               where: {
                 product_id: return_data.products[i].product_id,
                 user_id: req.userId,
+
               },
             });
+            console.log("+++++++++++++++ purchase stock +++++++++++++++");
+            console.log({
+                product_id: return_data.products[i].product_id,
+                user_id: req.userId,
+              });
             stockPurchse = await StockModel.findOne({
               where: {
                 product_id: return_data.products[i].product_id,
@@ -3536,10 +3549,10 @@ exports.returnSaleNew = async (req, res) => {
                 let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery);
                 if (purchaseProduct && purchaseProduct.current_image) {
                   current_image = purchaseProduct.current_image;
-                } else if (return_data.products[i].id) {
+                } else if (return_data.products[i] && return_data.products[i]?.id) {
                   // Fourth, check PurchaseProduct by ID
                   let purchaseProductById = await PurchaseProductModel.findOne({
-                    where: { id: return_data.products[i].id }
+                    where: { id: return_data.products[i]?.id }
                   });
                   if (purchaseProductById && purchaseProductById.current_image) {
                     current_image = purchaseProductById.current_image;
@@ -3550,11 +3563,12 @@ exports.returnSaleNew = async (req, res) => {
             
             stock = await StockModel.create(
               {
-                purchase_id: purchase.id,
+                purchase_id: purchase?.id,
                 current_image: current_image,
-                purchase_product_id: return_data.products[i].id,
+                purchase_product_id: return_data.products[i]?.id,
                 product_id: return_data.products[i].product_id,
                 size_id: return_data.products[i].size_id || null,
+                purity_id: return_data.products[i].materials[0].purity_id,
                 certificate_no: return_data.products[i].certificate_no,
                 quantity: 1,
                 total_weight: return_data.products[i].total_weight,
@@ -3568,16 +3582,29 @@ exports.returnSaleNew = async (req, res) => {
             weight = 0,
             unit_name = "";
           for (let mItem of return_data.products[i].materials) {
-            let stockM = await StockMaterialModel.findOne({
-              where: { stock_id: stock.id, material_id: mItem.material_id, purity_id: mItem.purity_id },
-            });
-            let stockMPurchase = await StockMaterialModel.findOne({
-              where: {
-                stock_id: stockPurchse.id,
-                material_id: mItem.material_id,
-                purity_id: mItem.purity_id
-              },
-            });
+            let stockM = null;
+            let stockMPurchase = null;
+
+            if (stock != null) {
+              stockM = await StockMaterialModel.findOne({
+                where: { stock_id: stock?.id, material_id: mItem.material_id, purity_id: mItem.purity_id },
+                transaction: t,
+              });
+            }
+            if (stockPurchse != null) {
+              stockMPurchase = await StockMaterialModel.findOne({
+                where: {
+                  stock_id: stockPurchse?.id,
+                  material_id: mItem.material_id,
+                  purity_id: mItem.purity_id
+                },
+                transaction: t,
+              });
+            }
+            console.log("---------------------- stockM ----------------------");
+            console.log(stockM);
+            console.log("---------------------- stockMPurchase ----------------------");
+            console.log(stockMPurchase);
             weight += mItem.return_weight ? parseInt(mItem.return_weight) : 0;
             if (stockM) {
               await StockMaterialModel.update(
@@ -3588,12 +3615,12 @@ exports.returnSaleNew = async (req, res) => {
                   quantity:
                     parseFloat(stockM.quantity) + parseInt(mItem.return_qty),
                 },
-                { where: { id: stockM.id }, transaction: t }
+                { where: { id: stockM?.id }, transaction: t }
               );
             } else {
               await StockMaterialModel.create(
                 {
-                  stock_id: stock.id,
+                  stock_id: stock?.id,
                   material_id: mItem.material_id,
                   weight: weightFormat(mItem.weight),
                   weight_in_gram: weightFormat(mItem.weight_in_gram),
@@ -3605,6 +3632,7 @@ exports.returnSaleNew = async (req, res) => {
                 { transaction: t }
               );
             }
+            console.log("---------------------- After stockM update ----------------------");
             if (stockMPurchase) {
               await StockMaterialModel.update(
                 {
@@ -3616,12 +3644,13 @@ exports.returnSaleNew = async (req, res) => {
                     parseFloat(stockMPurchase.quantity) -
                     parseInt(mItem.return_qty),
                 },
-                { where: { id: stockMPurchase.id }, transaction: t }
+                { where: { id: stockMPurchase?.id }, transaction: t }
               );
               /* weight += mItem.return_weight
                 ? parseInt(mItem.return_weight)
                 : 0; */
             }
+            console.log("---------------------- After stockMPurchase update ----------------------");
             unit_name = mItem.unit_name;
             weight = convertUnitToGram(unit_name, weight);
             quantity += parseInt(mItem.return_qty);
@@ -3640,31 +3669,34 @@ exports.returnSaleNew = async (req, res) => {
                   parseFloat(stock.total_weight) +
                   parseFloat(return_weight_in_gram),
               },
-              { where: { id: stock.id } }
+              { where: { id: stock?.id }, transaction: t }
             );
           }
-
-          if (parseFloat(stockPurchse.total_weight) <= weight) {
-            await StockModel.destroy({
-              where: { id: stockPurchse.id },
-              transaction: t,
-            });
-          } else {
-            let return_weight_in_gram = convertUnitToGram(
-              unit_name,
-              return_data.products[i].materials[0].return_weight
-            );
-            await StockModel.update(
-              {
-                quantity:
-                  parseFloat(stockPurchse.quantity) - parseFloat(quantity),
-                total_weight:
-                  parseFloat(stockPurchse.total_weight) -
-                  parseFloat(return_weight_in_gram),
-              },
-              { where: { id: stockPurchse.id } }
-            );
+          console.log("---------------------- stockPurchse update ----------------------");
+          if(stockPurchse){
+            if (parseFloat(stockPurchse.total_weight) <= weight) {
+              await StockModel.destroy({
+                where: { id: stockPurchse?.id },
+                transaction: t,
+              });
+            } else {
+              let return_weight_in_gram = convertUnitToGram(
+                unit_name,
+                return_data.products[i].materials[0].return_weight
+              );
+              await StockModel.update(
+                {
+                  quantity:
+                    parseFloat(stockPurchse.quantity) - parseFloat(quantity),
+                  total_weight:
+                    parseFloat(stockPurchse.total_weight) -
+                    parseFloat(return_weight_in_gram),
+                },
+                { where: { id: stockPurchse?.id }, transaction: t }
+              );
+            }
           }
+          console.log("---------------------- End of stockPurchse update ----------------------");
         } else {
           stock = await StockModel.findOne({
             where: {
@@ -3672,6 +3704,7 @@ exports.returnSaleNew = async (req, res) => {
               user_id: req.userId,
               certificate_no: return_data.products[i].certificate_no,
               size_id: return_data.products[i].size_id,
+              purity_id : return_data.products[i].materials[0].purity_id
             },
             include: [
               {
@@ -3682,7 +3715,10 @@ exports.returnSaleNew = async (req, res) => {
               },
             ],
           });
-
+          console.log(
+            "---------------------- Stock to check for create ----------------------"
+          );
+          console.log(stock);
           if (!stock) {
             // Try to get current_image from multiple sources
             let current_image = null;
@@ -3740,7 +3776,8 @@ exports.returnSaleNew = async (req, res) => {
                 }
               }
             }
-            
+            console.log("---------------------- current_image ----------------------");
+            console.log(current_image);
             stock = await StockModel.create(
               {
                 purchase_id: purchase.id,
@@ -3748,6 +3785,7 @@ exports.returnSaleNew = async (req, res) => {
                 purchase_product_id: return_data.products[i].id,
                 product_id: return_data.products[i].product_id,
                 size_id: return_data.products[i].size_id || null,
+                purity_id: return_data.products[i].materials[0].purity_id,
                 certificate_no: return_data.products[i].certificate_no,
                 quantity: return_data.products[i].certificate_no != ""?1:return_data.products[i].materials[0]?.quantity,
                 total_weight: return_data.products[i].total_weight,
@@ -3755,11 +3793,12 @@ exports.returnSaleNew = async (req, res) => {
               },
               { transaction: t }
             );
-
+            console.log("---------------------- Created Stock ----------------------");
+            console.log(stock);
             for (let x = 0; x < return_data.products[i].materials.length; x++) {
               await StockMaterialModel.create(
                 {
-                  stock_id: stock.id,
+                  stock_id: stock?.id,
                   material_id: return_data.products[i].materials[x].material_id,
                   weight: weightFormat(
                     return_data.products[i].materials[x].weight
@@ -3775,6 +3814,9 @@ exports.returnSaleNew = async (req, res) => {
                 { transaction: t }
               );
             }
+            console.log(
+              "---------------------- Created Stock Materials ----------------------"
+            );
           }
 
           stockPurchse = await StockModel.findOne({
@@ -3869,15 +3911,15 @@ exports.returnSaleNew = async (req, res) => {
             console.log(return_data.products[i].materials.length);
             if (numMatched == return_data.products[i].materials.length) {
               await StockMaterialModel.destroy({
-                where: { stock_id: stockPurchse.id },
+                where: { stock_id: stockPurchse?.id },
                 transaction: t,
               });
               await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
               let cart = await cartModel.findOne({
-                where: { type: "sale", stock_id: stockPurchse.id },
+                where: { type: "sale", stock_id: stockPurchse?.id },
               });
               await StockModel.destroy({
-                where: { id: stockPurchse.id },
+                where: { id: stockPurchse?.id },
                 transaction: t,
               });
               await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
@@ -3916,13 +3958,39 @@ exports.returnSaleNew = async (req, res) => {
         let paid_amount = parseFloat(sale.paid_amount);
         let due_amount = priceFormat(total_payable - paid_amount, true);
         due_amount = due_amount < 0 ? 0 : due_amount;
-        if (paid_amount > total_payable) {
+
+        let allReturnSale = await SaleProductModel.count({
+          where: { sale_id: sale.id, is_return: true },
+          transaction: t 
+        });
+        allReturnSale = allReturnSale ?? 0;
+        console.log(allReturnSale);
+        console.log(sale.saleProducts.length);
+        await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
+        let allReturnPurchase = await PurchaseProductModel.count({
+          where: { purchase_id: purchase.id, is_return: true },
+          transaction: t 
+        });
+        allReturnPurchase = allReturnPurchase ?? 0;
+        console.log(allReturnPurchase);
+        console.log(purchase.purchaseProducts.length);
+        await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
+        if (allReturnSale == sale.saleProducts.length && allReturnPurchase == purchase.purchaseProducts.length) {
+          due_amount = 0;
           paid_amount = total_payable;
         }
+        
 
         let return_amount_from_wallet = parseFloat(
           data.return_amount_from_wallet
         );
+
+        //paid_amount += return_amount_from_wallet;
+
+        if (paid_amount > total_payable) {
+          paid_amount = total_payable;
+        }
+
         if (return_amount_from_wallet > 0) {
           if (data.payment_type == "return") {
             let payment2 = await PaymentModel.create({
@@ -3946,8 +4014,10 @@ exports.returnSaleNew = async (req, res) => {
               can_accept: false,
               is_advance: false,
             });
+            console.log("---------------------- PaymentModel create for sale refund ----------------------");
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             await updateWalletRemainingBalance(userID, payment2.id);
+            console.log("---------------------- updateWalletRemainingBalance for sale refund ----------------------");
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             let payment3 = await PaymentModel.create({
               user_id: sale.user_id,
@@ -3967,8 +4037,11 @@ exports.returnSaleNew = async (req, res) => {
               can_accept: false,
               is_advance: false,
             });
+            console.log("---------------------- PaymentModel create for return purchase ----------------------");
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             await updateWalletRemainingBalance(sale.user_id, payment3.id);
+            console.log(`---------------------- updateWalletRemainingBalance for return purchase ----------------------`);
+            await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
           } else {
             await updateAdvanceAmount(
               sale.user_id,
@@ -3976,6 +4049,7 @@ exports.returnSaleNew = async (req, res) => {
               return_amount_from_wallet,
               true
             );
+            await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
           }
         }
         console.log(
@@ -3993,6 +4067,9 @@ exports.returnSaleNew = async (req, res) => {
           },
           { where: { id: req.params.id }, transaction: t }
         );
+        console.log(
+          "---------------------- SaleModel update ----------------------"
+        );  
         await new Promise((resolve) => setTimeout(resolve, 500));
         await PurchaseModel.update(
           {
@@ -4001,6 +4078,9 @@ exports.returnSaleNew = async (req, res) => {
             due_amount: due_amount,
           },
           { where: { sale_id: sale.id }, transaction: t }
+        );
+        console.log(
+          "---------------------- PurchaseModel update ----------------------"  
         );
         await new Promise((resolve) => setTimeout(resolve, 500));
         if (due_amount <= 0) {
@@ -4017,6 +4097,9 @@ exports.returnSaleNew = async (req, res) => {
             }
           );
         }
+        console.log(
+          "---------------------- NoticationModel update ----------------------"
+        );  
         await new Promise((resolve) => setTimeout(resolve, 500));
         /* make return as complete */
         await ReturnModel.update(
@@ -4025,17 +4108,28 @@ exports.returnSaleNew = async (req, res) => {
           },
           { where: { id: saleReturnObj.id }, transaction: t }
         );
+        console.log(
+          "---------------------- ReturnModel update ----------------------"  
+        );
         stock = await StockModel.findOne({
           where: {
             return_id: saleReturnObj.id,
           },
           transaction: t,
         });
+        console.log(
+          "---------------------- StockModel find for return_id ----------------------"
+        );  
         await new Promise((resolve) => setTimeout(resolve, 500));
-        await StockMaterialModel.destroy({
-          where: { stock_id: stock.id },
-          transaction: t,
-        });
+        if(stock){
+          await StockMaterialModel.destroy({
+            where: { stock_id: stock.id },
+            transaction: t,
+          });
+        }
+        console.log(
+          "---------------------- StockMaterialModel destroy for return_id ----------------------"
+        );
         await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
         await StockModel.destroy({
           where: { return_id: saleReturnObj.id },
@@ -4051,12 +4145,16 @@ exports.returnSaleNew = async (req, res) => {
           },
           { where: { id: req.params.id }, transaction: t }
         );
+        console.log("---------------------- update status in sale ----------------------");
         await new Promise((resolve) => setTimeout(resolve, 500));
         await PurchaseModel.update(
           {
             status: "return_pending",
           },
           { where: { sale_id: sale.id }, transaction: t }
+        );
+        console.log(
+          "---------------------- update status in purchase ----------------------"
         );
       }
     });
@@ -4079,7 +4177,7 @@ exports.returnSaleNew = async (req, res) => {
         { where: { id: req.params.id } }
       );
     }
-
+    console.log("---------------------- SaleModel Update ----------------------");
     let allReturnPurchase = await PurchaseProductModel.count({
       where: { purchase_id: purchase.id, is_return: true },
     });

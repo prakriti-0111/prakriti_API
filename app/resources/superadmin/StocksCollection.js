@@ -62,9 +62,11 @@ const getModelObject = async (data, user_id) => {
         }
     }
 
-    if(isEmpty(data.certificate_no)){
-        purity_display.push((data.purity ? data.purity.name : '-'));
-    }
+    /* if(isEmpty(data.certificate_no)){
+        purity_display.push((data.spurity ? data.spurity.name : '-'));
+    } */
+
+    purity_display.push(data.stockMaterials[0] && data.stockMaterials[0].purity ? data.stockMaterials[0].purity.name : '-');
     
     let productDetails = StockProductCollection(data.product);
     let total_weight_display = '';

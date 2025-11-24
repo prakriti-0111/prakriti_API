@@ -463,7 +463,7 @@ exports.index = async (req, res) => {
       {
         model: PurityModel,
         as: 'spurity',
-        required: true,
+        required: false,
       }
         
     ];
