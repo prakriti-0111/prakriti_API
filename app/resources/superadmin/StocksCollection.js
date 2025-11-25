@@ -22,7 +22,7 @@ const StocksCollection = async (data, user_id) => {
 }
 
 const getModelObject = async (data, user_id) => {
-    //console.log("-----data get modal object ",data)
+    console.log("STOCK COLLECTION-----data get modal object ",JSON.stringify(data));
     let materialItem = [], materialString = [];
     let taxInfo = null;
     if('tax' in data.product && data.product.tax){
@@ -34,10 +34,11 @@ const getModelObject = async (data, user_id) => {
         }
     }
     
-    let priceMaterials = await calculateProductPriceCart(data.stockMaterials, data.product.sub_category, data.product.type == "material", 'admin', taxInfo);
+    let priceMaterials = await calculateProductPriceCart(data.stockMaterials, data.product.sub_category, data.product.type == "material" || isEmpty(data.certificate_no), 'admin', taxInfo);
     let weight_display = [], unit_display = [], purity_display = [];
     for(let item of data.stockMaterials){
         //let str = item.material.name + ' <span style="padding-right: 18px; float: right;">' + weightFormat(item.weight) +(item.unit ? (' '+item.unit.name) : '') + '</span>';
+        console.log("item : ", item);
         let str = item.material.name;
         materialItem.push({
             material_id: item.material_id,
@@ -50,14 +51,22 @@ const getModelObject = async (data, user_id) => {
             purity_name: item.purity ? item.purity.name : ''
         });
         materialString.push(str);
-        if(data.product.type == "material"){
+        if(data.product.type == "material" || isEmpty(data.certificate_no)){
             weight_display.push(weightFormat(item.quantity));
         }else{
             weight_display.push(weightFormat(item.weight));
         }
         unit_display.push((item.unit ? item.unit.name : '-'));
-        purity_display.push((item.purity ? item.purity.name : '-'));
+        if(data.product.type == "material"){
+            purity_display.push((item.purity ? item.purity.name : '-'));
+        }
     }
+
+    /* if(isEmpty(data.certificate_no)){
+        purity_display.push((data.spurity ? data.spurity.name : '-'));
+    } */
+
+    purity_display.push(data.stockMaterials[0] && data.stockMaterials[0].purity ? data.stockMaterials[0].purity.name : '-');
     
     let productDetails = StockProductCollection(data.product);
     let total_weight_display = '';
@@ -67,7 +76,7 @@ const getModelObject = async (data, user_id) => {
         total_weight_display = weightFormat(data.total_weight) + ' gm';
     }
     
-    let can_add_cart = await canStockAddCart(data.id, data.product.type, user_id);
+    let can_add_cart = await canStockAddCart(data.id, data.product.type, user_id, data.certificate_no);
     let stock_user_name = data.user ? (data.user.company_name ? data.user.company_name : data.user.name) : '';
     
     //console.log(productDetails);

@@ -39,6 +39,15 @@ module.exports = (sequelize, DataTypes) => {
         as: 'purchaseProducts'
       });
 
+      this.hasMany(models.payments, {
+        foreignKey: "table_id",
+        constraints: false,
+        scope: {
+          table_type: 'purchase', // optional filter if you use table_type
+        },
+        as: "payments",
+      });
+
     }
   }
   Purchase.init({

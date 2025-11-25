@@ -19,6 +19,7 @@ const {
   convertUnitToGram,
   arrayColumn,
   removeBlankZero,
+  formatDateTime
 } = require("@helpers/helper");
 const {
   updateOrCreate,
@@ -38,7 +39,8 @@ const {
   isAdmin,
   getWalletBalance,
   getOwnUserSaleProducts,
-  getUserColumnValue,
+  getUserColumnValue, 
+  avlStockUserIdsNew
 } = require("@library/common");
 const { getPaginationOptions } = require("@helpers/paginator");
 const { SaleCollection } = require("@resources/superadmin/SaleCollection");
@@ -137,6 +139,14 @@ exports.index = async (req, res) => {
       conditions.sale_by = userID;
     }
   }
+  
+  /* check get the selected user legs ids */
+  const userIds = await avlStockUserIdsNew(req);
+  console.log("sale_by userIds for sale list ::::::==================", userIds);
+  if(userIds.length > 0 && is_approval){
+    conditions.sale_by = { [Op.in]: userIds };
+  }
+
   if (!isEmpty(search)) {
     conditions.invoice_number = { [Op.like]: `%${search}%` };
   }
@@ -201,6 +211,795 @@ exports.index = async (req, res) => {
 };
 
 /**
+ * Retrive purchase txn ledger
+ */
+exports.txnLedger = async (req, res) => {
+  let { page, limit, user_id, search, date_from, date_to, status, is_assigned, is_approval } = req.query;
+  is_assigned = is_assigned === undefined ? false : true;
+  is_approval = is_approval === undefined ? false : true;
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let conditions = { is_assigned: is_assigned, is_approval: is_approval };
+  if (status !== undefined && status != "") {
+    conditions.is_approved = status;
+  }
+  conditions.sale_by = userID;
+  if (!isEmpty(user_id)) {
+    conditions.user_id = user_id;
+  }
+  if (!isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")) {
+    conditions[Op.or] = [
+      { invoice_number: { [Op.like]: `%${search}%` } },
+      { notes: { [Op.like]: `%${search}%` } },
+      { bill_amount: { [Op.like]: `%${search}%` } },
+      { payment_mode: { [Op.like]: `%${search}%` } },
+    ];
+  }
+  conditions = {
+    ...conditions,
+    ...getDateFromToWhere(date_from, date_to, "invoice_date"),
+  };
+  const paginatorOptions = getPaginationOptions(page, limit);
+
+  try {
+    // Fetch all sales with their related payments
+    const allSales = await SaleModel.findAll({
+      include: [
+        {
+          model: PaymentModel,
+          as: "payments",
+          required: false,
+          where: !isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")
+            ? {
+                [Op.or]: [
+                  { amount: { [Op.like]: `%${search}%` } },
+                  { payment_mode: { [Op.like]: `%${search}%` } },
+                  { notes: { [Op.like]: `%${search}%` } },
+                ],
+              }
+            : undefined,
+        },
+      ],
+      where: conditions,
+      order: [["invoice_date", "DESC"]],
+      offset: paginatorOptions.offset,
+      limit: paginatorOptions.limit
+    });
+
+    // Flatten sales and payments into a single table structure
+    let tableData = [];
+    allSales.forEach((sale, index) => {
+      // Add Purchase row
+      tableData.push({
+        id: sale.id,
+        date: formatDateTime(sale.invoice_date, 8),
+        txn_date: sale.invoice_date,
+        invoice_number: sale.invoice_number,
+        remarks: sale.notes || "-",
+        bill_amount: displayAmount(sale.bill_amount),
+        txn_amount : parseFloat(sale.bill_amount),
+        payment_amount: null,
+        payment_mode: sale.payment_mode || "-",
+        type: "Sale"
+      });
+
+      // Add related payment rows
+      sale.payments.forEach((pay, idx) => {
+        tableData.push({
+          id: sale.id,
+          date: formatDateTime(pay.payment_date, 8),
+          txn_date: pay.payment_date,
+          invoice_number: sale.invoice_number,
+          remarks: pay.notes || "-",
+          bill_amount: null,
+          payment_amount: displayAmount(pay.amount),
+          txn_amount : parseFloat(pay.amount),
+          payment_mode: pay.payment_mode,
+          type: "Payment"
+        });
+      });
+    });
+
+    // Sort transactions by txn_date descending
+    tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
+    tableData.sort((a, b) => {
+      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
+    });
+
+    if(!isEmpty(search) && (search.toLowerCase() == "sale" || search.toLowerCase() == "payment")){
+      tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
+    }
+
+    // Compute running balance (Due Amount)
+    let runningBalance = 0;
+    const passbook = tableData.reverse().map((tx, index) => {
+      if (tx.type === 'Sale') {
+        runningBalance += tx.txn_amount;
+      } else if (tx.type === 'Payment') {
+        runningBalance -= tx.txn_amount;
+      }
+      return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
+    }).reverse();
+
+    console.log("----------passbook----------", passbook);
+
+    let result = {
+      items: passbook,
+      total: passbook.length,
+    };
+    res.send(formatResponse(result, "Sale Ledger List"));
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(errorCodes.default).send(formatErrorResponse(err));
+  }
+}
+
+/**
+ * Retrive purchase txn ledger pdf
+ */
+exports.downloadTxnLedger = async (req, res) => {
+  let { page, limit, user_id, search, date_from, date_to, status, is_assigned, is_approval } = req.query;
+  is_assigned = is_assigned === undefined ? false : true;
+  is_approval = is_approval === undefined ? false : true;
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let user = await UserModel.findByPk(userID);
+  let conditions = { is_assigned: is_assigned, is_approval: is_approval };
+  if (status !== undefined && status != "") {
+    conditions.is_approved = status;
+  }
+  conditions.sale_by = userID;
+  
+  if (!isEmpty(user_id)) {
+    conditions.user_id = user_id;
+  }
+  if (!isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")) {
+    conditions[Op.or] = [
+      { invoice_number: { [Op.like]: `%${search}%` } },
+      { notes: { [Op.like]: `%${search}%` } },
+      { bill_amount: { [Op.like]: `%${search}%` } },
+      { payment_mode: { [Op.like]: `%${search}%` } },
+    ];
+  }
+  conditions = {
+    ...conditions,
+    ...getDateFromToWhere(date_from, date_to, "invoice_date"),
+  };
+  //const paginatorOptions = getPaginationOptions(page, limit);
+
+  try {
+    // Fetch all sales with their related payments
+    const allSales = await SaleModel.findAll({
+      include: [
+        {
+          model: PaymentModel,
+          as: "payments",
+          required: false,
+          where: !isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")
+            ? {
+                [Op.or]: [
+                  { amount: { [Op.like]: `%${search}%` } },
+                  { payment_mode: { [Op.like]: `%${search}%` } },
+                  { notes: { [Op.like]: `%${search}%` } },
+                ],
+              }
+            : undefined,
+        },
+      ],
+      where: conditions,
+      order: [["invoice_date", "DESC"]],
+      //offset: paginatorOptions.offset,
+      //limit: paginatorOptions.limit
+    });
+
+    // Flatten sales and payments into a single table structure
+    let tableData = [];
+    allSales.forEach((sale, index) => {
+      // Add Sale row
+      tableData.push({
+        id: sale.id,
+        date: formatDateTime(sale.invoice_date, 8),
+        txn_date: sale.invoice_date,
+        invoice_number: sale.invoice_number,
+        remarks: sale.notes || "-",
+        bill_amount: displayAmount(sale.bill_amount),
+        txn_amount : parseFloat(sale.bill_amount),
+        payment_amount: null,
+        payment_mode: sale.payment_mode || "-",
+        type: "Sale"
+      });
+
+      // Add related payment rows
+      sale.payments.forEach((pay, idx) => {
+        tableData.push({
+          id: sale.id,
+          date: formatDateTime(pay.payment_date, 8),
+          txn_date: pay.payment_date,
+          invoice_number: sale.invoice_number,
+          remarks: pay.notes || "-",
+          bill_amount: null,
+          payment_amount: displayAmount(pay.amount),
+          txn_amount : parseFloat(pay.amount),
+          payment_mode: pay.payment_mode,
+          type: "Payment"
+        });
+      });
+    });
+
+    // Sort transactions by txn_date descending
+    tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
+    tableData.sort((a, b) => {
+      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
+    });
+
+    if(!isEmpty(search) && (search.toLowerCase() == "sale" || search.toLowerCase() == "payment")){
+      tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
+    }
+
+    // Compute running balance (Due Amount)
+    let runningBalance = 0;
+    const passbook = tableData.reverse().map((tx, index) => {
+      if (tx.type === 'Sale') {
+        runningBalance += tx.txn_amount;
+      } else if (tx.type === 'Payment') {
+        runningBalance -= tx.txn_amount;
+      }
+      return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
+    }).reverse();
+
+    console.log("----------passbook----------", passbook);
+
+    /* let result = {
+      items: passbook,
+      total: passbook.length,
+    }; */
+    //res.send(formatResponse(result, "Purchase Ledger List"));
+
+    const logoUrl = `public/images/logo.png`;
+    // const logoUrl = process.env.BASE_URL + "public/images/logo.png";
+
+    const bitmap = fs.readFileSync(logoUrl);
+    const logo = bitmap.toString("base64");
+
+    let footerhtml = `
+                <div class="invoice" style="width: 1000px; padding:15px; margin: 0px; position: absolute; bottom: 0px; background-color: #f9f9f9;">
+                    <hr/>
+                    <table cellpadding="0" cellspacing="1" width="1000px" style="margin:auto;" >
+                        <tbody>
+                            <tr>
+                                <td><table cellspacing="0" cellpadding="0"
+                                      border="0"
+                                      align="center" width="90%">
+                                      <div style="display: table; width:
+                                          100%; font-size: 11px;">
+                                          <div style="display: table-cell;
+                                              width: 65%;">
+                                              <h5 style="margin: 0px;
+                                                  font-size: 11px;
+                                                  font-weight:
+                                                  600; text-transform:
+                                                  uppercase;">NOTE</h5>
+                                              <ul style="margin: 0;
+                                                  padding: 0px;
+                                                  list-style: none;">
+                                                  <span style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400; ">*
+                                                      Goods once sold will
+                                                      be taken back with
+                                                      condition</span>
+
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">Returning
+                                                      minimum product
+                                                      value of Rs 5000/-
+                                                      above</li>
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">Returning
+                                                      product taken back
+                                                      Less than 20-30% of
+                                                      my billing amount</li>
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">If any Damage
+                                                      charge as per making
+                                                      cost only</li>
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">No Charges
+                                                      taken on Sale
+                                                      product returning
+                                                      within 7 days from
+                                                      bill date</li>
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">All disputes
+                                                      are subject to Patna
+                                                      Juridiction only</li>
+                                                  <li style="margin: 0;
+                                                      text-align: left;
+                                                      font-size: 11px;
+                                                      font-weight: 400;
+                                                      list-style-type:
+                                                      disc; margin-left:
+                                                      35px;">Charges may
+                                                      be appling cancel of
+                                                      order product making
+                                                      only</li>
+
+                                              </ul>
+                                          </div>
+                                          <div style="display: table-cell;
+                                              width: 35%;">
+                                              <div style="display: flex;
+                                                  
+                                                  justify-content:
+                                                  space-between;">
+                                                  <!---<div>
+                                                      <h4 style="margin:
+                                                          0px;
+                                                          text-align:
+                                                          center;
+                                                          font-size:
+                                                          11px;">Customer
+                                                          Signature</h4>
+                                                      <input type="text"
+                                                          style="display:
+                                                          block;
+                                                          margin: auto;
+                                                          height:
+                                                          36px; min-width:
+                                                          142px; ">
+
+                                                  </div> -->
+                                                  <!-- <div style="display:flex ; align-items: center;">
+                                                      <h4 style="margin-right:
+                                                          5px;
+                                                          text-align:
+                                                          center;
+                                                          font-size:
+                                                          11px;">Returning%
+                                                      </h4>
+                                                      <div
+                                                          style="position:
+                                                          relative;">
+                                                          <input
+                                                              type="text"
+                                                              style="display:
+                                                              block;
+                                                              margin:
+                                                              auto;
+                                                              height:
+                                                              16px;
+                                                              min-width:
+                                                              24px; width:64px; ">
+                                                          <div
+                                                              style="position:
+                                                              absolute;
+                                                              right:
+                                                              12px; top:
+                                                              4px;
+                                                              font-size:
+                                                              11px;">%</div>
+                                                      </div>
+                                                  </div> -->
+
+                                              </div>
+                                              
+                                          </div>
+                                      </div>
+                                  </table></td>
+                          </tr>
+                      </tbody>
+                  </table>
+              </div>
+            `;
+
+    let html = `<!DOCTYPE html>
+    <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta http-equiv="X-UA-Compatible" content="IE=edge">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Bill</title>
+            <link rel="preconnect" href="https://fonts.googleapis.com">
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+            <style>
+            html {
+              -webkit-print-color-adjust: exact;
+            }
+            </style>
+        </head>
+        <body style="box-sizing: border-box; padding: 0px; margin: 0px; font-family:
+            'Poppins', sans-serif;">
+            <div class="invoice" style="max-width: 1000px; margin: auto; padding:
+                15px;
+                background-color: #f9f9f9;">
+                <table cellpadding="0" cellspacing="0" width="100%">
+                    <tbody>
+                        <tr>
+                            <td>
+                                <table cellspacing="0" cellpadding="0" border="0"
+                                    align="center" width="100%">
+                                    <h1 style="font-size: 14px; text-align:
+                                        center; margin-bottom: 5px; font-weight:
+                                        300;">SALE TRANSACTION LEDGER</h1>
+                                </table>
+                                <table cellspacing="0" cellpadding="0" border="0"
+                                    align="center" width="100%">
+                                    <div style="display: table; width: 100%;">
+                                        <div style="width: 65%; display: table-cell;
+                                            vertical-align: bottom;">
+                                            <img src="data:image/png;base64,${logo}" style="width:
+                                                220px; margin-left: 10px;">
+                                            <h3 style="margin: 0; font-weight: 400;
+                                                font-size: 12px;">Corporate Office -
+                                                P210 Strand Bank Road Brabzar
+                                                Kolkata 700 011</h3>
+    
+                                        </div>
+                                        <div style="width: 35%; display: table-cell;
+                                            vertical-align: middle; text-align:
+                                            left;">
+                                            <h3 style="margin: 0;">
+                                                <span style="font-size: 16px;
+                                                    font-weight: 600;">Prakriti
+                                                    Patna</span></h3>
+                                            <h3 style="margin: 0; font-weight: 400;
+                                                font-size: 14px;">GST No -
+                                                <span style="font-weight: 600;">10CIUPK2654L1ZY</span></h3>
+                                            <h3 style="margin: 0; font-weight: 400;
+                                                font-size: 12px;">User Id - <span>${user.name}</span></h3>
+                                            <h3 style="margin: 0; font-weight: 400;
+                                                font-size: 12px;">Address - G100
+                                                RBI CPC Colony Kankarbagh Patna
+                                                Bihar 800 020</h3>
+                                            <h3 style="font-weight: 600; font-size:
+                                                12px; margin: 0;">
+                                                support@Prakriti.com, +91 98744
+                                                45878
+                                            </h3>
+                                        </div>
+                                    </div>
+                                </table>
+                                <table cellspacing="0" cellpadding="5" border="0"
+                                    align="center" width="100%">
+                                    <tbody>
+                                        <tr>
+                                            <hr style="border: 1px solid #1E2757">
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <table cellspacing="0" cellpadding="5" border="0"
+                                    align="center" width="100%">
+                                    <thead>
+                                        <!-- <tr style="background-color: #000;">
+                                            <th style="text-align: left; color:
+                                                #fff;">Company: Ratn Alankar
+                                                Jewellers</th>
+                                            <th style="text-align: left; color:
+                                                #fff;">Name: Mukund Singhaindi</th>
+                                            <th style="text-align: left; color:
+                                                #fff;">Cont: 91919191919</th>
+                                            <th style="text-align: left; color:
+                                                #fff;">City: Muzaffarpur</th>
+                                        </tr>
+                                    </thead> -->
+                                        <tbody>
+                                            <!-- <tr style="background-color: #fff;">
+                                            <td style="">
+                                                <span style="font-weight: 600;"> GST
+                                                    IN ${user.gst != null?user.gst:""} </span>
+                                            </td>
+                                            <td style="">
+                                                Ad:
+                                            </td>
+                                            <td style="">
+    
+                                            </td>
+                                            <td style="">
+                                                Pin Code: 800 020
+                                            </td>
+                                        </tr> -->
+                                            <tr>
+                                                <td style="padding: 0;">
+                                                    <div class="comp-part-one">
+                                                        <ul style="margin: 0;
+                                                            padding: 0; list-style:
+                                                            none; display: flex;
+                                                            gap: 15px;
+                                                            justify-content:
+                                                            space-between;">
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Company -</span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    600; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.company_name}</span></li>
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">GST IN</span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    600; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.gst != null?user.gst:""}</span></li>
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Cont -
+                                                                </span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    600; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.mobile}</span>
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Invoice Date
+                                                                    -
+                                                                </span> </li>
+                                                                    
+                                                        </ul>
+                                                    </div>
+                                                    <div class="comp-part-two">
+                                                        <ul style="margin: 0;
+                                                            padding: 0; list-style:
+                                                            none; display: flex;
+                                                            gap: 15px;
+                                                            justify-content:
+                                                            space-between;">
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Address -</span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    500; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.address != null?user.address:""}</span></li>
+                                                          
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Invoice No -
+                                                                </span> </li>
+                                                        </ul>
+                                                        <ul style="margin: 0;
+                                                            padding: 0;margin-left:52px; list-style:
+                                                            none; display: flex;
+                                                            gap: 15px;
+                                                          ">
+                                                        <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">City -</span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    500; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.city != null?user.city:""}</span></li>
+                                                            <li><span
+                                                                    style="font-weight:
+                                                                    400; font-size:
+                                                                    12px; margin:
+                                                                    0;">Pin -
+                                                                </span>
+                                                                <span
+                                                                    style="font-weight:
+                                                                    500; font-size:
+                                                                    12px; margin:
+                                                                    0;">${user.pincode != null?user.pincode:""}</span></li>
+                                                                    </ul>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>`;
+    if (passbook.length > 0) {
+      html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+                              border="0"
+                              align="center" width="100%">
+                              <thead style="background-color: #1E2757;">
+                                  <tr style="background-color: #1E2757;">
+                                      <th style="text-align: left; color:
+                                          #fff; border: 1px solid #1E2757;
+                                          font-size: 12px; font-weight:
+                                          400;background-color: #1E2757;">#</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400; ">Date</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400; ">Invoice No</th>
+                                      <th  style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400; ">Remarks</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400;">Bill Amt</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400; ">Payment Amt</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400;">Mode</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400;">Type</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400;">Balance(Due)</th>
+                                  </tr>
+                              </thead>
+                              <tbody>`;
+      for (let i = 0; i < passbook.length; i++) {
+        let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
+        html += `<tr style="background-color: ${bgTrColor}">
+                                      <td style="text-align: left;
+                                          font-size: 11px;
+                                          font-weight: 400;">
+                                          ${passbook[i].sl_no}
+                                      </td>
+                                      <td style="text-align: left;
+                                          font-size: 11px;
+                                          font-weight: 400;font-size: 10px;">
+                                          ${
+                                            passbook[i].txn_date
+                                          }
+                                      </td>
+                                      <td style="text-align: left;
+                                          font-size: 11px;
+                                          font-weight: 400;">
+                                          ${passbook[i].invoice_number}
+                                      </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .remarks
+                                          }
+                                      </td>
+                                      <td  style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .bill_amount != null?passbook[i]
+                                              .bill_amount:""
+                                          }
+                                      </td>
+                                      <td  style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .payment_amount != null?passbook[i]
+                                              .payment_amount:""
+                                          }
+                                      </td>
+                                      <td  style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .payment_mode
+                                          }
+                                      </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .type
+                                          }
+                                      </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .balance
+                                          }
+                                      </td>
+                                  </tr>`
+                                  
+      }
+      html += `
+                                      </tbody>
+                                  </table>`;
+    } 
+    
+
+    html += `
+                                            <!-- Footer -->
+                                            
+                                            ${footerhtml}
+                                        </td>
+                                    </tr>
+    
+                                </tbody>
+                            </table>
+                        </div>
+                    </body>
+                </html>`;
+
+    try {
+      let filename = user.name.replace(" ", "_") + "_" + (new Date().getTime()) + "_ledger.pdf";
+      let file_path =
+        "public/sales/" + filename ;
+      const options = { format: "A4" };
+
+      (async () => {
+        const file = { content: html };
+
+        // Generate PDF
+        const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+
+        // Save PDF to file
+        fs.writeFileSync(file_path, pdfBuffer);
+        console.log("PDF generated successfully!");
+
+        res.send(
+          formatResponse(
+            {
+              file_name: filename,
+              url: getFileAbsulatePathPDF(file_path),
+              items: passbook,
+              total: passbook.length,
+            },
+            "Ledger pdf"
+          )
+        );
+      })();
+    } catch (error) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse(error.toString()));
+    }
+  } catch (err) {
+    console.error("Error:", err);
+    res.status(errorCodes.default).send(formatErrorResponse(err));
+  }
+}
+
+/**
  * Store sale
  *
  * @param {*} req
@@ -208,7 +1007,7 @@ exports.index = async (req, res) => {
  */
 exports.store = async (req, res) => {
   let data = req.body;
-
+  console.log("sale store payload : ", data);
   let reportCharge = await ReportChargeModel.findAll({ 
     order:[['amount', 'ASC']],
     where: {}
@@ -343,6 +1142,7 @@ exports.store = async (req, res) => {
       status: status,
       image: image,
     };
+    console.log("sale create : ", saleObj);
     let sale = await SaleModel.create(saleObj);
 
     let purchase = null;
@@ -376,6 +1176,7 @@ exports.store = async (req, res) => {
         is_approved: is_approved,
         image: image,
       };
+      console.log("purchase create : ", purchaseObj);
       purchase = await PurchaseModel.create(purchaseObj);
     }
     //}
@@ -417,6 +1218,7 @@ exports.store = async (req, res) => {
           ? thisItem.order_product_id
           : null,
       };
+      console.log("sale product create : ", thisObj);
       let saleProduct = await SaleProductModel.create(thisObj);
       let product = await ProductModel.findByPk(thisItem.product_id);
       let sale_product_id = null;
@@ -483,13 +1285,17 @@ exports.store = async (req, res) => {
           total: priceFormat(thisItem.total),
           total_discount: priceFormat(thisItem.total_discount),
         };
+        console.log("purchase product create : ", thisObj2);
         purchaseProduct = await PurchaseProductModel.create(thisObj2);
         req_data_for_purchase.products[i].id = purchaseProduct.id;
       }
       //}
-
+      console.log("remove stock : ", thisItem.stock_id);
+      console.log("thisItem.certificate_no : ", thisItem.certificate_no);
+      console.log("!isEmpty(thisItem.certificate_no) : ", !isEmpty(thisItem.certificate_no));
       //remove stock
-      if (isEmpty(sale_product_id) && product.type != "material") {
+      if (isEmpty(sale_product_id) && product.type != "material" && !isEmpty(thisItem.certificate_no)) {
+        console.log("removed !");
         await StockModel.destroy({ where: { id: thisItem.stock_id } });
       }
 
@@ -512,6 +1318,7 @@ exports.store = async (req, res) => {
           total_gram: thisItem.materials[x].total_gram,
           per_gram_price: thisItem.materials[x].per_gram_price,
         };
+        console.log("sale product material create : ", thisMObj);
         await SaleProductMaterialModel.create(thisMObj);
 
         //if(!isSuperAdmin(req)){
@@ -528,6 +1335,7 @@ exports.store = async (req, res) => {
             amount: thisItem.materials[x].amount,
             discount_amount: thisItem.materials[x].discount_amount,
           };
+          console.log("purchase product material create : ", thisMObj2);
           await PurchaseProductMaterialModel.create(thisMObj2);
         }
         //}
@@ -536,10 +1344,11 @@ exports.store = async (req, res) => {
          * remove from stock materials
          */
         if (isEmpty(sale_product_id)) {
-          if (product.type == "material") {
+          if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 material_id: thisItem.materials[x].material_id,
+                purity_id: thisItem.materials[x].purity_id,
                 stock_id: thisItem.stock_id,
               },
             });
@@ -556,12 +1365,13 @@ exports.store = async (req, res) => {
                 },
                 { where: { id: stockMaterial.id } }
               );
-
+              console.log("stockMaterial.weight : ", parseFloat(stockMaterial.weight), " - thisItem.materials[x].weight = ",thisItem.materials[x].weight);
               if (
                 parseFloat(stockMaterial.weight) -
                   parseFloat(thisItem.materials[x].weight) <=
                 0
               ) {
+                console.log("stock material delete : ", thisItem.stock_id);
                 await StockModel.destroy({ where: { id: thisItem.stock_id } });
               } else {
                 let stock = await StockModel.findOne({
@@ -819,6 +1629,7 @@ exports.store = async (req, res) => {
       !isEmpty(data.on_approval_id) &&
       parseInt(data.on_approval_id) > 0
     ) {
+      console.log("restore into stock .................");
       let saleApproval = await SaleModel.findOne({
         where: { id: data.on_approval_id },
         include: [
@@ -850,8 +1661,13 @@ exports.store = async (req, res) => {
           },
           { where: { id: saleApproval.id } }
         );
-
+        console.log("saleOnApproval update : ", {
+            is_approved: 4,
+            accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
+          });
         let parentUserID = userID; //isSuperAdmin(req) ? null : req.userId;
+        console.log("parentUserId : ",parentUserID);
+        console.log("saleProductIds : ", saleProductIds);
         for (let i = 0; i < saleApproval.saleProducts.length; i++) {
           let thisItem = saleApproval.saleProducts[i];
           if (saleProductIds.includes(thisItem.id)) {
@@ -860,7 +1676,7 @@ exports.store = async (req, res) => {
 
           let product = await ProductModel.findByPk(thisItem.product_id);
           let stock = null;
-          if (product.type == "material") {
+          if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
             let quantity = 0;
             for (let x = 0; x < thisItem.saleMaterials.length; x++) {
               quantity += thisItem.saleMaterials[x].quantity
@@ -889,6 +1705,7 @@ exports.store = async (req, res) => {
             stock = await StockModel.create({
               product_id: thisItem.product_id,
               size_id: thisItem.size_id || null,
+              purity_id: thisItem.saleMaterials[0]?.purity_id || null,
               certificate_no: thisItem.certificate_no,
               current_image: thisItem.current_image,
               quantity: 1,
@@ -896,7 +1713,7 @@ exports.store = async (req, res) => {
               user_id: parentUserID,
             });
           }
-
+          console.log("stock created : ",stock.id);
           for (let x = 0; x < thisItem.saleMaterials.length; x++) {
             let saleMaterial = thisItem.saleMaterials[x];
             /**
@@ -906,11 +1723,12 @@ exports.store = async (req, res) => {
               saleMaterial.unit.name,
               saleMaterial.weight
             );
-            if (product.type == "material") {
+            if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
               let stockMaterial = await StockMaterialModel.findOne({
                 where: {
                   stock_id: stock.id,
                   material_id: saleMaterial.material_id,
+                  purity_id: saleMaterial.purity_id,
                 },
               });
               if (stockMaterial) {
@@ -935,8 +1753,19 @@ exports.store = async (req, res) => {
                   },
                   { where: { id: stockMaterial.id } }
                 );
+                console.log("stock material updated : ", stockMaterial.id);
               } else {
                 await StockMaterialModel.create({
+                  stock_id: stock.id,
+                  material_id: saleMaterial.material_id,
+                  weight: weightFormat(saleMaterial.weight),
+                  weight_in_gram: weightFormat(weight_in_gram),
+                  quantity: saleMaterial.quantity || 0,
+                  purity_id: saleMaterial.purity_id,
+                  unit_id: saleMaterial.unit_id,
+                  category_id: product.category_id,
+                });
+                console.log("stock material created : ", {
                   stock_id: stock.id,
                   material_id: saleMaterial.material_id,
                   weight: weightFormat(saleMaterial.weight),
@@ -949,6 +1778,16 @@ exports.store = async (req, res) => {
               }
             } else {
               await StockMaterialModel.create({
+                stock_id: stock.id,
+                material_id: saleMaterial.material_id,
+                weight: weightFormat(saleMaterial.weight),
+                weight_in_gram: weightFormat(weight_in_gram),
+                quantity: saleMaterial.quantity || 0,
+                purity_id: saleMaterial.purity_id,
+                unit_id: saleMaterial.unit_id,
+                category_id: product.category_id,
+              });
+              console.log("stock material created for type product : ", {
                 stock_id: stock.id,
                 material_id: saleMaterial.material_id,
                 weight: weightFormat(saleMaterial.weight),
@@ -988,59 +1827,60 @@ exports.store = async (req, res) => {
 exports.statuschange = async (req, res) => {
   let data = req.body;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let sale = await SaleModel.findOne({
-    where: { id: req.params.id, sale_by: userID },
-    include: [
-      {
-        model: SaleProductModel,
-        as: "saleProducts",
-        separate: true,
-        include: [
-          {
-            model: SaleProductMaterialModel,
-            as: "saleMaterials",
-            separate: true,
-            include: [
-              {
-                model: UnitModel,
-                as: "unit",
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  });
-  if (!sale) {
-    return res
-      .status(errorCodes.default)
-      .send(formatErrorResponse("Sale not found"));
-  }
-
-  let return_payment_mode = data.return_payment_mode
-    ? data.return_payment_mode
-    : "cash";
-  if (data.approve_status == 2 && data.decline_type == "return") {
-    let paidAmnt = parseFloat(sale.paid_amount);
-    let payment = await paymentModel.findOne({
-      where: { table_type: "sale", table_id: sale.id },
-    });
-    if (payment) {
-      if (payment.payment_mode == "cheque" && payment.status == "pending") {
-        paidAmnt = priceFormat(paidAmnt - parseFloat(payment.amount));
-      }
-    }
-    if (paidAmnt > 0) {
-      let walletBalance = await getWalletBalance(userID, return_payment_mode);
-      if (walletBalance < paidAmnt) {
-        return res
-          .status(errorCodes.default)
-          .send(formatErrorResponse("Insufficient wallet balance."));
-      }
-    }
-  }
-
+  console.log("status change data =================: ", data);
   try {
+    let sale = await SaleModel.findOne({
+      where: { id: req.params.id, sale_by: userID },
+      include: [
+        {
+          model: SaleProductModel,
+          as: "saleProducts",
+          separate: true,
+          include: [
+            {
+              model: SaleProductMaterialModel,
+              as: "saleMaterials",
+              separate: true,
+              include: [
+                {
+                  model: UnitModel,
+                  as: "unit",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    if (!sale) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Sale not found"));
+    }
+
+    let return_payment_mode = data.return_payment_mode
+      ? data.return_payment_mode
+      : "cash";
+    if (data.approve_status == 2 && data.decline_type == "return") {
+      let paidAmnt = parseFloat(sale.paid_amount);
+      let payment = await paymentModel.findOne({
+        where: { table_type: "sale", table_id: sale.id },
+      });
+      if (payment) {
+        if (payment.payment_mode == "cheque" && payment.status == "pending") {
+          paidAmnt = priceFormat(paidAmnt - parseFloat(payment.amount));
+        }
+      }
+      if (paidAmnt > 0) {
+        let walletBalance = await getWalletBalance(userID, return_payment_mode);
+        if (walletBalance < paidAmnt) {
+          return res
+            .status(errorCodes.default)
+            .send(formatErrorResponse("Insufficient wallet balance."));
+        }
+      }
+    }
+    
     if (data.approve_status != 4) {
       await SaleModel.update(
         {
@@ -1120,7 +1960,7 @@ exports.statuschange = async (req, res) => {
 
         let product = await ProductModel.findByPk(thisItem.product_id);
         let stock = null;
-        if (product.type == "material") {
+        if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
           let quantity = 0;
           for (let x = 0; x < thisItem.saleMaterials.length; x++) {
             quantity += thisItem.saleMaterials[x].quantity
@@ -1146,10 +1986,53 @@ exports.statuschange = async (req, res) => {
           );
           stock = result.item;
         } else {
+          // Try to get current_image from multiple sources
+          let current_image = null;
+          
+          if (thisItem.certificate_no) {
+            // First, check Stock records (most recent/updated - has the latest image)
+            let stockQuery = {
+              where: {
+                certificate_no: {
+                  [Op.like]: thisItem.certificate_no
+                }
+              },
+              order: [['id', 'DESC']] // Get the most recent one
+            };
+            let existingStock = await StockModel.findOne(stockQuery);
+            if (existingStock && existingStock.current_image) {
+              current_image = existingStock.current_image;
+            } else {
+              // Second, check PurchaseProduct by certificate_no (fallback)
+              let purchaseQuery = {
+                where: {
+                  certificate_no: {
+                    [Op.like]: thisItem.certificate_no
+                  }
+                },
+                order: [['id', 'DESC']] // Get the most recent one
+              };
+              let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery);
+              if (purchaseProduct && purchaseProduct.current_image) {
+                current_image = purchaseProduct.current_image;
+              } else if (thisItem.stock_id) {
+                // Third, check by stock_id if available
+                let stockById = await StockModel.findOne({
+                  where: { id: thisItem.stock_id }
+                });
+                if (stockById && stockById.current_image) {
+                  current_image = stockById.current_image;
+                }
+              }
+            }
+          }
+          
           stock = await StockModel.create({
             product_id: thisItem.product_id,
             size_id: thisItem.size_id || null,
+            purity_id: thisItem.saleMaterials[0]?.purity_id || null,
             certificate_no: thisItem.certificate_no,
+            current_image: current_image,
             quantity: 1,
             total_weight: thisItem.total_weight,
             user_id: parentUserID,
@@ -1165,11 +2048,12 @@ exports.statuschange = async (req, res) => {
             saleMaterial.unit.name,
             saleMaterial.weight
           );
-          if (product.type == "material") {
+          if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 stock_id: stock.id,
                 material_id: saleMaterial.material_id,
+                purity_id: saleMaterial.purity_id
               },
             });
             if (stockMaterial) {
@@ -1200,7 +2084,7 @@ exports.statuschange = async (req, res) => {
                 material_id: saleMaterial.material_id,
                 weight: weightFormat(saleMaterial.weight),
                 weight_in_gram: weightFormat(weight_in_gram),
-                quantity: saleMaterial.quantity || 0,
+                quantity: saleMaterial.quantity || 1,
                 purity_id: saleMaterial.purity_id,
                 unit_id: saleMaterial.unit_id,
                 category_id: product.category_id,
@@ -1212,7 +2096,7 @@ exports.statuschange = async (req, res) => {
               material_id: saleMaterial.material_id,
               weight: weightFormat(saleMaterial.weight),
               weight_in_gram: weightFormat(weight_in_gram),
-              quantity: saleMaterial.quantity || 0,
+              quantity: saleMaterial.quantity || 1,
               purity_id: saleMaterial.purity_id,
               unit_id: saleMaterial.unit_id,
               category_id: product.category_id,
@@ -1233,7 +2117,8 @@ exports.statuschange = async (req, res) => {
 
       for (let item of sale.saleProducts) {
         let quantity = 1;
-        if (item.product && item.product.type == "material") {
+        let product = await ProductModel.findByPk(item.product_id);
+        if (product && product.type == "material" || (product.type != "material" && isEmpty(item.certificate_no))) {
           quantity = item.saleMaterials[0].quantity;
         }
         let cart = await cartModel.create({
@@ -1263,6 +2148,7 @@ exports.statuschange = async (req, res) => {
 
     res.send(formatResponse([], "Status Changed successfully!"));
   } catch (error) {
+    console.log("status change error: ", error);
     return res.status(errorCodes.default).send(formatErrorResponse(error));
   }
 };
@@ -1622,11 +2508,11 @@ exports.returnSale = async (req, res) => {
           weight_in_gram = 0;
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           quantity +=
-            return_data.products[i].product_type == "material"
+            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material"
+            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           weight_in_gram += convertUnitToGram(
@@ -1635,7 +2521,7 @@ exports.returnSale = async (req, res) => {
           );
         }
         let stock = null;
-        if (return_data.products[i].product_type == "material") {
+        if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
           if (return_status == "completed") {
             let result = await updateOrCreate(
               StockModel,
@@ -1675,21 +2561,48 @@ exports.returnSale = async (req, res) => {
         } else {
           // console.log("req =============== 2", return_data);
          
-        let query = {
-            where: {
-              certificate_no: {
-                [Op.like]: `${return_data.products[i].certificate_no}`,
+          // Try to get current_image from multiple sources (prioritize most recent/updated image)
+          let current_image = null;
+          
+          // First, check if current_image is in return_data (if provided)
+          if (return_data.products[i] && return_data.products[i].current_image) {
+            current_image = return_data.products[i].current_image;
+          } else if (return_data.products[i].certificate_no) {
+            // Second, check Stock records first (most recent/updated - has the latest image)
+            let stockQuery = {
+              where: {
+                certificate_no: {
+                  [Op.like]: `${return_data.products[i].certificate_no}`,
+                },
               },
-            },
-          };
-            let resData=  await PurchaseProductModel.findAll(query)
-            let current_image = (resData && resData.length > 0 && resData[0].current_image) ? resData[0].current_image : null;
+              order: [['id', 'DESC']], // Get the most recent one
+            };
+            let existingStock = await StockModel.findOne(stockQuery, { transaction: t });
+            if (existingStock && existingStock.current_image) {
+              current_image = existingStock.current_image;
+            } else {
+              // Third, check PurchaseProduct records (fallback)
+              let purchaseQuery = {
+                where: {
+                  certificate_no: {
+                    [Op.like]: `${return_data.products[i].certificate_no}`,
+                  },
+                },
+                order: [['id', 'DESC']], // Get the most recent one
+              };
+              let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery, { transaction: t });
+              if (purchaseProduct && purchaseProduct.current_image) {
+                current_image = purchaseProduct.current_image;
+              }
+            }
+          }
+          
           stock = await StockModel.create(
             {
               product_id: return_data.products[i].product_id,
               size_id: return_data.products[i].size_id || null,
               certificate_no: return_data.products[i].certificate_no,
-              quantity: 1,
+              quantity: return_data.products[i].certificate_no != ""?1:return_data.products[i].materials[0]?.quantity,
               current_image: current_image,
               total_weight: weight_in_gram,
               user_id: req.userId,
@@ -1714,11 +2627,11 @@ exports.returnSale = async (req, res) => {
         //insert into return product materials table
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           let thisQty =
-            return_data.products[i].product_type == "material"
+            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material"
+            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           await ReturnProductMaterialModel.create(
@@ -1741,11 +2654,12 @@ exports.returnSale = async (req, res) => {
             return_data.products[i].materials[x].unit_name,
             thisWeight
           );
-          if (return_data.products[i].product_type == "material") {
+          if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 stock_id: stock.id,
                 material_id: return_data.products[i].materials[x].material_id,
+                purity_id: return_data.products[i].materials[x].purity_id
               },
             });
             if (stockMaterial) {
@@ -1790,7 +2704,7 @@ exports.returnSale = async (req, res) => {
                 material_id: return_data.products[i].materials[x].material_id,
                 weight: weightFormat(thisWeight),
                 weight_in_gram: weightFormat(weight_in_gram),
-                quantity: thisQty || 0,
+                quantity: thisQty || 1,
                 purity_id: return_data.products[i].materials[x].purity_id,
                 unit_id: return_data.products[i].materials[x].unit_id,
                 category_id: return_data.products[i].category_id,
@@ -1805,7 +2719,7 @@ exports.returnSale = async (req, res) => {
           (from_retailer_customer && return_status == "completed")
         ) {
           //update sale product is return and return weight & qty into sale product material table
-          if (return_data.products[i].product_type == "material") {
+          if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
             let total_return_weight =
               parseFloat(saleProduct.saleMaterials[0].return_weight) +
               parseFloat(return_data.products[i].materials[0].return_weight);
@@ -2019,7 +2933,7 @@ exports.returnSaleNew = async (req, res) => {
       }
 
       stockPurchse = null;
-      if (return_data.products[i].product_type == "material") {
+      if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
         if (!isEmpty(return_data.products[i].product_id)) {
           /* check for purchase record in stock */
           stockPurchse = await StockModel.findOne({
@@ -2033,6 +2947,7 @@ exports.returnSaleNew = async (req, res) => {
           stockPurchse = await StockModel.findOne({
             where: {
               material_id: return_data.products[i].materials[0].material_id,
+              purity_id: return_data.products[i].materials[0].purity_id,
               user_id: sale.user_id,
             },
           });
@@ -2053,6 +2968,7 @@ exports.returnSaleNew = async (req, res) => {
               where: {
                 stock_id: stockPurchse.id,
                 material_id: mItem.material_id,
+                purity_id: mItem.purity_id
               },
             });
 
@@ -2094,6 +3010,7 @@ exports.returnSaleNew = async (req, res) => {
             let item = return_data.products[i].materials[x];
             let thisM = _.filter(stockMaterials, {
               material_id: item.material_id,
+              purity_id: item.purity_id
             });
             if (
               thisM.length &&
@@ -2239,6 +3156,7 @@ exports.returnSaleNew = async (req, res) => {
           where: {
             purchase_id: purchase.id,
             product_id: saleProduct.product_id,
+            certificate_no: saleProduct.certificate_no
           },
           include: [
             {
@@ -2261,11 +3179,11 @@ exports.returnSaleNew = async (req, res) => {
           weight_in_gram = 0;
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           quantity +=
-            return_data.products[i].product_type == "material"
+            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material"
+            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           weight_in_gram += convertUnitToGram(
@@ -2314,21 +3232,49 @@ exports.returnSaleNew = async (req, res) => {
         } else {
           // console.log("req =============== 2", return_data);
 
-          let query = {
-            where: {
-              certificate_no: {
-                [Op.like]: `${return_data.products[i].certificate_no}`,
+          // Try to get current_image from multiple sources (prioritize most recent/updated image)
+          let current_image = null;
+          
+          // First, check if current_image is in return_data (if provided)
+          if (return_data.products[i] && return_data.products[i].current_image) {
+            current_image = return_data.products[i].current_image;
+          } else if (return_data.products[i].certificate_no) {
+            // Second, check Stock records first (most recent/updated - has the latest image)
+            let stockQuery = {
+              where: {
+                certificate_no: {
+                  [Op.like]: `${return_data.products[i].certificate_no}`,
+                },
               },
-            },
-          };
-            let resData=  await PurchaseProductModel.findAll(query)
-            let current_image = (resData && resData.length > 0 && resData[0].current_image) ? resData[0].current_image : null;
+              order: [['id', 'DESC']], // Get the most recent one
+            };
+            let existingStock = await StockModel.findOne(stockQuery, { transaction: t });
+            if (existingStock && existingStock.current_image) {
+              current_image = existingStock.current_image;
+            } else {
+              // Third, check PurchaseProduct records (fallback)
+              let purchaseQuery = {
+                where: {
+                  certificate_no: {
+                    [Op.like]: `${return_data.products[i].certificate_no}`,
+                  },
+                },
+                order: [['id', 'DESC']], // Get the most recent one
+              };
+              let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery, { transaction: t });
+              if (purchaseProduct && purchaseProduct.current_image) {
+                current_image = purchaseProduct.current_image;
+              }
+            }
+          }
+          
           stock = await StockModel.create(
             {
               product_id: return_data.products[i].product_id,
               size_id: return_data.products[i].size_id || null,
+              purity_id: return_data.products[i].materials[0].purity_id,
               certificate_no: return_data.products[i].certificate_no,
-              quantity: 1,
+              quantity: !isEmpty(return_data.products[i].certificate_no)?1:parseInt(return_data.products[i].materials[0].return_qty),
               current_image: current_image,
               total_weight: weight_in_gram,
               user_id: req.userId,
@@ -2355,11 +3301,11 @@ exports.returnSaleNew = async (req, res) => {
         //insert into return product materials table
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           let thisQty =
-            return_data.products[i].product_type == "material"
+            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material"
+            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           await ReturnProductMaterialModel.create(
@@ -2389,6 +3335,7 @@ exports.returnSaleNew = async (req, res) => {
               where: {
                 stock_id: stock.id,
                 material_id: return_data.products[i].materials[x].material_id,
+                purity_id: return_data.products[i].materials[x].purity_id
               },
             });
             if (stockMaterial) {
@@ -2418,7 +3365,7 @@ exports.returnSaleNew = async (req, res) => {
                   material_id: return_data.products[i].materials[x].material_id,
                   weight: weightFormat(thisWeight),
                   weight_in_gram: weightFormat(weight_in_gram),
-                  quantity: thisQty || 0,
+                  quantity: thisQty || 1,
                   purity_id: return_data.products[i].materials[x].purity_id,
                   unit_id: return_data.products[i].materials[x].unit_id,
                   category_id: return_data.products[i].category_id,
@@ -2433,7 +3380,7 @@ exports.returnSaleNew = async (req, res) => {
                 material_id: return_data.products[i].materials[x].material_id,
                 weight: weightFormat(thisWeight),
                 weight_in_gram: weightFormat(weight_in_gram),
-                quantity: thisQty || 0,
+                quantity: thisQty || 1,
                 purity_id: return_data.products[i].materials[x].purity_id,
                 unit_id: return_data.products[i].materials[x].unit_id,
                 category_id: return_data.products[i].category_id,
@@ -2517,12 +3464,24 @@ exports.returnSaleNew = async (req, res) => {
         stockPurchse = null;
         if (return_data.products[i].product_type == "material") {
           if (!isEmpty(return_data.products[i].product_id)) {
+            console.log("+++++++++++++++ product stock +++++++++++++++");
+            console.log({
+                product_id: return_data.products[i].product_id,
+                user_id: req.userId,
+
+              });
             stock = await StockModel.findOne({
               where: {
                 product_id: return_data.products[i].product_id,
                 user_id: req.userId,
+
               },
             });
+            console.log("+++++++++++++++ purchase stock +++++++++++++++");
+            console.log({
+                product_id: return_data.products[i].product_id,
+                user_id: req.userId,
+              });
             stockPurchse = await StockModel.findOne({
               where: {
                 product_id: return_data.products[i].product_id,
@@ -2545,16 +3504,71 @@ exports.returnSaleNew = async (req, res) => {
           }
 
           if (!stock) {
-            stock = await StockModel.create(
-              {
-                purchase_id: purchase.id,
-                current_image: base64FileUpload(
+            // Try to get current_image from multiple sources
+            let current_image = null;
+            
+            // First, check if image is provided in return_data (from frontend)
+            if (return_data.products[i] && return_data.products[i].current_image) {
+              // Check if it's a base64 string (needs upload) or a path (already uploaded)
+              if (return_data.products[i].current_image.startsWith('data:') || return_data.products[i].current_image.startsWith('iVBOR')) {
+                // It's a base64 string, upload it
+                let imageResult = await base64FileUpload(
                   return_data.products[i].current_image,
                   "products"
-                ).path,
-                purchase_product_id: return_data.products[i].id,
+                );
+                if (imageResult && imageResult.path) {
+                  current_image = imageResult.path;
+                }
+              } else {
+                // It's already a path
+                current_image = return_data.products[i].current_image;
+              }
+            } else if (return_data.products[i].certificate_no) {
+              // Second, check Stock records first (most recent/updated)
+              let stockQuery = {
+                where: {
+                  certificate_no: {
+                    [Op.like]: return_data.products[i].certificate_no
+                  }
+                },
+                order: [['id', 'DESC']]
+              };
+              let existingStock = await StockModel.findOne(stockQuery);
+              if (existingStock && existingStock.current_image) {
+                current_image = existingStock.current_image;
+              } else {
+                // Third, check PurchaseProduct by certificate_no
+                let purchaseQuery = {
+                  where: {
+                    certificate_no: {
+                      [Op.like]: return_data.products[i].certificate_no
+                    }
+                  },
+                  order: [['id', 'DESC']]
+                };
+                let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery);
+                if (purchaseProduct && purchaseProduct.current_image) {
+                  current_image = purchaseProduct.current_image;
+                } else if (return_data.products[i] && return_data.products[i]?.id) {
+                  // Fourth, check PurchaseProduct by ID
+                  let purchaseProductById = await PurchaseProductModel.findOne({
+                    where: { id: return_data.products[i]?.id }
+                  });
+                  if (purchaseProductById && purchaseProductById.current_image) {
+                    current_image = purchaseProductById.current_image;
+                  }
+                }
+              }
+            }
+            
+            stock = await StockModel.create(
+              {
+                purchase_id: purchase?.id,
+                current_image: current_image,
+                purchase_product_id: return_data.products[i]?.id,
                 product_id: return_data.products[i].product_id,
                 size_id: return_data.products[i].size_id || null,
+                purity_id: return_data.products[i].materials[0].purity_id,
                 certificate_no: return_data.products[i].certificate_no,
                 quantity: 1,
                 total_weight: return_data.products[i].total_weight,
@@ -2568,15 +3582,29 @@ exports.returnSaleNew = async (req, res) => {
             weight = 0,
             unit_name = "";
           for (let mItem of return_data.products[i].materials) {
-            let stockM = await StockMaterialModel.findOne({
-              where: { stock_id: stock.id, material_id: mItem.material_id },
-            });
-            let stockMPurchase = await StockMaterialModel.findOne({
-              where: {
-                stock_id: stockPurchse.id,
-                material_id: mItem.material_id,
-              },
-            });
+            let stockM = null;
+            let stockMPurchase = null;
+
+            if (stock != null) {
+              stockM = await StockMaterialModel.findOne({
+                where: { stock_id: stock?.id, material_id: mItem.material_id, purity_id: mItem.purity_id },
+                transaction: t,
+              });
+            }
+            if (stockPurchse != null) {
+              stockMPurchase = await StockMaterialModel.findOne({
+                where: {
+                  stock_id: stockPurchse?.id,
+                  material_id: mItem.material_id,
+                  purity_id: mItem.purity_id
+                },
+                transaction: t,
+              });
+            }
+            console.log("---------------------- stockM ----------------------");
+            console.log(stockM);
+            console.log("---------------------- stockMPurchase ----------------------");
+            console.log(stockMPurchase);
             weight += mItem.return_weight ? parseInt(mItem.return_weight) : 0;
             if (stockM) {
               await StockMaterialModel.update(
@@ -2587,16 +3615,16 @@ exports.returnSaleNew = async (req, res) => {
                   quantity:
                     parseFloat(stockM.quantity) + parseInt(mItem.return_qty),
                 },
-                { where: { id: stockM.id }, transaction: t }
+                { where: { id: stockM?.id }, transaction: t }
               );
             } else {
               await StockMaterialModel.create(
                 {
-                  stock_id: stock.id,
+                  stock_id: stock?.id,
                   material_id: mItem.material_id,
                   weight: weightFormat(mItem.weight),
                   weight_in_gram: weightFormat(mItem.weight_in_gram),
-                  quantity: mItem.quantity || 0,
+                  quantity: mItem.quantity || 1,
                   purity_id: mItem.purity_id,
                   unit_id: mItem.unit_id,
                   category_id: return_data.products[i].category_id,
@@ -2604,6 +3632,7 @@ exports.returnSaleNew = async (req, res) => {
                 { transaction: t }
               );
             }
+            console.log("---------------------- After stockM update ----------------------");
             if (stockMPurchase) {
               await StockMaterialModel.update(
                 {
@@ -2615,12 +3644,13 @@ exports.returnSaleNew = async (req, res) => {
                     parseFloat(stockMPurchase.quantity) -
                     parseInt(mItem.return_qty),
                 },
-                { where: { id: stockMPurchase.id }, transaction: t }
+                { where: { id: stockMPurchase?.id }, transaction: t }
               );
               /* weight += mItem.return_weight
                 ? parseInt(mItem.return_weight)
                 : 0; */
             }
+            console.log("---------------------- After stockMPurchase update ----------------------");
             unit_name = mItem.unit_name;
             weight = convertUnitToGram(unit_name, weight);
             quantity += parseInt(mItem.return_qty);
@@ -2639,31 +3669,34 @@ exports.returnSaleNew = async (req, res) => {
                   parseFloat(stock.total_weight) +
                   parseFloat(return_weight_in_gram),
               },
-              { where: { id: stock.id } }
+              { where: { id: stock?.id }, transaction: t }
             );
           }
-
-          if (parseFloat(stockPurchse.total_weight) <= weight) {
-            await StockModel.destroy({
-              where: { id: stockPurchse.id },
-              transaction: t,
-            });
-          } else {
-            let return_weight_in_gram = convertUnitToGram(
-              unit_name,
-              return_data.products[i].materials[0].return_weight
-            );
-            await StockModel.update(
-              {
-                quantity:
-                  parseFloat(stockPurchse.quantity) - parseFloat(quantity),
-                total_weight:
-                  parseFloat(stockPurchse.total_weight) -
-                  parseFloat(return_weight_in_gram),
-              },
-              { where: { id: stockPurchse.id } }
-            );
+          console.log("---------------------- stockPurchse update ----------------------");
+          if(stockPurchse){
+            if (parseFloat(stockPurchse.total_weight) <= weight) {
+              await StockModel.destroy({
+                where: { id: stockPurchse?.id },
+                transaction: t,
+              });
+            } else {
+              let return_weight_in_gram = convertUnitToGram(
+                unit_name,
+                return_data.products[i].materials[0].return_weight
+              );
+              await StockModel.update(
+                {
+                  quantity:
+                    parseFloat(stockPurchse.quantity) - parseFloat(quantity),
+                  total_weight:
+                    parseFloat(stockPurchse.total_weight) -
+                    parseFloat(return_weight_in_gram),
+                },
+                { where: { id: stockPurchse?.id }, transaction: t }
+              );
+            }
           }
+          console.log("---------------------- End of stockPurchse update ----------------------");
         } else {
           stock = await StockModel.findOne({
             where: {
@@ -2671,6 +3704,7 @@ exports.returnSaleNew = async (req, res) => {
               user_id: req.userId,
               certificate_no: return_data.products[i].certificate_no,
               size_id: return_data.products[i].size_id,
+              purity_id : return_data.products[i].materials[0].purity_id
             },
             include: [
               {
@@ -2681,30 +3715,90 @@ exports.returnSaleNew = async (req, res) => {
               },
             ],
           });
-
+          console.log(
+            "---------------------- Stock to check for create ----------------------"
+          );
+          console.log(stock);
           if (!stock) {
+            // Try to get current_image from multiple sources
+            let current_image = null;
+            
+            // First, check if image is provided in return_data (from frontend)
+            if (return_data.products[i] && return_data.products[i].current_image) {
+              // Check if it's a base64 string (needs upload) or a path (already uploaded)
+              if (return_data.products[i].current_image.startsWith('data:') || return_data.products[i].current_image.startsWith('iVBOR')) {
+                // It's a base64 string, upload it
+                let imageResult = await base64FileUpload(
+                  return_data.products[i].current_image,
+                  "products"
+                );
+                if (imageResult && imageResult.path) {
+                  current_image = imageResult.path;
+                }
+              } else {
+                // It's already a path
+                current_image = return_data.products[i].current_image;
+              }
+            } else if (return_data.products[i].certificate_no) {
+              // Second, check Stock records first (most recent/updated)
+              let stockQuery = {
+                where: {
+                  certificate_no: {
+                    [Op.like]: return_data.products[i].certificate_no
+                  }
+                },
+                order: [['id', 'DESC']]
+              };
+              let existingStock = await StockModel.findOne(stockQuery);
+              if (existingStock && existingStock.current_image) {
+                current_image = existingStock.current_image;
+              } else {
+                // Third, check PurchaseProduct by certificate_no
+                let purchaseQuery = {
+                  where: {
+                    certificate_no: {
+                      [Op.like]: return_data.products[i].certificate_no
+                    }
+                  },
+                  order: [['id', 'DESC']]
+                };
+                let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery);
+                if (purchaseProduct && purchaseProduct.current_image) {
+                  current_image = purchaseProduct.current_image;
+                } else if (return_data.products[i].id) {
+                  // Fourth, check PurchaseProduct by ID
+                  let purchaseProductById = await PurchaseProductModel.findOne({
+                    where: { id: return_data.products[i].id }
+                  });
+                  if (purchaseProductById && purchaseProductById.current_image) {
+                    current_image = purchaseProductById.current_image;
+                  }
+                }
+              }
+            }
+            console.log("---------------------- current_image ----------------------");
+            console.log(current_image);
             stock = await StockModel.create(
               {
                 purchase_id: purchase.id,
-                current_image: base64FileUpload(
-                  return_data.products[i].current_image,
-                  "products"
-                ).path,
+                current_image: current_image,
                 purchase_product_id: return_data.products[i].id,
                 product_id: return_data.products[i].product_id,
                 size_id: return_data.products[i].size_id || null,
+                purity_id: return_data.products[i].materials[0].purity_id,
                 certificate_no: return_data.products[i].certificate_no,
-                quantity: 1,
+                quantity: return_data.products[i].certificate_no != ""?1:return_data.products[i].materials[0]?.quantity,
                 total_weight: return_data.products[i].total_weight,
                 user_id: req.userId,
               },
               { transaction: t }
             );
-
+            console.log("---------------------- Created Stock ----------------------");
+            console.log(stock);
             for (let x = 0; x < return_data.products[i].materials.length; x++) {
               await StockMaterialModel.create(
                 {
-                  stock_id: stock.id,
+                  stock_id: stock?.id,
                   material_id: return_data.products[i].materials[x].material_id,
                   weight: weightFormat(
                     return_data.products[i].materials[x].weight
@@ -2712,7 +3806,7 @@ exports.returnSaleNew = async (req, res) => {
                   weight_in_gram: weightFormat(
                     return_data.products[i].materials[x].weight_in_gram
                   ),
-                  quantity: return_data.products[i].materials[x].quantity || 0,
+                  quantity: return_data.products[i].materials[x].quantity || 1,
                   purity_id: return_data.products[i].materials[x].purity_id,
                   unit_id: return_data.products[i].materials[x].unit_id,
                   category_id: return_data.products[i].category_id,
@@ -2720,6 +3814,9 @@ exports.returnSaleNew = async (req, res) => {
                 { transaction: t }
               );
             }
+            console.log(
+              "---------------------- Created Stock Materials ----------------------"
+            );
           }
 
           stockPurchse = await StockModel.findOne({
@@ -2796,6 +3893,7 @@ exports.returnSaleNew = async (req, res) => {
               let item = return_data.products[i].materials[x];
               let thisM = _.filter(stockMaterials, {
                 material_id: item.material_id,
+                purity_id: item.purity_id
               });
               if (
                 thisM.length &&
@@ -2813,15 +3911,15 @@ exports.returnSaleNew = async (req, res) => {
             console.log(return_data.products[i].materials.length);
             if (numMatched == return_data.products[i].materials.length) {
               await StockMaterialModel.destroy({
-                where: { stock_id: stockPurchse.id },
+                where: { stock_id: stockPurchse?.id },
                 transaction: t,
               });
               await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
               let cart = await cartModel.findOne({
-                where: { type: "sale", stock_id: stockPurchse.id },
+                where: { type: "sale", stock_id: stockPurchse?.id },
               });
               await StockModel.destroy({
-                where: { id: stockPurchse.id },
+                where: { id: stockPurchse?.id },
                 transaction: t,
               });
               await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
@@ -2860,13 +3958,39 @@ exports.returnSaleNew = async (req, res) => {
         let paid_amount = parseFloat(sale.paid_amount);
         let due_amount = priceFormat(total_payable - paid_amount, true);
         due_amount = due_amount < 0 ? 0 : due_amount;
-        if (paid_amount > total_payable) {
-          paid_amount = total_payable;
+
+        let allReturnSale = await SaleProductModel.count({
+          where: { sale_id: sale.id, is_return: true },
+          transaction: t 
+        });
+        allReturnSale = allReturnSale ?? 0;
+        console.log(allReturnSale);
+        console.log(sale.saleProducts.length);
+        await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
+        let allReturnPurchase = await PurchaseProductModel.count({
+          where: { purchase_id: purchase.id, is_return: true },
+          transaction: t 
+        });
+        allReturnPurchase = allReturnPurchase ?? 0;
+        console.log(allReturnPurchase);
+        console.log(purchase.purchaseProducts.length);
+        await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
+        if (allReturnSale == sale.saleProducts.length && allReturnPurchase == purchase.purchaseProducts.length) {
+          //due_amount = 0;
+          //paid_amount = total_payable;
         }
+        
 
         let return_amount_from_wallet = parseFloat(
           data.return_amount_from_wallet
         );
+
+        //paid_amount += return_amount_from_wallet;
+
+        /* if (paid_amount > total_payable) {
+          paid_amount = total_payable;
+        } */
+
         if (return_amount_from_wallet > 0) {
           if (data.payment_type == "return") {
             let payment2 = await PaymentModel.create({
@@ -2890,8 +4014,10 @@ exports.returnSaleNew = async (req, res) => {
               can_accept: false,
               is_advance: false,
             });
+            console.log("---------------------- PaymentModel create for sale refund ----------------------");
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             await updateWalletRemainingBalance(userID, payment2.id);
+            console.log("---------------------- updateWalletRemainingBalance for sale refund ----------------------");
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             let payment3 = await PaymentModel.create({
               user_id: sale.user_id,
@@ -2911,8 +4037,11 @@ exports.returnSaleNew = async (req, res) => {
               can_accept: false,
               is_advance: false,
             });
+            console.log("---------------------- PaymentModel create for return purchase ----------------------");
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             await updateWalletRemainingBalance(sale.user_id, payment3.id);
+            console.log(`---------------------- updateWalletRemainingBalance for return purchase ----------------------`);
+            await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
           } else {
             await updateAdvanceAmount(
               sale.user_id,
@@ -2920,6 +4049,7 @@ exports.returnSaleNew = async (req, res) => {
               return_amount_from_wallet,
               true
             );
+            await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
           }
         }
         console.log(
@@ -2937,6 +4067,9 @@ exports.returnSaleNew = async (req, res) => {
           },
           { where: { id: req.params.id }, transaction: t }
         );
+        console.log(
+          "---------------------- SaleModel update ----------------------"
+        );  
         await new Promise((resolve) => setTimeout(resolve, 500));
         await PurchaseModel.update(
           {
@@ -2945,6 +4078,9 @@ exports.returnSaleNew = async (req, res) => {
             due_amount: due_amount,
           },
           { where: { sale_id: sale.id }, transaction: t }
+        );
+        console.log(
+          "---------------------- PurchaseModel update ----------------------"  
         );
         await new Promise((resolve) => setTimeout(resolve, 500));
         if (due_amount <= 0) {
@@ -2961,6 +4097,9 @@ exports.returnSaleNew = async (req, res) => {
             }
           );
         }
+        console.log(
+          "---------------------- NoticationModel update ----------------------"
+        );  
         await new Promise((resolve) => setTimeout(resolve, 500));
         /* make return as complete */
         await ReturnModel.update(
@@ -2969,17 +4108,28 @@ exports.returnSaleNew = async (req, res) => {
           },
           { where: { id: saleReturnObj.id }, transaction: t }
         );
+        console.log(
+          "---------------------- ReturnModel update ----------------------"  
+        );
         stock = await StockModel.findOne({
           where: {
             return_id: saleReturnObj.id,
           },
           transaction: t,
         });
+        console.log(
+          "---------------------- StockModel find for return_id ----------------------"
+        );  
         await new Promise((resolve) => setTimeout(resolve, 500));
-        await StockMaterialModel.destroy({
-          where: { stock_id: stock.id },
-          transaction: t,
-        });
+        if(stock){
+          await StockMaterialModel.destroy({
+            where: { stock_id: stock.id },
+            transaction: t,
+          });
+        }
+        console.log(
+          "---------------------- StockMaterialModel destroy for return_id ----------------------"
+        );
         await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
         await StockModel.destroy({
           where: { return_id: saleReturnObj.id },
@@ -2995,12 +4145,16 @@ exports.returnSaleNew = async (req, res) => {
           },
           { where: { id: req.params.id }, transaction: t }
         );
+        console.log("---------------------- update status in sale ----------------------");
         await new Promise((resolve) => setTimeout(resolve, 500));
         await PurchaseModel.update(
           {
             status: "return_pending",
           },
           { where: { sale_id: sale.id }, transaction: t }
+        );
+        console.log(
+          "---------------------- update status in purchase ----------------------"
         );
       }
     });
@@ -3023,7 +4177,7 @@ exports.returnSaleNew = async (req, res) => {
         { where: { id: req.params.id } }
       );
     }
-
+    console.log("---------------------- SaleModel Update ----------------------");
     let allReturnPurchase = await PurchaseProductModel.count({
       where: { purchase_id: purchase.id, is_return: true },
     });
@@ -3157,6 +4311,7 @@ exports.delete = async (req, res) => {
                 where: {
                   stock_id: stock.id,
                   material_id: thisItem.material_id,
+                  purity_id: thisItem.purity_id
                 },
               });
               if (stockMaterial) {
@@ -3198,14 +4353,14 @@ exports.delete = async (req, res) => {
     for (let i = 0; i < sale.saleProducts.length; i++) {
       let product = sale.saleProducts[i].product;
       if (product) {
-        if (product.type == "material") {
+        if (product.type == "material" || isEmpty(product.certificate_no)) {
           let stock2 = await StockModel.findOne({
             where: { product_id: product.id, user_id: sale.user_id },
           });
           let quantity = 0;
           for (let mItem of sale.saleProducts[i].saleMaterials) {
             let stockM = await StockMaterialModel.findOne({
-              where: { stock_id: stock2.id, material_id: mItem.material_id },
+              where: { stock_id: stock2.id, material_id: mItem.material_id, purity_id: mItem.purity_id },
             });
             if (stockM) {
               await StockMaterialModel.update(
@@ -3338,6 +4493,7 @@ exports.returnStockTransfer = async (req, res) => {
         size_id: thisItem.size_id || null,
         certificate_no: thisItem.certificate_no,
         total_weight: weightFormat(thisItem.total_weight),
+        current_image: thisItem.current_image || null,
       };
       let purchaseProduct = await PurchaseProductModel.create(thisObj2);
 
@@ -3390,6 +4546,7 @@ exports.returnStockTransfer = async (req, res) => {
         size_id: thisItem.size_id,
         certificate_no: thisItem.certificate_no,
         total_weight: thisItem.total_weight,
+        current_image: thisItem.current_image || null,
         materials: reqDataM,
         worker_id: "",
       });
@@ -4011,7 +5168,7 @@ exports.downloadInvoice = async (req, res) => {
                                                       .size_name
                                                   }
                                               </td>
-                                              <td  style="text-align:
+                                              <td style="text-align:
                                                   left; font-size: 11px;
                                                   font-weight: 400;">
                                                   ${
@@ -4081,9 +5238,7 @@ exports.downloadInvoice = async (req, res) => {
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
       html += `<div>`;
       if (isEmpty(saleData.products[i].materials[x].discount_amount)) {
-        saleData.products[i].materials[x].amount == "₹0.00"
-          ? null
-          : (html += `-`);
+        html += `-`;
       } else {
         html += `<span
                                                                   style="text-align:
@@ -4125,9 +5280,7 @@ exports.downloadInvoice = async (req, res) => {
                                                           border-bottom: 1px solid
                                                           #1E2757;">`;
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
-      saleData.products[i].materials[x].amount == "₹0.00"
-        ? null
-        : (html += `<div>${saleData.products[i].materials[x].material_cost}</div>`);
+      html += `<div>${saleData.products[i].materials[x].material_cost}</div>`;
     }
     html += `</td>
                                                       <td style="text-align: left;
@@ -4516,7 +5669,7 @@ exports.downloadInvoice = async (req, res) => {
                                           <div
                                               class="table-footer-area"
                                               style="display: table; width:
-                                              90%;  bottom:20px">
+                                              90%;  bottom:50px">
                                               <div style="display:
                                                   table-cell; bottom:0px; width:
                                                   74%">
@@ -5572,9 +6725,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                             #1E2757; width: 300px; text-align: left;">
                                             <div style="max-width: 300px; text-align: left;">`;
       for (let x = 0; x < saleData.products[i].materials.length; x++) {
-        saleData.products[i].materials[x].amount == "₹0.00"
-          ? null
-          : (html += `<div style="display: flex;
+        html += `<div style="display: flex;
                                                     flex-wrap: wrap;
                                                     justify-content: center;
                                                     margin: 0 -5px; text-align: left;">
@@ -5608,7 +6759,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                             400;"> = ${saleData.products[i].materials[x].amount}</span>
                                                     </div>
 
-                                                </div>`);
+                                                </div>`;
       }
 
       html += `</div>
@@ -5620,9 +6771,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
       for (let x = 0; x < saleData.products[i].materials.length; x++) {
         html += `<div>`;
         if (isEmpty(saleData.products[i].materials[x].discount_amount)) {
-          saleData.products[i].materials[x].amount == "₹0.00"
-            ? null
-            : (html += `-`);
+          html += `-`;
         } else {
           html += `<span
                                                         style="text-align:
@@ -5656,9 +6805,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 border-bottom: 1px solid
                                                 #1E2757;">`;
       for (let x = 0; x < saleData.products[i].materials.length; x++) {
-        saleData.products[i].materials[x].amount == "₹0.00"
-          ? null
-          : (html += `<div>${saleData.products[i].materials[x].material_cost}</div>`);
+        html += `<div>${saleData.products[i].materials[x].material_cost}</div>`;
       }
       html += `</td>
                                             <td style="text-align: left;

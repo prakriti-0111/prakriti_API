@@ -21,6 +21,7 @@ const PurityModel = db.purities;
 const SubCategoryModel = db.sub_categories;
 const CategoryModel = db.categories;
 const SaleModel = db.sales;
+const SaleProductModel = db.sale_products;
 
 /**
  * Retrieve all Cart
@@ -115,9 +116,10 @@ exports.store = async (req, res) => {
     return res.status(errorCodes.default).send(formatErrorResponse('Product not found.'));
   }
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-
-  if(product.type == "material"){
-    let stock = await stockModel.findOne({where: {id: data.stock_id, user_id: userID}});
+  console.log("cart store data ===============: ", data);
+  let stock = await stockModel.findOne({where: {id: data.stock_id, user_id: userID}});
+  if(product.type == "material" || isEmpty(stock.certificate_no)){
+    
     let query = "SELECT SUM(quantity) as total_quantity FROM carts WHERE stock_id = " + data.stock_id + " AND deleted_at IS NULL";
     const cart = await sequelize.query(query, { type: QueryTypes.SELECT });
     if(!(!stock || !cart.length || cart[0].total_quantity == null || parseInt(cart[0].total_quantity) < parseInt(stock.quantity))){
@@ -190,6 +192,9 @@ exports.getCartItem = async (req, res) => {
   if(!isEmpty(req.query.stock_id)){
     conditions.stock_id = req.query.stock_id;
   }
+  
+  const certificate_no = req.query.certificate_no?req.query.certificate_no:null;
+  
   let stock = await stockModel.findOne({where: {id: req.query.stock_id, user_id: userID}});
   if(!stock){
     return res.status(errorCodes.default).send(formatErrorResponse('Stock not found.'));
@@ -204,6 +209,26 @@ exports.getCartItem = async (req, res) => {
     product_type = product.type;
   }else{
     product_type = 'material';
+  }
+
+  /* get all sale on approval sale ids by user */
+  const sales = await SaleModel.findAll({
+    attributes: ["id"],
+    where: { 
+      is_approval: "1",
+      sale_by: userID,
+      is_approved: "3"
+    }
+  });
+  let saleIds = arrayColumn(sales, "id");
+  const saleProductExists = await SaleProductModel.findOne({
+    where: { 
+      certificate_no: certificate_no,
+      sale_id: { [Op.in]: saleIds }, 
+    },
+  });
+  if(saleProductExists){
+    return res.status(errorCodes.default).send(formatErrorResponse('Sale record exists.'));
   }
 
   if(product_type == "material"){

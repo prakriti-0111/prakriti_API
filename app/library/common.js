@@ -1089,6 +1089,7 @@ const calculateProductPriceCart = async (
     total_material_discount = 0,
     total_mrp_price = 0,
     total_sale_price = 0;
+  console.log("materials : ", materials);
   for (let i = 0; i < materials.length; i++) {
     let materialPriceObj = await MaterialPriceModel.findOne({
       where: { material_id: materials[i].material_id },
@@ -1163,6 +1164,7 @@ const calculateProductPriceCart = async (
       total_gram: weightFormat(total_gram),
     });
   }
+  console.log("total_mrp_price : ", total_mrp_price);
   let total_making_charge = 0;
   let making_charge_type = sub_category ? sub_category.making_charge_type : "";
   let making_charge = sub_category ? sub_category.making_charge : 0;
@@ -1179,6 +1181,7 @@ const calculateProductPriceCart = async (
     (total_making_charge * making_charge_discount_percent) / 100
   );
   total_mrp_price += total_making_charge;
+  console.log("total_mrp_price after making charge : ", total_mrp_price);
   total_making_charge = priceFormat(total_making_charge - discount_amount);
   total_discount += discount_amount;
   total_sale_price += total_making_charge;
@@ -1193,6 +1196,7 @@ const calculateProductPriceCart = async (
       ? priceFormat((total_mrp_price * parseFloat(tax_info.sgst)) / 100, true)
       : 0;
     total_mrp_price += igst + cgst + sgst;
+    console.log("total_mrp_price after tax : ", total_mrp_price);
     total_tax = igst + cgst + sgst;
     total_sale_price += priceFormat(igst + cgst + sgst);
   }
@@ -1451,6 +1455,7 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
     categories = [];
   for (let i = 0; i < stocks.length; i++) {
     let stock = stocks[i];
+    
     let taxInfo = null;
     if (
       (stock.type == "product" || stock.type == "return") &&
@@ -1497,6 +1502,13 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
       (item) => item.category_id == category_id
     );
     let stockQ = !stock.quantity ? 1 : stock.quantity;
+
+    /* if stock does not have certificate_no then consider material qty */
+    
+    if(stock.certificate_no == ""){
+      stockQ = stock.stockMaterials && stock.stockMaterials.length > 0 && stock.stockMaterials[0].quantity?stock.stockMaterials[0].quantity:stockQ;
+    }
+
     if (index !== -1) {
       categories[index].total_amount = priceFormat(
         categories[index].total_amount + thisPrice
@@ -1514,7 +1526,7 @@ const getTotalStockPriceByUser = async (byCategory, userId, type) => {
   }
 
   // console.log(" Total_Prize :- ", + total_price);
-
+  console.log("By categories ---------------: ", categories);
   return byCategory ? categories : priceFormat(total_price);
 };
 
@@ -1529,49 +1541,72 @@ const getWalletBalance = async (
   payment_type,
   paymentId
 ) => {
-  payment_type = payment_type === undefined ? "wallet" : payment_type;
-  let paymentIdQ = "";
-  if (paymentId) {
-    paymentIdQ = " AND id <= " + paymentId;
-  }
-  if (!payment_mode) {
-    let query =
-      "SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND payment_belongs = " +
-      userId +
-      " AND payment_type = '" +
-      payment_type +
-      "' AND deleted_at IS NULL" +
-      paymentIdQ;
-    const paymentObj = await dbSequelize.query(query, {
-      type: QueryTypes.SELECT,
-    });
-    let total_debit = 0,
-      total_credit = 0;
-    if (paymentObj.length) {
-      total_debit = parseFloat(paymentObj[0].total_debit);
-      total_credit = parseFloat(paymentObj[0].total_credit);
+  try{
+    payment_type = payment_type === undefined ? "wallet" : payment_type;
+    let paymentIdQ = "";
+    if (paymentId) {
+      paymentIdQ = " AND id <= " + paymentId;
     }
-    return priceFormat(total_credit - total_debit);
-  } else {
-    let query =
-      "SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND  payment_belongs = " +
-      userId +
-      " AND payment_mode = '" +
-      payment_mode +
-      "' AND payment_type = '" +
-      payment_type +
-      "' AND deleted_at IS NULL" +
-      paymentIdQ;
-    const paymentObj = await dbSequelize.query(query, {
-      type: QueryTypes.SELECT,
-    });
-    let total_debit = 0,
-      total_credit = 0;
-    if (paymentObj.length) {
-      total_debit = parseFloat(paymentObj[0].total_debit);
-      total_credit = parseFloat(paymentObj[0].total_credit);
-    }
-    return priceFormat(total_credit - total_debit);
+    console.log("payment_mode : ", payment_mode);
+    if (!payment_mode) {
+      let query =
+        "SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND payment_belongs = " +
+        userId +
+        " AND payment_type = '" +
+        payment_type +
+        "' AND deleted_at IS NULL" +
+        paymentIdQ;
+        console.log(query);
+      const paymentObj = await dbSequelize.query(query, {
+        type: QueryTypes.SELECT,
+      });
+      let total_debit = 0,
+        total_credit = 0;
+      if (paymentObj.length) {
+        total_debit = parseFloat(paymentObj[0].total_debit);
+        total_credit = parseFloat(paymentObj[0].total_credit);
+      }
+      return priceFormat(total_credit - total_debit);
+    } else {
+      let query = "";
+      if(payment_mode == "Advance"){
+        query =
+          "SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND  payment_belongs = " +
+          userId +
+          " AND is_advance = '1' AND payment_type = '" +
+          payment_type +
+          "' AND deleted_at IS NULL" +
+          paymentIdQ;
+      } else {
+        query =
+          "SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND  payment_belongs = " +
+          userId +
+          " AND payment_mode = '" +
+          payment_mode +
+          "' AND payment_type = '" +
+          payment_type +
+          "' AND deleted_at IS NULL" +
+          paymentIdQ;
+          
+      }
+      console.log(query);
+      const paymentObj = await dbSequelize.query(query, {
+        type: QueryTypes.SELECT,
+      });
+      let total_debit = 0,
+        total_credit = 0;
+      if (paymentObj.length) {
+        total_debit = parseFloat(paymentObj[0].total_debit);
+        total_credit = parseFloat(paymentObj[0].total_credit);
+      }
+      if(payment_mode == "Advance"){
+        return priceFormat(total_credit);
+      } else {
+        return priceFormat(total_credit - total_debit);
+      }
+    } 
+  } catch(err){
+    console.log(err);
   }
 };
 
@@ -2967,7 +3002,7 @@ const getStockUserID = async (req, userID) => {
   return userID;
 };
 
-const canStockAddCart = async (stockId, productType, user_id) => {
+const canStockAddCart = async (stockId, productType, user_id, certificate_no = null) => {
   if (productType == "material") {
     let stock = await StockModel.findOne({
       where: { id: stockId, user_id: user_id },
@@ -2997,6 +3032,33 @@ const canStockAddCart = async (stockId, productType, user_id) => {
       can_add_cart = false;
     }
   }
+
+  /* check if already sold or in sale on approval state */
+  // if(certificate_no != null){
+  //   /* get all sale on approval sale ids by user */
+  //   const sales = await SaleModel.findAll({
+  //     attributes: ["id"],
+  //     where: { 
+  //       is_approval: "1",
+  //       sale_by: user_id,
+  //       is_approved: "3"
+  //     }
+  //   });
+  //   let saleIds = arrayColumn(sales, "id");
+  //   const saleProductExists = await SaleProductModel.findOne({
+  //     where: { 
+  //       certificate_no: certificate_no,
+  //       sale_id: { [Op.in]: saleIds }, 
+  //     },
+  //   });
+  //   console.log("---------------------->saleProductExists->>>>>>>>>", saleProductExists);
+  //   if (!saleProductExists) {
+  //     can_add_cart = true;
+  //   } else {
+  //     can_add_cart = false;
+  //   }
+  // }
+
   return can_add_cart;
 };
 
@@ -3297,6 +3359,7 @@ const getPurchaseProducts = async (params) => {
       is_approval: false,
       sale_id: { [Op.is]: null },
       //type: { [Op.in]: ["product", "order_purchase"] },
+      type: {[Op.ne]: "material"},
       user_id: { [Op.in]: managerIds },
     },
     order: [["createdAt", "DESC"]],
@@ -3425,6 +3488,8 @@ const getPurchaseProducts = async (params) => {
         if (product && product.type == "material") {
           //console.log(pm.quantity, pm.return_qty, product.name)
           weight_display.push(weightFormat(quantity));
+        } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){ 
+          weight_display.push(weightFormat(quantity));
         } else {
           weight_display.push(weightFormat(weight));
         }
@@ -3468,6 +3533,8 @@ const getPurchaseProducts = async (params) => {
         total_return_product += materialItem.length
           ? materialItem[0].return_qty
           : 0;
+      } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+        total_product += materialItem.length ? materialItem[0].quantity : 1;
       } else {
         total_product++;
         //total_return_product++;
@@ -3484,6 +3551,9 @@ const getPurchaseProducts = async (params) => {
               ? materialItem[0].quantity
               : 0
             : 1;
+        if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+          stockQ = materialItem.length?materialItem[0].quantity:1;
+        }
         if (index !== -1) {
           categories[index].total_amount = priceFormat(
             categories[index].total_amount + priceFormat(pp.total)
@@ -3650,6 +3720,8 @@ const getPurchaseProductsUser = async (req, params) => {
         if (product && product.type == "material") {
           //console.log(pm.quantity, pm.return_qty, product.name)
           weight_display.push(weightFormat(quantity));
+        } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){ 
+          weight_display.push(weightFormat(quantity));
         } else {
           weight_display.push(weightFormat(weight));
         }
@@ -3694,6 +3766,8 @@ const getPurchaseProductsUser = async (req, params) => {
         total_return_product += materialItem.length
           ? materialItem[0].return_qty
           : 0;
+      } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+        total_product += materialItem.length ? materialItem[0].quantity : 1;
       } else {
         total_product++;
         //total_return_product++;
@@ -3710,6 +3784,9 @@ const getPurchaseProductsUser = async (req, params) => {
               ? materialItem[0].quantity
               : 0
             : 1;
+        if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+          stockQ = materialItem.length?materialItem[0].quantity:1;
+        }    
         if (index !== -1) {
           categories[index].total_amount = priceFormat(
             categories[index].total_amount + priceFormat(pp.total)
@@ -3746,11 +3823,11 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
   let sales = await SaleModel.findAll({
     where: {
       sale_by: { [Op.in]: userIds },
-      is_assigned: false,
-      [Op.or]: [
+      is_assigned: false, is_approval: false, /* is_approved: { [Op.ne]: 2 } */
+      /* [Op.or]: [
         { is_approval: false, is_approved: { [Op.ne]: 2 } },
         { is_approval: true, is_approved: 3 },
-      ],
+      ], */
     },
     include: [
       {
@@ -3877,6 +3954,8 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
         materialString.push(str);
         if (product && product.type == "material") {
           weight_display.push(weightFormat(quantity));
+        } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+          weight_display.push(weightFormat(quantity));
         } else {
           weight_display.push(weightFormat(weight));
         }
@@ -3914,6 +3993,8 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
       }
       if (product && product.type == "material") {
         total_product += materialItem.length ? materialItem[0].quantity : 0;
+      } else if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+        total_product += materialItem.length ? materialItem[0].quantity : 1;
       } else {
         total_product++;
       }
@@ -3929,6 +4010,9 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
               ? materialItem[0].quantity
               : 0
             : 1;
+        if(product && isEmpty(pp.certificate_no) && product.type != "material"){
+          stockQ = materialItem.length ? materialItem[0].quantity : 1;
+        }
         if (index !== -1) {
           categories[index].total_amount = priceFormat(
             categories[index].total_amount + priceFormat(pp.total)
