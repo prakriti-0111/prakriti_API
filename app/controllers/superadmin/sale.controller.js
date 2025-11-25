@@ -5198,7 +5198,7 @@ exports.downloadInvoice = async (req, res) => {
                                                           margin: 0 -5px; text-align: left;">
                                                           <div style="flex-basis:
                                                               calc(69% - 10px);
-                                                              margin: 0 5px
+                                                              margin: 0 0px
                                                               0px; line-height:
                                                               1;text-align: left;">
                                                               <span
@@ -5215,7 +5215,7 @@ exports.downloadInvoice = async (req, res) => {
                                                               style="flex-basis:
                                                               calc(31% -
                                                               10px);
-                                                              margin: 0 5px
+                                                              margin: 0 0px
                                                               0px; line-height:
                                                               1;">
                                                               <span
@@ -8221,9 +8221,9 @@ exports.downloadInvoiceItems = async (req, res) => {
                 
           } ${
             saleData.products[i].materials[x].unit_name
-          } x ${removeCurrencyAndDecimalFromPrice(
+          } x ${
             saleData.products[i].materials[x].rate
-          )}
+          }
                                                       </span>
                                                       <!-- span
                                                           style="
