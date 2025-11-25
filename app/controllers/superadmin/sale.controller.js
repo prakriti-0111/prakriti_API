@@ -4011,7 +4011,7 @@ exports.downloadInvoice = async (req, res) => {
                                                       .size_name
                                                   }
                                               </td>
-                                              <td colspan="8" style="text-align:
+                                              <td  style="text-align:
                                                   left; font-size: 11px;
                                                   font-weight: 400;">
                                                   ${
@@ -4019,7 +4019,14 @@ exports.downloadInvoice = async (req, res) => {
                                                       .certificate_no
                                                   }
                                               </td>
-  
+                                              <td colspan="7" style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400;">Gross Weight-
+                                                    ${
+                                                      saleData.products[i]
+                                                        .total_weight
+                                                    }
+                                              </td>
                                           </tr>
                                           <tr style="background-color: #fff;
                                               vertical-align: top;">
@@ -4028,15 +4035,13 @@ exports.downloadInvoice = async (req, res) => {
                                                   #1E2757; width: 300px; text-align: left;">
                                                   <div style="max-width: 300px; text-align: left;">`;
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
-      saleData.products[i].materials[x].amount == "₹0.00"
-        ? null
-        : (html += `<div style="display: flex;
+      html += `<div style="display: flex;
                                                           flex-wrap: wrap;
                                                           justify-content: center;
                                                           margin: 0 -5px; text-align: left;">
                                                           <div style="flex-basis:
                                                               calc(69% - 10px);
-                                                              margin: 0 5px
+                                                              margin: 0 0px
                                                               0px; line-height:
                                                               1;text-align: left;">
                                                               <span
@@ -4053,7 +4058,7 @@ exports.downloadInvoice = async (req, res) => {
                                                               style="flex-basis:
                                                               calc(31% -
                                                               10px);
-                                                              margin: 0 5px
+                                                              margin: 0 0px
                                                               0px; line-height:
                                                               1;">
                                                               <span
@@ -4061,10 +4066,10 @@ exports.downloadInvoice = async (req, res) => {
                                                                   left; font-size:
                                                                   10px;
                                                                   font-weight:
-                                                                  400;"> = ${saleData.products[i].materials[x].amount}</span>
+                                                                  400;">=${saleData.products[i].materials[x].amount}</span>
                                                           </div>
   
-                                                      </div>`);
+                                                      </div>`;
     }
 
     html += `</div>
@@ -4255,7 +4260,7 @@ exports.downloadInvoice = async (req, res) => {
 
                                               class="table-footer-area"
                                               style="display: table; width:
-                                              90%; position:absolute ;bottom:${
+                                              90%; bottom:${
                                                 payments.length == 0
                                                   ? 80
                                                   : payments.length == 1
@@ -4511,9 +4516,9 @@ exports.downloadInvoice = async (req, res) => {
                                           <div
                                               class="table-footer-area"
                                               style="display: table; width:
-                                              90%; position:absolute; bottom:50px">
+                                              90%;  bottom:20px">
                                               <div style="display:
-                                                  table-cell;position:absolute; bottom:0px; width:
+                                                  table-cell; bottom:0px; width:
                                                   74%">
                                                   <div style="display: block;
                                                       justify-content: flex-end;
@@ -7048,9 +7053,7 @@ exports.downloadInvoiceItems = async (req, res) => {
                                                   
                                           `;
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
-      saleData.products[i].materials[x].amount == "₹0.00"
-        ? null
-        : (html += `<div style="display: flex;
+      html += `<div style="display: flex;
                                                   margin: 5px 5px 0px 5px; text-align: left; width:150px;">
                                                   <div style="
                                                       line-height:1; text-align: left;">
@@ -7063,17 +7066,17 @@ exports.downloadInvoiceItems = async (req, res) => {
                                                               .material_name
                                                           } ${
             saleData.products[i].materials[x].pakka_weight
-              ? removeCurrencyAndDecimalFromPrice(
+              ? 
                   saleData.products[i].materials[x].pakka_weight
-                )
-              : removeCurrencyAndDecimalFromPrice(
+                
+              : 
                   saleData.products[i].materials[x].weight
-                )
+                
           } ${
             saleData.products[i].materials[x].unit_name
-          } x ${removeCurrencyAndDecimalFromPrice(
+          } x ${
             saleData.products[i].materials[x].rate
-          )}
+          }
                                                       </span>
                                                       <!-- span
                                                           style="
@@ -7104,15 +7107,13 @@ exports.downloadInvoiceItems = async (req, res) => {
                                                           }</span>
                                                   </div-->
 
-                                              </div>`);
+                                              </div>`;
     }
     html += `
                                               </td>
                                               <td style="border-bottom:1px solid #1E2757;">`;
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
-      saleData.products[i].materials[x].amount == "₹0.00"
-        ? null
-        : (html += `<div style="display: flex;
+      html += `<div style="display: flex;
                                                       width:50px;
                                                       margin: 0px 5px 0px 0px; text-align: left;">
                                                       <div style="
@@ -7127,7 +7128,7 @@ exports.downloadInvoiceItems = async (req, res) => {
                                                                   .amount
                                                               )}</span>
                                                       </div>
-                                                  </div>`);
+                                                  </div>`;
     }
     html += `
                                               </td>
@@ -7135,9 +7136,7 @@ exports.downloadInvoiceItems = async (req, res) => {
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
       html += `<div style="width:90px;">`;
       if (isEmpty(saleData.products[i].materials[x].discount_amount)) {
-        saleData.products[i].materials[x].amount == "₹0.00"
-          ? null
-          : (html += `-`);
+        html += `-`;
       } else {
         html += `<span style="text-align:left; font-size:10px;font-weight:400;">
                                                   Disc@${removeBlankZero(
@@ -7162,16 +7161,14 @@ exports.downloadInvoiceItems = async (req, res) => {
                                               </td>
                                               <td style="border-bottom: 1px solid #1E2757;">`;
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
-      saleData.products[i].materials[x].amount == "₹0.00"
-        ? null
-        : (html += `<div style="text-align: left; font-size: 10px; font-weight: 400;
+      html += `<div style="text-align: left; font-size: 10px; font-weight: 400;
                                                       margin-top: 5px; 
                                                       width: 40px
                                                       line-height:1;">${removeCurrencyAndDecimalFromPrice(
                                                         saleData.products[i]
                                                           .materials[x]
                                                           .material_cost
-                                                      )}</div>`);
+                                                      )}</div>`;
     }
     html += `
                                               </td>
