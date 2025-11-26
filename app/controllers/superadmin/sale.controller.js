@@ -3959,7 +3959,7 @@ exports.returnSaleNew = async (req, res) => {
         let due_amount = priceFormat(total_payable - paid_amount, true);
         due_amount = due_amount < 0 ? 0 : due_amount;
 
-        let allReturnSale = await SaleProductModel.count({
+        /* let allReturnSale = await SaleProductModel.count({
           where: { sale_id: sale.id, is_return: true },
           transaction: t 
         });
@@ -3978,7 +3978,7 @@ exports.returnSaleNew = async (req, res) => {
         if (allReturnSale == sale.saleProducts.length && allReturnPurchase == purchase.purchaseProducts.length) {
           //due_amount = 0;
           //paid_amount = total_payable;
-        }
+        } */
         
 
         let return_amount_from_wallet = parseFloat(
@@ -5198,7 +5198,7 @@ exports.downloadInvoice = async (req, res) => {
                                                           margin: 0 -5px; text-align: left;">
                                                           <div style="flex-basis:
                                                               calc(69% - 10px);
-                                                              margin: 0 5px
+                                                              margin: 0 0px
                                                               0px; line-height:
                                                               1;text-align: left;">
                                                               <span
@@ -5215,7 +5215,7 @@ exports.downloadInvoice = async (req, res) => {
                                                               style="flex-basis:
                                                               calc(31% -
                                                               10px);
-                                                              margin: 0 5px
+                                                              margin: 0 0px
                                                               0px; line-height:
                                                               1;">
                                                               <span
@@ -8221,9 +8221,9 @@ exports.downloadInvoiceItems = async (req, res) => {
                 
           } ${
             saleData.products[i].materials[x].unit_name
-          } x ${removeCurrencyAndDecimalFromPrice(
+          } x ${
             saleData.products[i].materials[x].rate
-          )}
+          }
                                                       </span>
                                                       <!-- span
                                                           style="
