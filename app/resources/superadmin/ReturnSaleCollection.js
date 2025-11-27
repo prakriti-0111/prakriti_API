@@ -44,6 +44,8 @@ const getModelObject = async(data) => {
     
     let sale = data.sale;
     req_data = new Buffer.from(data.req_data, "base64").toString('ascii');
+    req_data = req_data.replace(/[\u0000-\u001F]+/g, ""); // remove invisible and invalid characters
+    
     req_data = JSON.parse(req_data);
     let payment_type = req_data.payment_type;
     let return_payment_mode = req_data.return_payment_mode;
