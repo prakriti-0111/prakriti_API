@@ -3456,6 +3456,7 @@ exports.returnSaleNew = async (req, res) => {
           "---------------------- Weight updated into Product & Material for purchae and sale Model ----------------------"
         );
 
+        //if(from_retailer_customer && return_status == "pending") {
         /**
          * START - Remove from stock table
          */
@@ -3938,6 +3939,7 @@ exports.returnSaleNew = async (req, res) => {
           }
         }
         //}
+        //}
 
         /**
          * END - Remove from stock table
@@ -4150,7 +4152,7 @@ exports.returnSaleNew = async (req, res) => {
         await PurchaseModel.update(
           {
             status: "return_pending",
-          },
+    PurchaseModel      },
           { where: { sale_id: sale.id }, transaction: t }
         );
         console.log(
