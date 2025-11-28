@@ -2886,6 +2886,7 @@ const formatStockMaterials = (stockMaterials) => {
 exports.returnSaleNew = async (req, res) => {
   let retailerRoleId = getRoleId("retailer");
 
+  /* get sale details from id */
   let sale = await SaleModel.findOne({
     where: { id: req.params.id },
     include: [
@@ -2901,6 +2902,7 @@ exports.returnSaleNew = async (req, res) => {
       .send(formatErrorResponse("Sale not found"));
   }
   console.log("---------------------- sale ----------------------");
+  /* get purchase details from sale id */
   let purchase = await PurchaseModel.findOne({
     where: { sale_id: sale.id },
     include: [
@@ -2916,11 +2918,14 @@ exports.returnSaleNew = async (req, res) => {
       .send(formatErrorResponse("Purchase not found"));
   }
   console.log("---------------------- purchase ----------------------");
+
+  /* posted data */
   let data = req.body;
   let return_products = req.body.return_products;
   let return_data = req.body.return_data;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
 
+  /* buyer */
   let saleToUserId = sale.user_id;
   let saleToUserRole = await getUserColumnValue(saleToUserId, "role_id");
 
@@ -2933,7 +2938,7 @@ exports.returnSaleNew = async (req, res) => {
       }
 
       stockPurchse = null;
-      if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
+      if (return_data.products[i].product_type == "material") {
         if (!isEmpty(return_data.products[i].product_id)) {
           /* check for purchase record in stock */
           stockPurchse = await StockModel.findOne({
@@ -2989,6 +2994,7 @@ exports.returnSaleNew = async (req, res) => {
             product_id: return_data.products[i].product_id,
             user_id: sale.user_id,
             certificate_no: return_data.products[i].certificate_no,
+            purity_id: return_data.products[i].materials[0].purity_id,
             size_id: return_data.products[i].size_id,
           },
           include: [
@@ -3049,16 +3055,20 @@ exports.returnSaleNew = async (req, res) => {
     /* --------------- check if product stock is assigned to the buyerId ---------------- */
   }
 
+  /* check if we returning stocks */
   let is_return_stock = false;
   for (let i = 0; i < return_products.length; i++) {
     if (!return_products[i].is_return) {
       continue;
     }
+    /* if charges apply then it will be return stock flow */
     if (return_data.products[i].return_charge_percent > 0) {
       is_return_stock = true;
       break;
     }
   }
+
+  /* returning from retailer customer if requested by SE or distributor */
   let from_retailer_customer = false,
     show_superadmin = false;
   if (isSalesExecutive(req) || isDistributor(req)) {
@@ -3066,6 +3076,8 @@ exports.returnSaleNew = async (req, res) => {
   } else {
     is_return_stock = false;
   }
+
+  /* return status will be if from_retailer_customer and (charges not applied) then "completed" else "pending" */
   let return_status = "pending";
   if (from_retailer_customer) {
     if (is_return_stock) {
@@ -3076,14 +3088,16 @@ exports.returnSaleNew = async (req, res) => {
   } else {
     return_status = "pending";
   }
-  console.log("---------------------- return_status ----------------------");
+  console.log("---------------------- return_status ----------------------", return_status);
+
   //check has amount in wallet
   let return_amount_from_wallet = data.return_amount_from_wallet;
   if (
     data.payment_type == "return" &&
     (!from_retailer_customer ||
       (from_retailer_customer && return_status == "completed"))
-  ) {
+  ) { 
+    /* not retailer customer or retailer customer and charges not applied */
     let walletBalance = await getWalletBalance(
       userID,
       data.return_payment_mode
@@ -3097,10 +3111,15 @@ exports.returnSaleNew = async (req, res) => {
         .send(formatErrorResponse("Insufficient wallet balance."));
     }
   }
+
   console.log("---------------------- returnSaleNew ----------------------");
   try {
+    /* start transaction */
     const trans = await sequelize.transaction(async (t) => {
+
       let sale_products = sale.saleProducts;
+
+      /* convert all return data into Base64 */
       let req_data = JSON.stringify(data);
       req_data = new Buffer.from(req_data).toString("base64");
 
@@ -3129,7 +3148,7 @@ exports.returnSaleNew = async (req, res) => {
         },
         { transaction: t }
       );
-      console.log("---------------------- ReturnModel ----------------------");
+      console.log("---------------------- ReturnModel create ----------------------");
       /**
        * Return Products
        */
@@ -3150,13 +3169,14 @@ exports.returnSaleNew = async (req, res) => {
           ],
         });
         console.log(
-          "---------------------- saleProduct ----------------------"
+          "---------------------- saleProduct fetch ----------------------", saleProduct.id
         );
         let purchaseProduct = await PurchaseProductModel.findOne({
           where: {
             purchase_id: purchase.id,
             product_id: saleProduct.product_id,
-            certificate_no: saleProduct.certificate_no
+            certificate_no: saleProduct.certificate_no,
+            size_id: saleProduct.size_id,
           },
           include: [
             {
@@ -3166,15 +3186,18 @@ exports.returnSaleNew = async (req, res) => {
           ],
         });
         console.log(
-          "---------------------- purchaseProduct ----------------------"
+          "---------------------- purchaseProduct fetch ----------------------", purchaseProduct.id
         );
         /**
          * moved to stock
          */
+        console.log("---------------------- preparing stock entry ----------------------");
         let stock_type = "product";
         if (return_data.products[i].return_charge_percent > 0) {
           stock_type = "return";
         }
+        console.log("---------------------- stock_type ----------------------", stock_type);
+
         let quantity = 0,
           weight_in_gram = 0;
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
@@ -3222,7 +3245,7 @@ exports.returnSaleNew = async (req, res) => {
                 quantity: quantity,
                 total_weight: weight_in_gram,
                 user_id: req.userId,
-                type: stock_type,
+                type: stock_type, // "return" as stock type
                 return_id: saleReturnObj.id,
                 purity_id: return_data.products[i].materials[0].purity_id,
               },
@@ -3284,7 +3307,7 @@ exports.returnSaleNew = async (req, res) => {
             { transaction: t }
           );
         }
-        console.log("---------------------- StockModel ----------------------");
+        console.log("---------------------- StockModel create as return ----------------------");
         //insert into return product table
         let returnSaleProduct = await ReturnProductModel.create(
           {
@@ -3296,7 +3319,7 @@ exports.returnSaleNew = async (req, res) => {
           { transaction: t }
         );
         console.log(
-          "---------------------- ReturnProductModel ----------------------"
+          "---------------------- ReturnProductModel create ----------------------"
         );
         //insert into return product materials table
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
@@ -3321,7 +3344,7 @@ exports.returnSaleNew = async (req, res) => {
             { transaction: t }
           );
           console.log(
-            "---------------------- ReturnProductMaterialModel ----------------------"
+            "---------------------- ReturnProductMaterialModel create ----------------------"
           );
           /**
            * add to stock materials
@@ -3390,14 +3413,15 @@ exports.returnSaleNew = async (req, res) => {
           }
         }
         console.log(
-          "---------------------- StockMaterialModel ----------------------"
+          "---------------------- StockMaterialModel create ----------------------"
         );
-        if (
+        /* if (
           !from_retailer_customer ||
           (from_retailer_customer && return_status == "completed")
-        ) {
-          //update sale product is return and return weight & qty into sale product material table
+        ) { */
+          //update sale product is return and return weight & qty into sale product material table 
           if (return_data.products[i].product_type == "material") {
+            console.log("update sale product is return and return weight & qty into sale & purchase product material table");
             let total_return_weight =
               parseFloat(saleProduct.saleMaterials[0].return_weight) +
               parseFloat(return_data.products[i].materials[0].return_weight);
@@ -3439,6 +3463,9 @@ exports.returnSaleNew = async (req, res) => {
                 transaction: t,
               }
             );
+            console.log(
+              "---------------------- Weight updated into Product Material for purchae and sale Model ----------------------"
+            );
           } else {
             await SaleProductModel.update(
               { is_return: true },
@@ -3450,20 +3477,23 @@ exports.returnSaleNew = async (req, res) => {
               { where: { id: purchaseProduct.id }, transaction: t }
             );
           }
-        }
+          console.log(
+            "---------------------- Weight updated into Product for purchae and sale Model ----------------------"
+          );
+        //} 
 
-        console.log(
-          "---------------------- Weight updated into Product & Material for purchae and sale Model ----------------------"
-        );
+        
 
         //if(from_retailer_customer && return_status == "pending") {
         /**
          * START - Remove from stock table
          */
         //if (purchase.is_approved == 1) {
+        console.log("---------------------- Removing from stock ----------------------");
         stock = null;
         stockPurchse = null;
         if (return_data.products[i].product_type == "material") {
+          console.log("+++++++++++++++ material stock +++++++++++++++");
           if (!isEmpty(return_data.products[i].product_id)) {
             console.log("+++++++++++++++ product stock +++++++++++++++");
             console.log({
@@ -3481,7 +3511,7 @@ exports.returnSaleNew = async (req, res) => {
             console.log("+++++++++++++++ purchase stock +++++++++++++++");
             console.log({
                 product_id: return_data.products[i].product_id,
-                user_id: req.userId,
+                user_id: sale.userId,
               });
             stockPurchse = await StockModel.findOne({
               where: {
@@ -3504,7 +3534,7 @@ exports.returnSaleNew = async (req, res) => {
             });
           }
 
-          if (!stock) {
+          /* if (!stock) {
             // Try to get current_image from multiple sources
             let current_image = null;
             
@@ -3577,7 +3607,7 @@ exports.returnSaleNew = async (req, res) => {
               },
               { transaction: t }
             );
-          }
+          } */
 
           let quantity = 0,
             weight = 0,
@@ -3608,7 +3638,7 @@ exports.returnSaleNew = async (req, res) => {
             console.log(stockMPurchase);
             weight += mItem.return_weight ? parseInt(mItem.return_weight) : 0;
             if (stockM) {
-              await StockMaterialModel.update(
+              /* await StockMaterialModel.update(
                 {
                   weight: weightFormat(
                     parseFloat(stockM.weight) + parseFloat(mItem.return_weight)
@@ -3617,9 +3647,9 @@ exports.returnSaleNew = async (req, res) => {
                     parseFloat(stockM.quantity) + parseInt(mItem.return_qty),
                 },
                 { where: { id: stockM?.id }, transaction: t }
-              );
+              ); */
             } else {
-              await StockMaterialModel.create(
+              /* await StockMaterialModel.create(
                 {
                   stock_id: stock?.id,
                   material_id: mItem.material_id,
@@ -3631,7 +3661,7 @@ exports.returnSaleNew = async (req, res) => {
                   category_id: return_data.products[i].category_id,
                 },
                 { transaction: t }
-              );
+              ); */
             }
             console.log("---------------------- After stockM update ----------------------");
             if (stockMPurchase) {
@@ -3647,23 +3677,22 @@ exports.returnSaleNew = async (req, res) => {
                 },
                 { where: { id: stockMPurchase?.id }, transaction: t }
               );
-              /* weight += mItem.return_weight
-                ? parseInt(mItem.return_weight)
-                : 0; */
+              
             }
             console.log("---------------------- After stockMPurchase update ----------------------");
             unit_name = mItem.unit_name;
             weight = convertUnitToGram(unit_name, weight);
             quantity += parseInt(mItem.return_qty);
           }
-          if (parseFloat(stock.total_weight) <= weight) {
+          
+          if (stock && parseFloat(stock.total_weight) <= weight) {
             //await StockModel.destroy({ where: { id: stock.id }, transaction: t });
           } else {
             let return_weight_in_gram = convertUnitToGram(
               unit_name,
               return_data.products[i].materials[0].return_weight
             );
-            await StockModel.update(
+            /* await StockModel.update(
               {
                 quantity: parseFloat(stock.quantity) + parseFloat(quantity),
                 total_weight:
@@ -3671,7 +3700,7 @@ exports.returnSaleNew = async (req, res) => {
                   parseFloat(return_weight_in_gram),
               },
               { where: { id: stock?.id }, transaction: t }
-            );
+            ); */
           }
           console.log("---------------------- stockPurchse update ----------------------");
           if(stockPurchse){
@@ -3699,6 +3728,7 @@ exports.returnSaleNew = async (req, res) => {
           }
           console.log("---------------------- End of stockPurchse update ----------------------");
         } else {
+          console.log("+++++++++++++++ product stock +++++++++++++++");
           stock = await StockModel.findOne({
             where: {
               product_id: return_data.products[i].product_id,
@@ -3720,7 +3750,7 @@ exports.returnSaleNew = async (req, res) => {
             "---------------------- Stock to check for create ----------------------"
           );
           console.log(stock);
-          if (!stock) {
+          /* if (!stock) {
             // Try to get current_image from multiple sources
             let current_image = null;
             
@@ -3818,7 +3848,7 @@ exports.returnSaleNew = async (req, res) => {
             console.log(
               "---------------------- Created Stock Materials ----------------------"
             );
-          }
+          } */
 
           stockPurchse = await StockModel.findOne({
             where: {
@@ -3841,6 +3871,7 @@ exports.returnSaleNew = async (req, res) => {
           );
           console.log(stock);
           console.log(stockPurchse);
+
           /* if (stock) {
             let numMatched = 0;
             let stockMaterials = formatStockMaterials(stock.stockMaterials);
@@ -3960,27 +3991,6 @@ exports.returnSaleNew = async (req, res) => {
         let paid_amount = parseFloat(sale.paid_amount);
         let due_amount = priceFormat(total_payable - paid_amount, true);
         due_amount = due_amount < 0 ? 0 : due_amount;
-
-        /* let allReturnSale = await SaleProductModel.count({
-          where: { sale_id: sale.id, is_return: true },
-          transaction: t 
-        });
-        allReturnSale = allReturnSale ?? 0;
-        console.log(allReturnSale);
-        console.log(sale.saleProducts.length);
-        await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
-        let allReturnPurchase = await PurchaseProductModel.count({
-          where: { purchase_id: purchase.id, is_return: true },
-          transaction: t 
-        });
-        allReturnPurchase = allReturnPurchase ?? 0;
-        console.log(allReturnPurchase);
-        console.log(purchase.purchaseProducts.length);
-        await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
-        if (allReturnSale == sale.saleProducts.length && allReturnPurchase == purchase.purchaseProducts.length) {
-          //due_amount = 0;
-          //paid_amount = total_payable;
-        } */
         
 
         let return_amount_from_wallet = parseFloat(
@@ -4123,40 +4133,22 @@ exports.returnSaleNew = async (req, res) => {
           "---------------------- StockModel find for return_id ----------------------"
         );  
         await new Promise((resolve) => setTimeout(resolve, 500));
-        if(stock){
+        /* if(stock){
           await StockMaterialModel.destroy({
             where: { stock_id: stock.id },
             transaction: t,
           });
-        }
+        } */
         console.log(
           "---------------------- StockMaterialModel destroy for return_id ----------------------"
         );
         await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
-        await StockModel.destroy({
+        /* await StockModel.destroy({
           where: { return_id: saleReturnObj.id },
           transaction: t,
-        });
+        }); */
         console.log(
           "---------------------- make return as complete ----------------------"
-        );
-      } else {
-        await SaleModel.update(
-          {
-            status: "return_pending",
-          },
-          { where: { id: req.params.id }, transaction: t }
-        );
-        console.log("---------------------- update status in sale ----------------------");
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        await PurchaseModel.update(
-          {
-            status: "return_pending",
-    PurchaseModel      },
-          { where: { sale_id: sale.id }, transaction: t }
-        );
-        console.log(
-          "---------------------- update status in purchase ----------------------"
         );
       }
     });
@@ -4174,12 +4166,12 @@ exports.returnSaleNew = async (req, res) => {
     if (allReturnSale == sale.saleProducts.length) {
       await SaleModel.update(
         {
-          status: "returned",
+          status: return_status == "completed"?"returned":"return_pending",
         },
         { where: { id: req.params.id } }
       );
     }
-    console.log("---------------------- SaleModel Update ----------------------");
+    console.log("---------------------- SaleModel Status Update ----------------------");
     let allReturnPurchase = await PurchaseProductModel.count({
       where: { purchase_id: purchase.id, is_return: true },
     });
@@ -4189,12 +4181,12 @@ exports.returnSaleNew = async (req, res) => {
     if (allReturnPurchase == purchase.purchaseProducts.length) {
       await PurchaseModel.update(
         {
-          status: "returned",
+          status: return_status == "completed"?"returned":"return_pending",
         },
         { where: { sale_id: sale.id } }
       );
     }
-    console.log("---------------------- Final Status ----------------------");
+    console.log("---------------------- PurchaseModel Status Update ----------------------");
 
     res.send(formatResponse([], "Returned successfully!"));
   } catch (error) {
