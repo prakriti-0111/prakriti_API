@@ -118,7 +118,9 @@ exports.index = async (req, res) => {
     isAddedByUser = true;
     /* check parent and assign as user id */
     let user = await UserModel.findByPk(addedBy);
-    userID = user.parent_id;
+    if(user){
+      userID = user.parent_id;
+    }
   }
   console.log("userID : ",userID);
   let conditions = { type: { [Op.ne]: "order_purchase" } };
@@ -1017,7 +1019,9 @@ exports.store = async (req, res) => {
     addedBy = req.userId;
     /* check parent and assign as user id */
     let user = await UserModel.findByPk(addedBy);
-    userID = user.parent_id;
+    if(user){
+      userID = user.parent_id;
+    }
   }
 
   if (priceFormat(data.paid_amount) > 0) {
