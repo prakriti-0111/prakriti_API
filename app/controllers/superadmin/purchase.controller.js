@@ -82,6 +82,7 @@ const SaleProductMaterialModel = db.sale_product_materials;
 const NoticationModel = db.notifiactions;
 const cartsModel = db.carts;
 const cartMaterialsModel = db.cart_materials;
+
 const _ = require("lodash");
 const { base64FileUpload } = require("../../helpers/upload");
 const fs = require("fs");
@@ -1031,6 +1032,41 @@ exports.store = async (req, res) => {
         .status(errorCodes.default)
         .send(formatErrorResponse("Insufficient wallet balance."));
     }
+  }
+
+  /**
+   * Check duplicate certidicate no
+   * @param req
+   * @param res
+   */
+  let is_certificate_exist = false;
+  for (let i = 0; i < data.products.length; i++) {
+      let thisItem = data.products[i];
+    /* cretified product must have unique certificate number */
+    if (!isEmpty(thisItem.certificate_no)) {
+      let stock = await StockModel.findOne({
+        where: { certificate_no: thisItem.certificate_no },
+      });
+      is_certificate_exist = stock ? thisItem.certificate_no : false;
+      let purchaseProduct = await PurchaseProductModel.findOne({
+        where: { certificate_no: thisItem.certificate_no },
+        // include: [
+        //   {
+        //     model: PurchaseModel,
+        //     as: "purchase",
+        //     required: true,
+        //     where: { is_approved: { [Op.ne]: 2 } },
+        //   },
+        // ],
+      });
+      is_certificate_exist = purchaseProduct ? thisItem.certificate_no : is_certificate_exist;
+    }
+  }
+console.log("is_certificate_exist : ", is_certificate_exist);
+  if(is_certificate_exist){
+    return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse(`One of the product has certificate no. ${is_certificate_exist} which does exists in stocks or on approval state.`));
   }
 
   try {
