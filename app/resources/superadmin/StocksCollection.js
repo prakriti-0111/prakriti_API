@@ -22,7 +22,7 @@ const StocksCollection = async (data, user_id) => {
 }
 
 const getModelObject = async (data, user_id) => {
-    console.log("STOCK COLLECTION-----data get modal object ",JSON.stringify(data));
+    //console.log("STOCK COLLECTION-----data get modal object ",JSON.stringify(data));
     let materialItem = [], materialString = [];
     let taxInfo = null;
     if('tax' in data.product && data.product.tax){
