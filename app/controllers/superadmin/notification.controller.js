@@ -22,6 +22,7 @@ exports.index = async (req, res) => {
     //limit: paginatorOptions.limit,
     where: {user_id: userID, is_read: false}
   }).then(async (data) => {
+    console.log("notification data : ", NotificationCollection(data.rows));
     let totalNew = await NoticationModel.count({where: {user_id: userID, is_read: false}});
     let result = {
       items: convertToNotificationGroup(NotificationCollection(data.rows)),
