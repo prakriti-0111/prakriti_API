@@ -1400,6 +1400,25 @@ console.log("is_certificate_exist : ", is_certificate_exist);
           : priceFormat(
               parseFloat(data.advance_amount) - parseFloat(data.total_payable)
             );
+      let payment = await paymentModel.create({
+        payment_mode: "advance",
+        amount: priceFormat(thisAmnt),
+        user_id: userID,
+        payment_by: req.userId,
+        payment_date: moment().format("YYYY-MM-DD"),
+        // txn_id: data.transaction_no,
+        // cheque_no: data.cheque_no,
+        status: "success",
+        type: "advance_adjust",
+        table_type: "purchase",
+        table_id: purchase.id,
+        payment_belongs: data.supplier_id,
+        purpose: "purchase adjust from advance",
+        can_accept: true,
+        is_advance: true,
+      });
+
+      await updateWalletRemainingBalance(data.supplier_id, payment.id);
 
       await updateAdvanceAmount(userID, data.supplier_id, thisAmnt, false);
     }
@@ -1887,6 +1906,13 @@ exports.statuschange = async (req, res) => {
             if (payment) {
               if (payment.status == "pending") {
                 paidAmnt = priceFormat(paidAmnt - parseFloat(payment.amount));
+              } else {
+                await PaymentModel.update(
+                  {
+                    is_advance: "1"
+                  },
+                  { where: { table_type: "purchase", table_id: purchase.id } }
+                );
               }
             }
             await updateAdvanceAmount(
@@ -3362,6 +3388,12 @@ exports.returnProducts = async (req, res) => {
           });
           await updateWalletRemainingBalance(userID, payment2.id);
         } else {
+          await PaymentModel.update(
+            {
+              is_advance: "1"
+            },
+            { where: { table_type: "purchase", table_id: purchase.id } }
+          );
           await updateAdvanceAmount(
             userID,
             purchase.supplier_id,

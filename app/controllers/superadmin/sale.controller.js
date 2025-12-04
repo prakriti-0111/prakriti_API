@@ -1989,7 +1989,15 @@ exports.statuschange = async (req, res) => {
         });
         if (payment && payment.status == "pending") {
           paidAmnt = priceFormat(paidAmnt - parseFloat(payment.amount));
+        } else {
+          await paymentModel.update(
+            {
+              is_advance: "1"
+            },
+            { where: { table_type: "sale", table_id: sale.id } }
+          );
         }
+        
         await updateAdvanceAmount(sale.user_id, sale.sale_by, paidAmnt, true);
       }
 
@@ -2837,6 +2845,12 @@ exports.returnSale = async (req, res) => {
             });
             await updateWalletRemainingBalance(userID, payment2.id);
           } else {
+            await PaymentModel.update(
+              {
+                is_advance: "1"
+              },
+              { where: { table_type: "sale", table_id: sale.id } }
+            );
             await updateAdvanceAmount(
               sale.user_id,
               userID,
@@ -4095,6 +4109,13 @@ exports.returnSaleNew = async (req, res) => {
             console.log(`---------------------- updateWalletRemainingBalance for return purchase ----------------------`);
             await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
           } else {
+            await PaymentModel.update(
+              {
+                is_advance: "1"
+              },
+              { where: { table_type: "sale", table_id: sale.id } }
+            );
+            
             await updateAdvanceAmount(
               sale.user_id,
               userID,
