@@ -1798,7 +1798,15 @@ const sendNotification = async (type, req, params, userId) => {
         is_assigned: params.sale.is_assigned,
       };
       break;
-
+    case "purchase_on_approval": 
+      message = `${params.sale.invoice_number} sale is pending for approval.`;
+      postParams = {
+        sale_id: params.sale.id,
+        purchase_id: params.purchase.id,
+        user_id: params.sale.user_id,
+        is_assigned: params.sale.is_assigned,
+      };
+      break;
     case "purchase_accept":
       if (params.purchase.is_assigned) {
         let name = await getUserColumnValue(req.userId, "name");
@@ -2922,6 +2930,13 @@ const getNotificationLabelByType = (item) => {
         label = "Stock Received";
       } else {
         label = "Purchase";
+      }
+      break;
+    case "purchase_on_approval":
+      if (item.params.is_assigned) {
+        label = "Purchase assigned";
+      } else {
+        label = "Purchase on approval";
       }
       break;
     case "purchase_accept":

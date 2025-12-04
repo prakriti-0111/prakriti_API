@@ -2020,7 +2020,7 @@ exports.statuschange = async (req, res) => {
 
                 let product = await ProductModel.findByPk(thisItem.product_id);
                 let stock = null;
-                if (product.type == "material" || (product_type != "material" && isEmpty(thisItem.certificate_no))) {
+                if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
                   let quantity = 0;
                   for (let x = 0; x < thisItem.materials.length; x++) {
                     quantity += thisItem.materials[x].quantity
