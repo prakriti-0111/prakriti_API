@@ -1147,7 +1147,8 @@ exports.store = async (req, res) => {
 
     let purchase = null;
     //if(!isSuperAdmin(req)){
-    if (!data.on_approval && !data.order_from_customer) {
+    //if (!data.on_approval && !data.order_from_customer) {
+    if (!data.order_from_customer) {
       let purchaseObj = {
         supplier_id: userID,
         is_assigned: data.is_assigned,
@@ -1173,7 +1174,8 @@ exports.store = async (req, res) => {
           ? moment(data.due_date).format("YYYY-MM-DD")
           : null,
         status: status,
-        is_approved: is_approved,
+        is_approved: data.on_approval ? 3 : is_approved,
+        is_approval: data.on_approval,
         image: image,
       };
       console.log("purchase create : ", purchaseObj);
@@ -1221,6 +1223,7 @@ exports.store = async (req, res) => {
       console.log("sale product create : ", thisObj);
       let saleProduct = await SaleProductModel.create(thisObj);
       let product = await ProductModel.findByPk(thisItem.product_id);
+      
       let sale_product_id = null;
       if ("sale_product_id" in thisItem && !isEmpty(thisItem.sale_product_id)) {
         sale_product_id = thisItem.sale_product_id;
@@ -1492,6 +1495,8 @@ exports.store = async (req, res) => {
       );
     }
 
+    
+
     //insert into payment table
     if (!data.is_assigned && priceFormat(data.paid_amount) > 0) {
       let amount = priceFormat(data.paid_amount);
@@ -1661,7 +1666,23 @@ exports.store = async (req, res) => {
           },
           { where: { id: saleApproval.id } }
         );
-        console.log("saleOnApproval update : ", {
+        
+        /* check if purchase on approval record exists */
+        let purchaseOnApproval = await PurchaseModel.findOne({
+          where: { sale_id: saleApproval.id }
+        });
+        /* update status only for purchase on approval if sale on approval change to sale */
+        if(!isEmpty(purchaseOnApproval)){
+          await PurchaseModel.update(
+            {
+              is_approved: 4,
+              accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
+            },
+            { where: { id: purchaseOnApproval.id } }
+          );
+        }
+        
+        console.log("saleOnApproval & purchaseOnApproval updated : ", {
             is_approved: 4,
             accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
           });
@@ -1804,7 +1825,9 @@ exports.store = async (req, res) => {
     }
 
     //send notification
-    if (purchase) {
+    if (purchase && purchase.is_approval == 1) {
+      sendNotification("purchase_on_approval", req, { sale: sale, purchase: purchase });
+    } else {
       sendNotification("sale", req, { sale: sale, purchase: purchase });
     }
 
@@ -1889,6 +1912,23 @@ exports.statuschange = async (req, res) => {
         },
         { where: { id: sale.id } }
       );
+      /* if sale is declined */
+      if(data.approve_status == 2){
+        /* check if purchase on approval record exists */
+        let purchaseExists = await PurchaseModel.findOne({
+          where: { sale_id: sale.id }
+        });
+        /* update status only for purchase on approval if sale is declined */
+        if(!isEmpty(purchaseExists) && purchaseExists.is_approved == 3 && purchaseExists.is_approval == 1){
+          await PurchaseModel.update(
+            {
+              is_approved: data.approve_status,
+              accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
+            },
+            { where: { id: purchaseExists.id } }
+          );
+        }
+      }
     }
 
     if (data.approve_status == 2) {

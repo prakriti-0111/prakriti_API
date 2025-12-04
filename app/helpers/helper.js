@@ -606,6 +606,9 @@ const getNotificationRedirectUrl = (type, params) => {
         redirect_to = "/purchases/view/" + data.purchase_id;
       }
       break;
+    case "purchase_on_approval":
+      redirect_to = "/purchase-on-approve/view/" + data.purchase_id;
+      break;
     case "purchase_accept":
     case "purchase_declined":
       if (data.is_assigned) {
