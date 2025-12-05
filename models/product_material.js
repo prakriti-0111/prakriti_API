@@ -40,6 +40,12 @@ module.exports = (sequelize, DataTypes) => {
     sequelize,
     paranoid: true,
     modelName: 'product_materials',
+    indexes: [
+      {
+        unique: true,
+        fields: ['product_id', 'material_id']  // 👈 composite unique key
+      }
+    ]
   });
   return ProductMaterial;
 };
