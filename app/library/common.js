@@ -65,6 +65,7 @@ const PaymentModel = db.payments;
 const NoticationModel = db.notifiactions;
 const cartsModel = db.carts;
 const ProductSizeMaterialModel = db.product_size_materials;
+const ProductMaterialModel = db.product_materials;
 const MaterialModel = db.materials;
 const SizeModel = db.sizes;
 const UserToUserModel = db.user_to_users;
@@ -2150,6 +2151,23 @@ const getProductSizeMaterials = async (
     where: { product_id: productId },
     include: [
       {
+        model: ProductMaterialModel,
+        as: 'productMaterial',
+        required: false,
+        on: {
+          product_id: Sequelize.where(
+            Sequelize.col("product_size_materials.product_id"),
+            "=",
+            Sequelize.col("productMaterial.product_id")
+          ),
+          material_id: Sequelize.where(
+            Sequelize.col("product_size_materials.material_id"),
+            "=",
+            Sequelize.col("productMaterial.material_id")
+          )
+        }
+      },
+      {
         model: MaterialModel,
         as: "material",
       },
@@ -2165,6 +2183,7 @@ const getProductSizeMaterials = async (
     order: [["id", "ASC"]],
   });
   let purityToFirst = ["Grade-C", "Grade-B", "Grade-A"];
+  let mgroup = [];
   for (let i = 0; i < sizeMatarialsData.length; i++) {
     let purityIds = sizeMatarialsData[i].purities.split(",").map(Number);
     let purities = await PurityModel.findAll({
@@ -2211,6 +2230,54 @@ const getProductSizeMaterials = async (
         size_materials,
         (item) => item.size_id == sizeMatarialsData[i].size_id
       );
+      let mgIndex = _.findIndex(
+        mgroup,
+        (item) => sizeMatarialsData[i].productMaterial && sizeMatarialsData[i].productMaterial.group && item == sizeMatarialsData[i].productMaterial.group
+      );
+      //console.log("sizeMatarialsData[i].productMaterial : ", sizeMatarialsData[i].productMaterial);
+      if(mgIndex === -1 && sizeMatarialsData[i].productMaterial && sizeMatarialsData[i].productMaterial.group){
+        mgroup.push(sizeMatarialsData[i].productMaterial.group);
+      }
+      console.log("mgroup : ", mgroup);
+      /* group materials */
+      //let gmaterials = [];
+      /* if(mgroup.length > 0){
+        if(!gmaterials[mgIndex]){
+          gmaterials[mgIndex] = [];
+        }
+        
+        gmaterials[mgIndex].push({
+          material_id: sizeMatarialsData[i].material_id,
+          material_name: sizeMatarialsData[i].material
+            ? sizeMatarialsData[i].material.name
+            : "",
+          purities: purities,
+          weight: weightFormat(sizeMatarialsData[i].weight),
+          unit_id: sizeMatarialsData[i].unit_id,
+          quantity: sizeMatarialsData[i].quantity || 0,
+          unit_name: sizeMatarialsData[i].unit
+            ? sizeMatarialsData[i].unit.name
+            : "",
+          group: sizeMatarialsData[i].productMaterial?sizeMatarialsData[i].productMaterial.group:false
+        }); 
+      } else { 
+        gmaterials = {
+          material_id: sizeMatarialsData[i].material_id,
+          material_name: sizeMatarialsData[i].material
+            ? sizeMatarialsData[i].material.name
+            : "",
+          purities: purities,
+          weight: weightFormat(sizeMatarialsData[i].weight),
+          unit_id: sizeMatarialsData[i].unit_id,
+          quantity: sizeMatarialsData[i].quantity || 0,
+          unit_name: sizeMatarialsData[i].unit
+            ? sizeMatarialsData[i].unit.name
+            : "",
+          group: sizeMatarialsData[i].productMaterial?sizeMatarialsData[i].productMaterial.group:false
+        };
+      }*/
+
+      
       if (index !== -1) {
         size_materials[index].materials.push({
           material_id: sizeMatarialsData[i].material_id,
@@ -2224,10 +2291,13 @@ const getProductSizeMaterials = async (
           unit_name: sizeMatarialsData[i].unit
             ? sizeMatarialsData[i].unit.name
             : "",
+          group: sizeMatarialsData[i].productMaterial?sizeMatarialsData[i].productMaterial.group:false
         });
+        //size_materials[index].materials = gmaterials;
       } else {
         size_materials.push({
           size_id: sizeMatarialsData[i].size_id,
+          mgroup: mgroup,
           size_name: sizeMatarialsData[i].size
             ? sizeMatarialsData[i].size.name
             : "",
@@ -2244,8 +2314,10 @@ const getProductSizeMaterials = async (
               unit_name: sizeMatarialsData[i].unit
                 ? sizeMatarialsData[i].unit.name
                 : "",
+              group: sizeMatarialsData[i].productMaterial?sizeMatarialsData[i].productMaterial.group:false
             },
           ],
+          //materials: gmaterials
         });
       }
     }
