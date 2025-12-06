@@ -74,6 +74,7 @@ module.exports = (sequelize, DataTypes) => {
     old_total_amount: DataTypes.DECIMAL(15, 2),
     on_ready_at: DataTypes.DATE,
     order_from: DataTypes.STRING,
+    is_viewed: DataTypes.INTEGER,
     createdAt: {
       field: 'created_at',
       type: DataTypes.DATE,
