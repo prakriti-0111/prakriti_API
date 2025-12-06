@@ -353,7 +353,7 @@ exports.index = async (req, res) => {
     }*/
 
     let sCond = [];
-    if (!isEmpty(search) && isNaN(search)) {
+    if (!isEmpty(search)/*  && isNaN(search) */) {
       let sArr = search.split(",");
       /* console.log(sArr); */
       for (let i = 0; i < sArr.length; i++) {
@@ -364,10 +364,13 @@ exports.index = async (req, res) => {
           s = s.replace("gm", "").trim();
           sCond.push({ total_weight: { [Op.lte]: `${s}` } });
           //conditions = { ...conditions, [Op.or]: [{ 'total_weight': { [Op.lte]: `${s}` } }] };
-        } else if (isNaN(s)) {
+        }
+        else {/* if((/^\d+$/.test(str) || isNaN(s)) && s.length == 12){
+          sCond.push({ certificate_no: s });
+        }
+        else if (isNaN(s)) { */
           if (type == "product" || type == "return") {
             sCond.push({ "$product.name$": { [Op.like]: `%${s}%` } });
-            sCond.push({ certificate_no: s });
             sCond.push({ "$product.product_code$": { [Op.like]: `%${s}%` } });
             //conditions = { ...conditions, [Op.or]: [{ '$product.name$': { [Op.like]: `%${s}%` } }, { certificate_no: s }, { '$product.product_code$': { [Op.like]: `%${s}%` } }, /*{ '$user.name$': { [Op.like]: `%${search}%` } }, { '$user.company_name$': { [Op.like]: `%${search}%` } }*/] };
           } else {
@@ -375,6 +378,7 @@ exports.index = async (req, res) => {
             sCond.push({ "$spurity.name$": { [Op.like]: `%${s}%` } });
             //conditions = { ...conditions, [Op.or]: [{ '$material.name$': { [Op.like]: `%${s}%` } }] };
           }
+          sCond.push({ certificate_no: s });
         }
       }
       /* console.log(sCond); */
@@ -555,6 +559,7 @@ exports.index = async (req, res) => {
       .then(async (data) => {
         //
         console.log("-------this is actual value ",data.rows.length);
+        //return false;
         let result = {
           items:
             type == "product" || type == "return"

@@ -185,6 +185,7 @@ exports.updateStatus = async (req, res) => {
   let userID = await getWorkingUserID(req);
   let data = req.body;
   req_data = new Buffer.from(returnData.req_data, "base64").toString('ascii');
+  req_data = req_data.replace(/[\u0000-\u001F]+/g, ""); // remove invisible and invalid characters
   req_data = JSON.parse(req_data);
   let return_products = req_data.return_products;
   let return_data = req_data.return_data;

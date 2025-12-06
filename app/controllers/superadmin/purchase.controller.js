@@ -82,6 +82,7 @@ const SaleProductMaterialModel = db.sale_product_materials;
 const NoticationModel = db.notifiactions;
 const cartsModel = db.carts;
 const cartMaterialsModel = db.cart_materials;
+
 const _ = require("lodash");
 const { base64FileUpload } = require("../../helpers/upload");
 const fs = require("fs");
@@ -118,7 +119,9 @@ exports.index = async (req, res) => {
     isAddedByUser = true;
     /* check parent and assign as user id */
     let user = await UserModel.findByPk(addedBy);
-    userID = user.parent_id;
+    if(user){
+      userID = user.parent_id;
+    }
   }
   console.log("userID : ",userID);
   let conditions = { type: { [Op.ne]: "order_purchase" } };
@@ -1017,7 +1020,9 @@ exports.store = async (req, res) => {
     addedBy = req.userId;
     /* check parent and assign as user id */
     let user = await UserModel.findByPk(addedBy);
-    userID = user.parent_id;
+    if(user){
+      userID = user.parent_id;
+    }
   }
 
   if (priceFormat(data.paid_amount) > 0) {
@@ -1027,6 +1032,41 @@ exports.store = async (req, res) => {
         .status(errorCodes.default)
         .send(formatErrorResponse("Insufficient wallet balance."));
     }
+  }
+
+  /**
+   * Check duplicate certidicate no
+   * @param req
+   * @param res
+   */
+  let is_certificate_exist = false;
+  for (let i = 0; i < data.products.length; i++) {
+      let thisItem = data.products[i];
+    /* cretified product must have unique certificate number */
+    if (!isEmpty(thisItem.certificate_no)) {
+      let stock = await StockModel.findOne({
+        where: { certificate_no: thisItem.certificate_no },
+      });
+      is_certificate_exist = stock ? thisItem.certificate_no : false;
+      let purchaseProduct = await PurchaseProductModel.findOne({
+        where: { certificate_no: thisItem.certificate_no },
+        // include: [
+        //   {
+        //     model: PurchaseModel,
+        //     as: "purchase",
+        //     required: true,
+        //     where: { is_approved: { [Op.ne]: 2 } },
+        //   },
+        // ],
+      });
+      is_certificate_exist = purchaseProduct ? thisItem.certificate_no : is_certificate_exist;
+    }
+  }
+console.log("is_certificate_exist : ", is_certificate_exist);
+  if(is_certificate_exist){
+    return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse(`One of the product has certificate no. ${is_certificate_exist} which does exists in stocks or on approval state.`));
   }
 
   try {
@@ -1360,6 +1400,25 @@ exports.store = async (req, res) => {
           : priceFormat(
               parseFloat(data.advance_amount) - parseFloat(data.total_payable)
             );
+      let payment = await paymentModel.create({
+        payment_mode: "advance",
+        amount: priceFormat(thisAmnt),
+        user_id: userID,
+        payment_by: req.userId,
+        payment_date: moment().format("YYYY-MM-DD"),
+        // txn_id: data.transaction_no,
+        // cheque_no: data.cheque_no,
+        status: "success",
+        type: "advance_adjust",
+        table_type: "purchase",
+        table_id: purchase.id,
+        payment_belongs: data.supplier_id,
+        purpose: "purchase adjust from advance",
+        can_accept: true,
+        is_advance: true,
+      });
+
+      await updateWalletRemainingBalance(data.supplier_id, payment.id);
 
       await updateAdvanceAmount(userID, data.supplier_id, thisAmnt, false);
     }
@@ -1847,6 +1906,13 @@ exports.statuschange = async (req, res) => {
             if (payment) {
               if (payment.status == "pending") {
                 paidAmnt = priceFormat(paidAmnt - parseFloat(payment.amount));
+              } else {
+                await PaymentModel.update(
+                  {
+                    is_advance: "1"
+                  },
+                  { where: { table_type: "purchase", table_id: purchase.id } }
+                );
               }
             }
             await updateAdvanceAmount(
@@ -1980,7 +2046,7 @@ exports.statuschange = async (req, res) => {
 
                 let product = await ProductModel.findByPk(thisItem.product_id);
                 let stock = null;
-                if (product.type == "material" || (product_type != "material" && isEmpty(thisItem.certificate_no))) {
+                if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
                   let quantity = 0;
                   for (let x = 0; x < thisItem.materials.length; x++) {
                     quantity += thisItem.materials[x].quantity
@@ -3322,6 +3388,12 @@ exports.returnProducts = async (req, res) => {
           });
           await updateWalletRemainingBalance(userID, payment2.id);
         } else {
+          await PaymentModel.update(
+            {
+              is_advance: "1"
+            },
+            { where: { table_type: "purchase", table_id: purchase.id } }
+          );
           await updateAdvanceAmount(
             userID,
             purchase.supplier_id,
