@@ -64,6 +64,16 @@ exports.index = async (req, res) => {
     conditions.id = order_id;
   }
 
+  /* if order id then mark order as viewed */
+  if(!isEmpty(order_id)){
+    await orderModel.update(
+      {
+        is_viewed: 1
+      },
+      { where: { id: order_id } }
+    );
+  }
+
   const paginatorOptions = getPaginationOptions(page, limit);
   orderModel
     .findAndCountAll({
