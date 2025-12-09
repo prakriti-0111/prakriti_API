@@ -2,7 +2,7 @@ const config = require("@config/auth.config");
 const { errorCodes, formatErrorResponse, formatResponse } = require("@utils/response.config");
 const db = require("@models");
 const moment = require('moment');
-const {isEmpty, getDateFromToWhere, priceFormat, formatDateTime, weightFormat, addLog, convertUnitToGram} = require("@helpers/helper");
+const {isEmpty, getDateFromToWhere, priceFormat, formatDateTime, weightFormat, addLog, convertUnitToGram, encodeForStorage, decodeFromStorage, cleanInput} = require("@helpers/helper");
 const {updateOrCreate, removeMaterialFromStock, getWalletBalance, getSuperAdminId, getWorkingUserID} = require("@library/common");
 const { getPaginationOptions } = require('@helpers/paginator')
 const {PurchaseListCollection} = require("@resources/superadmin/PurchaseListCollection");
@@ -158,6 +158,7 @@ exports.store = async (req, res) => {
         is_approved: 0,
         //req_data: req_data
       };
+
       let purchase = await PurchaseModel.create(purchaseObj, { transaction: t });
 
       //insert into purchase product table
@@ -169,7 +170,7 @@ exports.store = async (req, res) => {
           product_id: thisItem.product_id,
           worker_id: worker_id,
           size_id: thisItem.size_id || null,
-          certificate_no: thisItem.certificate_no,
+          certificate_no: cleanInput(thisItem.certificate_no),
           total_weight: weightFormat(thisItem.total_weight),
           sub_price: priceFormat(thisItem.sub_price),
           making_charge: priceFormat(thisItem.making_charge),
@@ -298,8 +299,9 @@ exports.store = async (req, res) => {
         invoice_number = 'RV-P-' + purchase.id;
       }
 
-      req_data = JSON.stringify(req_data);
-      req_data = new Buffer.from(req_data).toString("base64");
+      //req_data = JSON.stringify(req_data);
+      //req_data = new Buffer.from(req_data).toString("base64");
+      req_data = encodeForStorage(req_data);
       await PurchaseModel.update({
         invoice_number: invoice_number,
         req_data: req_data
@@ -522,8 +524,9 @@ exports.statuschange = async (req, res) => {
       if(data.approve_status == 1){
         let req_data = purchase.req_data;
         if(!isEmpty(req_data)){
-          req_data = new Buffer.from(req_data, "base64").toString('ascii');
-          req_data = JSON.parse(req_data);
+          //req_data = new Buffer.from(req_data, "base64").toString('ascii');
+          //req_data = JSON.parse(req_data);
+          req_data = decodeFromStorage(req_data);
           for(let i = 0; i < req_data.products.length; i++){
             let thisItem = req_data.products[i];
             let worker_id = thisItem.worker_id || null;
@@ -551,7 +554,7 @@ exports.statuschange = async (req, res) => {
                 purchase_product_id: thisItem.id,
                 product_id: thisItem.product_id,
                 size_id: thisItem.size_id || null,
-                certificate_no: thisItem.certificate_no,
+                certificate_no: cleanInput(thisItem.certificate_no),
                 quantity: 1,
                 total_weight: thisItem.total_weight
               }, { transaction: t });
@@ -851,7 +854,7 @@ exports.update = async (req, res) => {
           worker_id: worker_id,
           product_id: thisItem.product_id,
           size_id: thisItem.size_id,
-          certificate_no: thisItem.certificate_no,
+          certificate_no: cleanInput(thisItem.certificate_no),
           total_weight: priceFormat(thisItem.total_weight),
           sub_price: priceFormat(thisItem.sub_price),
           making_charge: priceFormat(thisItem.making_charge),
@@ -890,7 +893,7 @@ exports.update = async (req, res) => {
             purchase_id: purchase.id,
             product_id: thisItem.product_id,
             size_id: thisItem.size_id,
-            certificate_no: thisItem.certificate_no,
+            certificate_no: cleanInput(thisItem.certificate_no),
             quantity: 1,
             total_weight: thisItem.total_weight
           }, t);

@@ -2,7 +2,7 @@ const config = require("@config/auth.config");
 const { errorCodes, formatErrorResponse, formatResponse } = require("@utils/response.config");
 const db = require("@models");
 const moment = require('moment');
-const { isEmpty, getDateFromToWhere, priceFormat, formatDateTime, weightFormat, addLog, convertUnitToGram, ucWords } = require("@helpers/helper");
+const { isEmpty, getDateFromToWhere, priceFormat, formatDateTime, weightFormat, addLog, convertUnitToGram, ucWords, encodeForStorage, decodeFromStorage, cleanInput } = require("@helpers/helper");
 const { updateOrCreate, removeMaterialFromStock, getWalletBalance, getWorkingUserID, isSuperAdmin, updateWalletRemainingBalance, updateAdvanceAmount, getSuperAdminId, sendNotification, isManager } = require("@library/common");
 const { getPaginationOptions } = require('@helpers/paginator')
 const { ReturnSaleCollection } = require("@resources/superadmin/ReturnSaleCollection");
@@ -184,9 +184,10 @@ exports.updateStatus = async (req, res) => {
 
   let userID = await getWorkingUserID(req);
   let data = req.body;
-  req_data = new Buffer.from(returnData.req_data, "base64").toString('ascii');
+  /* req_data = new Buffer.from(returnData.req_data, "base64").toString('ascii');
   req_data = req_data.replace(/[\u0000-\u001F]+/g, ""); // remove invisible and invalid characters
-  req_data = JSON.parse(req_data);
+  req_data = JSON.parse(req_data); */
+  req_data = decodeFromStorage(returnData.req_data);
   let return_products = req_data.return_products;
   let return_data = req_data.return_data;
 
@@ -335,7 +336,7 @@ exports.updateStatus = async (req, res) => {
                 purchase_product_id: thisItem.id,
                 product_id: thisItem.product_id,
                 size_id: thisItem.size_id || null,
-                certificate_no: thisItem.certificate_no,
+                certificate_no: cleanInput(thisItem.certificate_no),
                 quantity: 1,
                 total_weight: thisItem.total_weight,
                 current_image: current_image,
@@ -578,7 +579,7 @@ exports.updateStatus = async (req, res) => {
                 purchase_product_id: thisItem.id,
                 product_id: thisItem.product_id,
                 size_id: thisItem.size_id || null,
-                certificate_no: thisItem.certificate_no,
+                certificate_no: cleanInput(thisItem.certificate_no),
                 quantity: 1,
                 total_weight: thisItem.total_weight,
                 current_image: current_image,
