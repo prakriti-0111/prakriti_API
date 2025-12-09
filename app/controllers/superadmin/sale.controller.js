@@ -19,7 +19,10 @@ const {
   convertUnitToGram,
   arrayColumn,
   removeBlankZero,
-  formatDateTime
+  formatDateTime,
+  encodeForStorage, 
+  decodeFromStorage,
+  cleanInput
 } = require("@helpers/helper");
 const {
   updateOrCreate,
@@ -1067,8 +1070,9 @@ exports.store = async (req, res) => {
     }
     //insert into sale table
     let invoice_number = data.invoice_number || null;
-    let req_data = JSON.stringify(data);
-    req_data = new Buffer.from(req_data).toString("base64");
+    /* let req_data = JSON.stringify(data);
+    req_data = new Buffer.from(req_data).toString("base64"); */
+    let req_data = encodeForStorage(data);
     let req_data_for_purchase = data;
     let status = "due",
       paid_amount = 0,
@@ -1192,7 +1196,7 @@ exports.store = async (req, res) => {
         stock_id: thisItem.stock_id,
         product_id: thisItem.product_id,
         size_id: thisItem.size_id || null,
-        certificate_no: thisItem.certificate_no,
+        certificate_no: cleanInput(thisItem.certificate_no),
         total_weight: weightFormat(thisItem.total_weight),
         sub_price: priceFormat(thisItem.sub_price),
         making_charge: priceFormat(thisItem.making_charge),
@@ -1279,7 +1283,7 @@ exports.store = async (req, res) => {
           product_id: thisItem.product_id,
           current_image: current_image,
           size_id: thisItem.size_id || null,
-          certificate_no: thisItem.certificate_no,
+          certificate_no: cleanInput(thisItem.certificate_no),
           total_weight: weightFormat(thisItem.total_weight),
           sub_price: priceFormat(thisItem.sub_price),
           making_charge: priceFormat(thisItem.making_charge),
@@ -1482,10 +1486,11 @@ exports.store = async (req, res) => {
     }
 
     if (purchase) {
-      req_data_for_purchase = JSON.stringify(req_data_for_purchase);
+      /* req_data_for_purchase = JSON.stringify(req_data_for_purchase);
       req_data_for_purchase = new Buffer.from(req_data_for_purchase).toString(
         "base64"
-      );
+      ); */
+      req_data_for_purchase = encodeForStorage(req_data_for_purchase);
       await PurchaseModel.update(
         {
           invoice_number: purchase_invoice_number,
@@ -1727,7 +1732,7 @@ exports.store = async (req, res) => {
               product_id: thisItem.product_id,
               size_id: thisItem.size_id || null,
               purity_id: thisItem.saleMaterials[0]?.purity_id || null,
-              certificate_no: thisItem.certificate_no,
+              certificate_no: cleanInput(thisItem.certificate_no),
               current_image: thisItem.current_image,
               quantity: 1,
               total_weight: thisItem.total_weight,
@@ -2079,7 +2084,7 @@ exports.statuschange = async (req, res) => {
             product_id: thisItem.product_id,
             size_id: thisItem.size_id || null,
             purity_id: thisItem.saleMaterials[0]?.purity_id || null,
-            certificate_no: thisItem.certificate_no,
+            certificate_no: cleanInput(thisItem.certificate_no),
             current_image: current_image,
             quantity: 1,
             total_weight: thisItem.total_weight,
@@ -2176,7 +2181,7 @@ exports.statuschange = async (req, res) => {
           size_id: item.size_id || null,
           quantity: quantity,
           total_weight: item.total_weight || null,
-          certificate_no: item.certificate_no,
+          certificate_no: cleanInput(item.certificate_no),
           sale_product_id: item.id,
           type: "sale",
         });
@@ -2496,9 +2501,9 @@ exports.returnSale = async (req, res) => {
   try {
     const trans = await sequelize.transaction(async (t) => {
       let sale_products = sale.saleProducts;
-      let req_data = JSON.stringify(data);
-      req_data = new Buffer.from(req_data).toString("base64");
-
+      /* let req_data = JSON.stringify(data);
+      req_data = new Buffer.from(req_data).toString("base64"); */
+      let req_data = encodeForStorage(data);
       let saleReturnObj = await ReturnModel.create(
         {
           user_id: sale.user_id,
@@ -2649,7 +2654,7 @@ exports.returnSale = async (req, res) => {
             {
               product_id: return_data.products[i].product_id,
               size_id: return_data.products[i].size_id || null,
-              certificate_no: return_data.products[i].certificate_no,
+              certificate_no: cleanInput(return_data.products[i].certificate_no),
               quantity: return_data.products[i].certificate_no != ""?1:return_data.products[i].materials[0]?.quantity,
               current_image: current_image,
               total_weight: weight_in_gram,
@@ -3047,7 +3052,7 @@ exports.returnSaleNew = async (req, res) => {
           where: {
             product_id: return_data.products[i].product_id,
             user_id: sale.user_id,
-            certificate_no: return_data.products[i].certificate_no,
+            certificate_no: cleanInput(return_data.products[i].certificate_no),
             purity_id: return_data.products[i].materials[0].purity_id,
             size_id: return_data.products[i].size_id,
           },
@@ -3174,9 +3179,9 @@ exports.returnSaleNew = async (req, res) => {
       let sale_products = sale.saleProducts;
 
       /* convert all return data into Base64 */
-      let req_data = JSON.stringify(data);
-      req_data = new Buffer.from(req_data).toString("base64");
-
+      /* let req_data = JSON.stringify(data);
+      req_data = new Buffer.from(req_data).toString("base64"); */
+      let req_data = encodeForStorage(data);
       let saleReturnObj = await ReturnModel.create(
         {
           user_id: sale.user_id,
@@ -3229,7 +3234,7 @@ exports.returnSaleNew = async (req, res) => {
           where: {
             purchase_id: purchase.id,
             product_id: saleProduct.product_id,
-            certificate_no: saleProduct.certificate_no,
+            certificate_no: cleanInput(saleProduct.certificate_no),
             size_id: saleProduct.size_id,
           },
           include: [
@@ -3350,7 +3355,7 @@ exports.returnSaleNew = async (req, res) => {
               product_id: return_data.products[i].product_id,
               size_id: return_data.products[i].size_id || null,
               purity_id: return_data.products[i].materials[0].purity_id,
-              certificate_no: return_data.products[i].certificate_no,
+              certificate_no: cleanInput(return_data.products[i].certificate_no),
               quantity: !isEmpty(return_data.products[i].certificate_no)?1:parseInt(return_data.products[i].materials[0].return_qty),
               current_image: current_image,
               total_weight: weight_in_gram,
@@ -3787,7 +3792,7 @@ exports.returnSaleNew = async (req, res) => {
             where: {
               product_id: return_data.products[i].product_id,
               user_id: req.userId,
-              certificate_no: return_data.products[i].certificate_no,
+              certificate_no: cleanInput(return_data.products[i].certificate_no),
               size_id: return_data.products[i].size_id,
               purity_id : return_data.products[i].materials[0].purity_id
             },
@@ -3908,7 +3913,7 @@ exports.returnSaleNew = async (req, res) => {
             where: {
               product_id: return_data.products[i].product_id,
               user_id: sale.user_id,
-              certificate_no: return_data.products[i].certificate_no,
+              certificate_no: cleanInput(return_data.products[i].certificate_no),
               size_id: return_data.products[i].size_id,
             },
             include: [
@@ -4537,7 +4542,7 @@ exports.returnStockTransfer = async (req, res) => {
         sale_id: sale.id,
         product_id: thisItem.product_id,
         size_id: thisItem.size_id || null,
-        certificate_no: thisItem.certificate_no,
+        certificate_no: cleanInput(thisItem.certificate_no),
         total_weight: weightFormat(thisItem.total_weight),
       };
       let saleProduct = await SaleProductModel.create(thisObj);
@@ -4546,7 +4551,7 @@ exports.returnStockTransfer = async (req, res) => {
         purchase_id: purchase.id,
         product_id: thisItem.product_id,
         size_id: thisItem.size_id || null,
-        certificate_no: thisItem.certificate_no,
+        certificate_no: cleanInput(thisItem.certificate_no),
         total_weight: weightFormat(thisItem.total_weight),
         current_image: thisItem.current_image || null,
       };
@@ -4599,7 +4604,7 @@ exports.returnStockTransfer = async (req, res) => {
         id: purchaseProduct.id,
         product_id: thisItem.product_id,
         size_id: thisItem.size_id,
-        certificate_no: thisItem.certificate_no,
+        certificate_no: cleanInput(thisItem.certificate_no),
         total_weight: thisItem.total_weight,
         current_image: thisItem.current_image || null,
         materials: reqDataM,
@@ -4614,8 +4619,10 @@ exports.returnStockTransfer = async (req, res) => {
     if (isEmpty(invoice_number)) {
       invoice_number = "RV-T-" + sale.id;
       purchase_invoice_number = invoice_number;
-      req_data = JSON.stringify(req_data);
-      req_data = new Buffer.from(req_data).toString("base64");
+      /* req_data = JSON.stringify(req_data);
+      req_data = new Buffer.from(req_data).toString("base64"); */
+      req_data = encodeForStorage(req_data);
+
       await SaleModel.update(
         {
           invoice_number: invoice_number,
