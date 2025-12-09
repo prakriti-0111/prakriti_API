@@ -682,6 +682,56 @@ const getMonthDateRange = (year, month) => {
   return { start: startDate, end: endDate };
 };
 
+const sanitizeJSON = (obj) => {
+    return JSON.stringify(obj, (key, value) => {
+        if (typeof value === "string") {
+            // remove invalid JSON characters
+            return value.replace(/[\u0000-\u001F]+/g, "");
+        }
+        return value;
+    });
+}
+
+const encodeForStorage = (data) => {
+    const json = sanitizeJSON(data);
+    return Buffer.from(json, "utf8").toString("base64");
+}
+
+const decodeFromStorage = (encoded) => {
+    const json = Buffer.from(encoded, "base64").toString("utf8");
+    return JSON.parse(json);
+}
+
+function cleanInput(value) {
+    if (value === null || value === undefined) return value;
+
+    if (typeof value === "string") {
+        return value
+            // remove all control chars
+            .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
+            // remove invisible unicode separators
+            .replace(/[\u2028\u2029]/g, "")
+            // normalize unicode text (fix encoded garbage)
+            .normalize("NFC")
+            .trim();
+    }
+
+    if (Array.isArray(value)) {
+        return value.map(cleanInput);
+    }
+
+    if (typeof value === "object") {
+        const cleaned = {};
+        for (const key in value) {
+            cleaned[key] = cleanInput(value[key]);
+        }
+        return cleaned;
+    }
+
+    return value;
+}
+
+
 module.exports = {
   isToday,
   getItemFromMultidimensionalArray,
@@ -735,4 +785,7 @@ module.exports = {
   removeCurrency,
   getMonthDateRange,
   removeBlankZero,
+  encodeForStorage,
+  decodeFromStorage,
+  cleanInput
 };

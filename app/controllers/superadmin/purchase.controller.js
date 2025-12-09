@@ -18,6 +18,9 @@ const {
   convertUnitToGram,
   removeBlankZero,
   displayAmount,
+  encodeForStorage, 
+  decodeFromStorage,
+  cleanInput
 } = require("@helpers/helper");
 const {
   updateOrCreate,
@@ -1100,10 +1103,10 @@ console.log("is_certificate_exist : ", is_certificate_exist);
       }
     }
     // console.log("data is Current image ", data.current_image)
-    let current_image =
+    /* let current_image =
       data.current_image == undefined
         ? null
-        : `${(await base64FileUpload(data.current_image, "products")).path}`;
+        : `${(await base64FileUpload(data.current_image, "products")).path}`; */
 
     // console.log("current image is the ",current_image)
 
@@ -1161,7 +1164,7 @@ console.log("is_certificate_exist : ", is_certificate_exist);
         product_id: thisItem.product_id || null,
         worker_id: worker_id,
         size_id: thisItem.size_id || null,
-        certificate_no: thisItem.certificate_no,
+        certificate_no: cleanInput(thisItem.certificate_no),
         total_weight: weightFormat(thisItem.total_weight),
         sub_price: priceFormat(thisItem.sub_price),
         making_charge: priceFormat(thisItem.making_charge),
@@ -1314,8 +1317,9 @@ console.log("is_certificate_exist : ", is_certificate_exist);
       invoice_number = "RV-P-" + purchase.id;
     }
 
-    req_data = JSON.stringify(req_data);
-    req_data = new Buffer.from(req_data).toString("base64");
+    //req_data = JSON.stringify(req_data);
+    //req_data = new Buffer.from(req_data).toString("base64");
+    req_data = encodeForStorage(req_data);
     await PurchaseModel.update(
       {
         invoice_number: invoice_number,
@@ -1656,8 +1660,9 @@ exports.statuschange = async (req, res) => {
         let stock_con = userID; //isSuperAdmin(req) ? {[Op.is]: null} : userID;
         if (!isEmpty(req_data)) {
           if (req_data) {
-            req_data = new Buffer.from(req_data, "base64").toString("ascii");
-            req_data = JSON.parse(req_data);
+            //req_data = new Buffer.from(req_data, "base64").toString("ascii");
+            //req_data = JSON.parse(req_data);
+            req_data = decodeFromStorage(req_data);
           } else {
             req_data = {
               products: [],
@@ -1748,7 +1753,7 @@ exports.statuschange = async (req, res) => {
                   product_id: thisItem.product_id || null,
                   size_id: thisItem.size_id || null,
                   purity_id: thisItem.materials[0].purity_id || null,
-                  certificate_no: thisItem.certificate_no,
+                  certificate_no: cleanInput(thisItem.certificate_no),
                   quantity: 1,
                   total_weight: thisItem.total_weight,
                   user_id: userID, //isSuperAdmin(req) ? null : req.userId,
@@ -2031,10 +2036,11 @@ exports.statuschange = async (req, res) => {
               let parentUserID = purchase.supplier_id; //isAdmin(req) ? await getSuperAdminId() : purchase.supplier_id;
               let req_data = purchase.req_data;
               if (req_data) {
-                req_data = new Buffer.from(req_data, "base64").toString(
+                /* req_data = new Buffer.from(req_data, "base64").toString(
                   "ascii"
                 );
-                req_data = JSON.parse(req_data);
+                req_data = JSON.parse(req_data); */
+                req_data = decodeFromStorage(req_data);
               } else {
                 req_data = {
                   products: [],
@@ -2088,7 +2094,7 @@ exports.statuschange = async (req, res) => {
                       product_id: thisItem.product_id,
                       size_id: thisItem.size_id || null,
                       purity_id: thisItem.materials[0]?.purity_id || null,
-                      certificate_no: thisItem.certificate_no,
+                      certificate_no: cleanInput(thisItem.certificate_no),
                       quantity: 1,
                       total_weight: thisItem.total_weight,
                       user_id: parentUserID,
@@ -2255,11 +2261,12 @@ exports.statuschange = async (req, res) => {
           await updateWalletRemainingBalance(userID, payment4.id);
         }
 
-        let return_req_data = new Buffer.from(
+        /* let return_req_data = new Buffer.from(
           saleReturn.req_data,
           "base64"
         ).toString("ascii");
-        return_req_data = JSON.parse(return_req_data);
+        return_req_data = JSON.parse(return_req_data); */
+        let return_req_data = decodeFromStorage(return_req_data);
         let return_products = return_req_data.return_products;
         let return_data = return_req_data.return_data;
 
@@ -2394,6 +2401,7 @@ exports.statuschange = async (req, res) => {
 exports.view = async (req, res) => {
   try {
     let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+    console.log("purchase view --------------> req.params.id : ",req.params.id);
     let purchase = await PurchaseModel.findOne({
       where: { id: req.params.id /*, user_id: userID*/ },
       /* include: [
@@ -2515,10 +2523,10 @@ exports.view = async (req, res) => {
         .send(formatErrorResponse("Purchase not found"));
     }
 
-    let req_data = new Buffer.from(purchase.req_data, "base64").toString(
+    /* let req_data = new Buffer.from(purchase.req_data, "base64").toString(
       "ascii"
     );
-    req_data = JSON.parse(req_data);
+    req_data = JSON.parse(req_data); */
 
     res.send(
       formatResponse(PurchaseViewCollection(purchase), "Purchase details")
@@ -2707,7 +2715,7 @@ exports.update = async (req, res) => {
             worker_id: worker_id,
 
             size_id: thisItem.size_id || null,
-            certificate_no: thisItem.certificate_no,
+            certificate_no: cleanInput(thisItem.certificate_no),
             total_weight: weightFormat(thisItem.total_weight),
             sub_price: priceFormat(thisItem.sub_price),
             making_charge: priceFormat(thisItem.making_charge),
@@ -2790,8 +2798,9 @@ exports.update = async (req, res) => {
         transaction: t,
       });
 
-      req_data = JSON.stringify(req_data);
-      req_data = new Buffer.from(req_data).toString("base64");
+      //req_data = JSON.stringify(req_data);
+      //req_data = new Buffer.from(req_data).toString("base64");
+      req_data = encodeForStorage(req_data);
       await PurchaseModel.update(
         {
           req_data: req_data,
@@ -2975,7 +2984,7 @@ exports.returnProducts = async (req, res) => {
           where: {
             product_id: return_data.products[i].product_id,
             user_id: stock_con,
-            certificate_no: return_data.products[i].certificate_no,
+            certificate_no: cleanInput(return_data.products[i].certificate_no),
             size_id: return_data.products[i].size_id,
           },
           include: [
@@ -3021,8 +3030,9 @@ exports.returnProducts = async (req, res) => {
   try {
     const trans = await sequelize.transaction(async (t) => {
       //insert into return table
-      let req_data = JSON.stringify(data);
-      req_data = new Buffer.from(req_data).toString("base64");
+      /* let req_data = JSON.stringify(data);
+      req_data = new Buffer.from(req_data).toString("base64"); */
+      let req_data = encodeForStorage(data);
       const returnObj = await ReturnModel.create(
         {
           user_id: userID,
@@ -3275,7 +3285,7 @@ exports.returnProducts = async (req, res) => {
               where: {
                 product_id: return_data.products[i].product_id,
                 user_id: stock_con,
-                certificate_no: return_data.products[i].certificate_no,
+                certificate_no: cleanInput(return_data.products[i].certificate_no),
                 size_id: return_data.products[i].size_id,
               },
               include: [
