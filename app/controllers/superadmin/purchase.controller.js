@@ -1398,22 +1398,36 @@ console.log("is_certificate_exist : ", is_certificate_exist);
 
     //if paid from advance amount
     if (parseFloat(data.advance_amount) > 0 && data.pay_from_advance) {
-      let thisAmnt =
+      /* let thisAmnt =
         parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
           ? data.advance_amount
           : priceFormat(
               parseFloat(data.advance_amount) - parseFloat(data.total_payable)
+            ); */
+
+      let theDebitAmount = parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
+          ? parseFloat(data.advance_amount)
+          : parseFloat(data.total_payable);
+
+      let thisCreditAmnt =
+        parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
+          ? 0.00
+          : priceFormat(
+              parseFloat(data.advance_amount) - parseFloat(data.total_payable)
             );
-      let payment = await paymentModel.create({
-        payment_mode: "advance",
-        amount: priceFormat(thisAmnt),
+
+      /* debit advance amount */
+      let paymentD = await paymentModel.create({
+        //payment_mode: "advance",
+        payment_mode: data.payment_mode,
+        amount: priceFormat(theDebitAmount),
         user_id: userID,
         payment_by: req.userId,
         payment_date: moment().format("YYYY-MM-DD"),
         // txn_id: data.transaction_no,
         // cheque_no: data.cheque_no,
         status: "success",
-        type: "advance_adjust",
+        type: "debit", //advance_adjust
         table_type: "purchase",
         table_id: purchase.id,
         payment_belongs: data.supplier_id,
@@ -1422,9 +1436,51 @@ console.log("is_certificate_exist : ", is_certificate_exist);
         is_advance: true,
       });
 
-      await updateWalletRemainingBalance(data.supplier_id, payment.id);
+      await updateWalletRemainingBalance(data.supplier_id, paymentD.id);
 
-      await updateAdvanceAmount(userID, data.supplier_id, thisAmnt, false);
+      /* credit remaining advance amount */
+      /* let payment = await paymentModel.create({
+        parent_id: paymentD.id,
+        payment_mode: "advance",
+        amount: priceFormat(thisCreditAmnt),
+        user_id: userID,
+        payment_by: req.userId,
+        payment_date: moment().format("YYYY-MM-DD"),
+        // txn_id: data.transaction_no,
+        // cheque_no: data.cheque_no,
+        status: "success",
+        type: "credit", //advance_adjust
+        table_type: "purchase",
+        table_id: purchase.id,
+        payment_belongs: data.supplier_id,
+        purpose: "purchase adjust from advance",
+        can_accept: true,
+        is_advance: true,
+      });
+
+      await updateWalletRemainingBalance(data.supplier_id, payment.id); */     
+
+      /* let payment = await paymentModel.create({
+        payment_mode: "advance",
+        amount: priceFormat(thisAmnt),
+        user_id: userID,
+        payment_by: req.userId,
+        payment_date: moment().format("YYYY-MM-DD"),
+        // txn_id: data.transaction_no,
+        // cheque_no: data.cheque_no,
+        status: "success",
+        type: "credit", //advance_adjust
+        table_type: "purchase",
+        table_id: purchase.id,
+        payment_belongs: data.supplier_id,
+        purpose: "purchase adjust from advance",
+        can_accept: true,
+        is_advance: true,
+      }); */
+
+      /* await updateWalletRemainingBalance(data.supplier_id, payment.id); */
+
+      await updateAdvanceAmount(userID, data.supplier_id, thisCreditAmnt, false);
     }
 
     res.send(formatResponse([], "Purchase successfully!"));

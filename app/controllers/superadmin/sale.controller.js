@@ -1560,22 +1560,29 @@ exports.store = async (req, res) => {
 
     //if paid from advance amount
     if (parseFloat(data.advance_amount) > 0 && data.pay_from_advance) {
-      let thisAmnt =
+      let theDebitAmount = parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
+          ? parseFloat(data.advance_amount)
+          : parseFloat(data.total_payable);
+
+      let thisCreditAmnt =
         parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
-          ? data.advance_amount
+          ? 0.00
           : priceFormat(
               parseFloat(data.advance_amount) - parseFloat(data.total_payable)
             );
-      let payment = await paymentModel.create({
-        payment_mode: "advance",
-        amount: priceFormat(thisAmnt),
+
+      /* debit advance amount */
+      let paymentD = await paymentModel.create({
+        //payment_mode: "advance",
+        payment_mode: data.payment_mode,
+        amount: priceFormat(theDebitAmount),
         user_id: data.user_id,
         payment_by: req.userId,
         payment_date: moment().format("YYYY-MM-DD"),
         // txn_id: data.transaction_no,
         // cheque_no: data.cheque_no,
         status: "success",
-        type: "advance_adjust",
+        type: "debit", //advance_adjust
         table_type: "sale",
         table_id: sale.id,
         payment_belongs: userID,
@@ -1584,9 +1591,31 @@ exports.store = async (req, res) => {
         is_advance: true,
       });
 
-      await updateWalletRemainingBalance(userID, payment.id);
+      await updateWalletRemainingBalance(userID, paymentD.id);
 
-      await updateAdvanceAmount(data.user_id, userID, thisAmnt, false);
+      /* credit remaining advance amount */
+      /* let payment = await paymentModel.create({
+        parent_id: paymentD.id,
+        payment_mode: "advance",
+        amount: priceFormat(thisCreditAmnt),
+        user_id: data.user_id,
+        payment_by: req.userId,
+        payment_date: moment().format("YYYY-MM-DD"),
+        // txn_id: data.transaction_no,
+        // cheque_no: data.cheque_no,
+        status: "success",
+        type: "credit", //advance_adjust
+        table_type: "sale",
+        table_id: sale.id,
+        payment_belongs: userID,
+        purpose: "sale adjust from advance",
+        can_accept: true,
+        is_advance: true,
+      });
+
+      await updateWalletRemainingBalance(userID, payment.id); */
+
+      await updateAdvanceAmount(data.user_id, userID, thisCreditAmnt, false);
     }
 
     //complete order
