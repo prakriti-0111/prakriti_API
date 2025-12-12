@@ -1601,7 +1601,7 @@ const getWalletBalance = async (
         total_credit = parseFloat(paymentObj[0].total_credit);
       }
       if(payment_mode == "Advance"){
-        return priceFormat(total_credit);
+        return priceFormat(total_credit - total_debit);
       } else {
         return priceFormat(total_credit - total_debit);
       }
@@ -1738,11 +1738,28 @@ const getAdvanceAmount = async (userId, belongsId, isSupplier) => {
   //     return totalAdvanceCredit > totalAdvanceDebit ? priceFormat((totalAdvanceCredit - totalAdvanceDebit), true) : 0;
   // }
 
+  let advanceAmount = 0;
+
   let advance = await AdvancePaymentModel.findOne({
     attributes: ["amount"],
     where: { user_id: userId, payment_belongs: belongsId },
   });
-  return advance ? parseFloat(advance.amount) : 0;
+  //return advance ? parseFloat(advance.amount) : 0;
+  if(advance){
+    advanceAmount = parseFloat(advance.amount);
+  }
+
+
+  let query = `SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND payment_belongs = ${belongsId} AND user_id = ${userId} AND payment_type = 'wallet' AND is_advance = '1' AND deleted_at IS NULL`;
+  const paymentObj = await dbSequelize.query(query, { type: QueryTypes.SELECT });
+  let total_debit = 0, total_credit = 0;
+  if(paymentObj.length){
+      total_debit = paymentObj[0].total_debit ? parseFloat(paymentObj[0].total_debit) : 0;
+      total_credit = paymentObj[0].total_credit ? parseFloat(paymentObj[0].total_credit) : 0;
+  }
+  advanceAmount = priceFormat(total_credit - total_debit);
+
+  return advanceAmount;
 
   // let totalDue = 0;
   // let query = `SELECT SUM(CASE WHEN (type = 'debit') THEN amount ELSE 0 END) AS total_debit, SUM(CASE WHEN (type = 'credit') THEN amount ELSE 0 END) AS total_credit FROM payments WHERE status = 'success' AND payment_belongs = ${belongsId} AND user_id = ${userId} AND payment_type = 'wallet' AND deleted_at IS NULL`;

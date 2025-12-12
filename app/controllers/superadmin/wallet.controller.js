@@ -45,7 +45,7 @@ exports.index = async (req, res) => {
 
   if(!isEmpty(payment_mode) && payment_mode == "advance"){
     conditions.is_advance = "1";
-    conditions.type = "credit";
+    //conditions.type = "credit";
   }
 
   conditions = {
@@ -67,7 +67,7 @@ exports.index = async (req, res) => {
   })
     .then(async (data) => {
       let result = {
-        items: await WalletCollection(data.rows),
+        items: await WalletCollection(data.rows, payment_mode),
         total: data.count,
         balance_by_mode: {
           cash: displayAmount(await getWalletBalance(superAdminId, "cash")),

@@ -1010,7 +1010,7 @@ exports.downloadTxnLedger = async (req, res) => {
  */
 exports.store = async (req, res) => {
   let data = req.body;
-  console.log("sale store payload : ", data);
+  console.log("sale store payload : ", data); 
   let reportCharge = await ReportChargeModel.findAll({ 
     order:[['amount', 'ASC']],
     where: {}
@@ -1097,6 +1097,12 @@ exports.store = async (req, res) => {
     }
     if (data.order_from_customer) {
       is_approved = 1; // customer
+    }
+
+    if(data.already_paid_amount && data.already_paid_amount > 0){
+      paid_amount = priceFormat(
+          paid_amount + parseFloat(data.already_paid_amount)
+        );
     }
 
     if (data.pay_from_advance) {
@@ -1560,22 +1566,29 @@ exports.store = async (req, res) => {
 
     //if paid from advance amount
     if (parseFloat(data.advance_amount) > 0 && data.pay_from_advance) {
-      let thisAmnt =
+      let theDebitAmount = parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
+          ? parseFloat(data.advance_amount)
+          : parseFloat(data.total_payable);
+
+      let thisCreditAmnt =
         parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
-          ? data.advance_amount
+          ? 0.00
           : priceFormat(
               parseFloat(data.advance_amount) - parseFloat(data.total_payable)
             );
-      let payment = await paymentModel.create({
-        payment_mode: "advance",
-        amount: priceFormat(thisAmnt),
+
+      /* debit advance amount */
+      let paymentD = await paymentModel.create({
+        //payment_mode: "advance",
+        payment_mode: data.payment_mode,
+        amount: priceFormat(theDebitAmount),
         user_id: data.user_id,
         payment_by: req.userId,
         payment_date: moment().format("YYYY-MM-DD"),
         // txn_id: data.transaction_no,
         // cheque_no: data.cheque_no,
         status: "success",
-        type: "advance_adjust",
+        type: "debit", //advance_adjust
         table_type: "sale",
         table_id: sale.id,
         payment_belongs: userID,
@@ -1584,9 +1597,31 @@ exports.store = async (req, res) => {
         is_advance: true,
       });
 
-      await updateWalletRemainingBalance(userID, payment.id);
+      await updateWalletRemainingBalance(userID, paymentD.id);
 
-      await updateAdvanceAmount(data.user_id, userID, thisAmnt, false);
+      /* credit remaining advance amount */
+      /* let payment = await paymentModel.create({
+        parent_id: paymentD.id,
+        payment_mode: "advance",
+        amount: priceFormat(thisCreditAmnt),
+        user_id: data.user_id,
+        payment_by: req.userId,
+        payment_date: moment().format("YYYY-MM-DD"),
+        // txn_id: data.transaction_no,
+        // cheque_no: data.cheque_no,
+        status: "success",
+        type: "credit", //advance_adjust
+        table_type: "sale",
+        table_id: sale.id,
+        payment_belongs: userID,
+        purpose: "sale adjust from advance",
+        can_accept: true,
+        is_advance: true,
+      });
+
+      await updateWalletRemainingBalance(userID, payment.id); */
+
+      await updateAdvanceAmount(data.user_id, userID, thisCreditAmnt, false);
     }
 
     //complete order
@@ -2850,12 +2885,35 @@ exports.returnSale = async (req, res) => {
             });
             await updateWalletRemainingBalance(userID, payment2.id);
           } else {
-            await PaymentModel.update(
-              {
-                is_advance: "1"
-              },
-              { where: { table_type: "sale", table_id: sale.id } }
-            );
+            // await PaymentModel.update(
+            //   {
+            //     is_advance: "1"
+            //   },
+            //   { where: { table_type: "sale", table_id: sale.id } }
+            // );
+            let payment2 = await PaymentModel.create({
+              user_id: sale.user_id,
+              payment_by: userID,
+              table_type: "sale",
+              table_id: sale.id,
+              amount: data.return_amount_from_wallet,
+              payment_mode: data.return_payment_mode,
+              remaining_balance: 0,
+              status: "success",
+              payment_date: data.return_date
+                ? moment(data.return_date, "MM/DD/YYYY").format("YYYY-MM-DD")
+                : moment().format("YYYY-MM-DD"),
+              payment_belongs: userID,
+              type: "credit",
+              purpose:
+                sale.is_approval == 1
+                  ? "sale on apporval refund"
+                  : "sale refund",
+              can_accept: false,
+              is_advance: true,
+            });
+            await updateWalletRemainingBalance(userID, payment2.id);
+
             await updateAdvanceAmount(
               sale.user_id,
               userID,
@@ -4114,13 +4172,38 @@ exports.returnSaleNew = async (req, res) => {
             console.log(`---------------------- updateWalletRemainingBalance for return purchase ----------------------`);
             await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
           } else {
-            await PaymentModel.update(
-              {
-                is_advance: "1"
-              },
-              { where: { table_type: "sale", table_id: sale.id } }
-            );
+            // await PaymentModel.update(
+            //   {
+            //     is_advance: "1"
+            //   },
+            //   { where: { table_type: "sale", table_id: sale.id } }
+            // );
             
+            let payment = await PaymentModel.create({
+              user_id: sale.user_id,
+              payment_by: userID,
+              table_type: "sale",
+              table_id: sale.id,
+              amount: data.return_amount_from_wallet,
+              payment_mode: data.return_payment_mode,
+              remaining_balance: 0,
+              status: "success",
+              payment_date: data.return_date
+                ? moment(data.return_date, "MM/DD/YYYY").format("YYYY-MM-DD")
+                : moment().format("YYYY-MM-DD"),
+              payment_belongs: userID,
+              type: "credit",
+              purpose:
+                sale.is_approval == 1
+                  ? "sale on apporval refund"
+                  : "sale refund",
+              can_accept: false,
+              is_advance: true,
+            });
+            console.log("---------------------- PaymentModel create for return purchase ----------------------");
+            await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
+            await updateWalletRemainingBalance(sale.user_id, payment.id);
+
             await updateAdvanceAmount(
               sale.user_id,
               userID,
