@@ -3454,12 +3454,32 @@ exports.returnProducts = async (req, res) => {
           });
           await updateWalletRemainingBalance(userID, payment2.id);
         } else {
-          await PaymentModel.update(
-            {
-              is_advance: "1"
-            },
-            { where: { table_type: "purchase", table_id: purchase.id } }
-          );
+          // await PaymentModel.update(
+          //   {
+          //     is_advance: "1"
+          //   },
+          //   { where: { table_type: "purchase", table_id: purchase.id } }
+          // );
+          let payment2 = await paymentModel.create({
+            user_id: purchase.supplier_id,
+            payment_by: userID,
+            table_type: "purchase",
+            table_id: purchase.id,
+            amount: data.return_amount_from_wallet,
+            payment_mode: data.return_payment_mode,
+            remaining_balance: 0,
+            status: "success",
+            payment_date: data.return_date
+              ? moment(data.return_date, "MM/DD/YYYY").format("YYYY-MM-DD")
+              : moment().format("YYYY-MM-DD"),
+            payment_belongs: userID,
+            type: "credit",
+            purpose: "return purchase",
+            can_accept: false,
+            is_advance: true,
+          });
+          await updateWalletRemainingBalance(userID, payment2.id);
+
           await updateAdvanceAmount(
             userID,
             purchase.supplier_id,

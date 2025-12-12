@@ -1010,7 +1010,7 @@ exports.downloadTxnLedger = async (req, res) => {
  */
 exports.store = async (req, res) => {
   let data = req.body;
-  console.log("sale store payload : ", data);
+  console.log("sale store payload : ", data); 
   let reportCharge = await ReportChargeModel.findAll({ 
     order:[['amount', 'ASC']],
     where: {}
@@ -1097,6 +1097,12 @@ exports.store = async (req, res) => {
     }
     if (data.order_from_customer) {
       is_approved = 1; // customer
+    }
+
+    if(data.already_paid_amount && data.already_paid_amount > 0){
+      paid_amount = priceFormat(
+          paid_amount + parseFloat(data.already_paid_amount)
+        );
     }
 
     if (data.pay_from_advance) {
@@ -2879,12 +2885,35 @@ exports.returnSale = async (req, res) => {
             });
             await updateWalletRemainingBalance(userID, payment2.id);
           } else {
-            await PaymentModel.update(
-              {
-                is_advance: "1"
-              },
-              { where: { table_type: "sale", table_id: sale.id } }
-            );
+            // await PaymentModel.update(
+            //   {
+            //     is_advance: "1"
+            //   },
+            //   { where: { table_type: "sale", table_id: sale.id } }
+            // );
+            let payment2 = await PaymentModel.create({
+              user_id: sale.user_id,
+              payment_by: userID,
+              table_type: "sale",
+              table_id: sale.id,
+              amount: data.return_amount_from_wallet,
+              payment_mode: data.return_payment_mode,
+              remaining_balance: 0,
+              status: "success",
+              payment_date: data.return_date
+                ? moment(data.return_date, "MM/DD/YYYY").format("YYYY-MM-DD")
+                : moment().format("YYYY-MM-DD"),
+              payment_belongs: userID,
+              type: "credit",
+              purpose:
+                sale.is_approval == 1
+                  ? "sale on apporval refund"
+                  : "sale refund",
+              can_accept: false,
+              is_advance: true,
+            });
+            await updateWalletRemainingBalance(userID, payment2.id);
+
             await updateAdvanceAmount(
               sale.user_id,
               userID,
@@ -4143,13 +4172,38 @@ exports.returnSaleNew = async (req, res) => {
             console.log(`---------------------- updateWalletRemainingBalance for return purchase ----------------------`);
             await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
           } else {
-            await PaymentModel.update(
-              {
-                is_advance: "1"
-              },
-              { where: { table_type: "sale", table_id: sale.id } }
-            );
+            // await PaymentModel.update(
+            //   {
+            //     is_advance: "1"
+            //   },
+            //   { where: { table_type: "sale", table_id: sale.id } }
+            // );
             
+            let payment = await PaymentModel.create({
+              user_id: sale.user_id,
+              payment_by: userID,
+              table_type: "sale",
+              table_id: sale.id,
+              amount: data.return_amount_from_wallet,
+              payment_mode: data.return_payment_mode,
+              remaining_balance: 0,
+              status: "success",
+              payment_date: data.return_date
+                ? moment(data.return_date, "MM/DD/YYYY").format("YYYY-MM-DD")
+                : moment().format("YYYY-MM-DD"),
+              payment_belongs: userID,
+              type: "credit",
+              purpose:
+                sale.is_approval == 1
+                  ? "sale on apporval refund"
+                  : "sale refund",
+              can_accept: false,
+              is_advance: true,
+            });
+            console.log("---------------------- PaymentModel create for return purchase ----------------------");
+            await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
+            await updateWalletRemainingBalance(sale.user_id, payment.id);
+
             await updateAdvanceAmount(
               sale.user_id,
               userID,
