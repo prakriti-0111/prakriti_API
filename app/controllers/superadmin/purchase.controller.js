@@ -69,6 +69,7 @@ const MaterialModel = db.materials;
 const SizeModel = db.sizes;
 const StockModel = db.stocks;
 const StockMaterialModel = db.stock_materials;
+const PrePurchaseModel = db.pre_purchases;
 const PurchaseModel = db.purchases;
 const PurchaseProductModel = db.purchase_products;
 const PurchaseProductMaterialModel = db.purchase_product_materials;
@@ -986,6 +987,94 @@ exports.downloadTxnLedger = async (req, res) => {
     res.status(errorCodes.default).send(formatErrorResponse(err));
   }
 }
+
+/**
+ * Store pre purchase data
+ * 
+ * @param {*} req 
+ * @param {*} res 
+ */
+exports.pre_store = async (req, res) => {
+  let data = req.body;
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  try { 
+    console.log("pre purchase store payload : ", data);
+    //return false;
+    let req_data = data; //JSON.stringify(data);
+    //req_data = new Buffer.from(req_data).toString("base64");
+    req_data = encodeForStorage(req_data);  
+    let prePurchaseObj = {
+      user_id: userID,
+      req_data: req_data
+    };
+
+    /* create and return create id */
+    let prePurchase = await PrePurchaseModel.create(prePurchaseObj);   
+    //prePurchase.record_id = prePurchase.id;
+
+    res.send(formatResponse(prePurchase, "Pre Purchase data stored successfully!"));
+  } catch (error) {
+    addLog('err: ' + error.toString());
+    return res.status(errorCodes.default).send(formatErrorResponse('Pre Purchase data does not success due to some error'));
+  }
+
+};
+
+/**
+ * Fetch all pre purchase data
+ */
+exports.pre_purchase_list = async (req, res) => {
+  try {
+    let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+    let prePurchases = await PrePurchaseModel.findAll({
+      where: { user_id: userID },
+      order: [['createdAt', 'DESC']]
+    });
+    
+    /* decode req_data and send */
+    let items = [];
+    prePurchases = prePurchases.map(item => {
+      let decodedData = decodeFromStorage(item.req_data);
+      decodedData.id = item.id;
+      items.push(decodedData);
+    });
+
+    let result = {
+      pre_purchase_items: items,
+      total: items.length,
+    };
+
+    res.send(formatResponse(result, "Pre Purchase data fetched successfully!"));
+  } catch (error) {
+    addLog('err: ' + error.toString());
+    return res.status(errorCodes.default).send(formatErrorResponse('Pre Purchase data does not fetch due to some error'));
+  }
+};
+
+/**
+ * delete pre purchase item single/all
+ */
+exports.pre_purchase_delete = async (req, res) => {
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  try {
+    let id = req.params.id;
+    console.log("----pre purchase delete id",id, " ", userID);
+    if(id == 'all'){
+      await PrePurchaseModel.destroy({
+        where: { user_id: userID }
+      });
+    }else{
+      await PrePurchaseModel.destroy({
+        where: { id: id, user_id: userID }
+      });
+    }
+    res.send(formatResponse([], "Pre Purchase item deleted successfully!"));
+  } catch (error) {
+    addLog('err: ' + error.toString());
+    return res.status(errorCodes.default).send(formatErrorResponse('Pre Purchase item does not delete due to some error'));
+  }
+};
+
 
 /**
  * Store purchase

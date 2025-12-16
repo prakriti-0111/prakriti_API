@@ -900,6 +900,16 @@ module.exports = (app, express, io) => {
     purchaseController.downloadTxnLedger
   );
   router.post(
+    "/purchases/pre-store",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    purchaseController.pre_store
+  );
+  router.get(
+    "/purchases/pre-store-list",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    purchaseController.pre_purchase_list
+  );
+  router.post(
     "/purchases/store",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     purchaseController.store
@@ -923,6 +933,11 @@ module.exports = (app, express, io) => {
     "/purchases/delete/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     purchaseController.delete
+  );
+  router.delete(
+    "/purchases/pre-purchase-delete/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    purchaseController.pre_purchase_delete
   );
   router.get(
     "/purchases/new-invoice-number",
