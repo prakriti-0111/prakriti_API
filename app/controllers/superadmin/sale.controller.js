@@ -7732,12 +7732,721 @@ exports.downloadInvoiceInfo = async (req, res) => {
 };
 
 /**
- * Download Invoice
+ * Download Invoice Item List
  *
  * @param {*} req
  * @param {*} res
  */
-exports.downloadInvoiceItems = async (req, res) => {
+exports.downloadInvoiceItemList = async (req, res) => {
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let sale = await SaleModel.findOne({
+    where: { id: req.params.id, sale_by: userID },
+    include: [
+      {
+        model: SaleProductModel,
+        as: "saleProducts",
+        separate: true,
+        include: [
+          {
+            model: ProductModel,
+            as: "product",
+            include: [
+              {
+                model: CategoryModel,
+                as: "category",
+              },
+              {
+                model: SubCategoryModel,
+                as: "sub_category",
+              },
+              {
+                model: taxSlabModel,
+                as: "tax",
+              },
+            ],
+          },
+          {
+            model: SizeModel,
+            as: "size",
+          },
+          {
+            model: SaleProductMaterialModel,
+            as: "saleMaterials",
+            separate: true,
+            include: [
+              {
+                model: MaterialModel,
+                as: "material",
+              },
+              {
+                model: PurityModel,
+                as: "purity",
+              },
+              {
+                model: UnitModel,
+                as: "unit",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        model: UserModel,
+        as: "user",
+      },
+      {
+        model: UserModel,
+        as: "saleBy",
+      },
+    ],
+  });
+  if (!sale) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Sale not found"));
+  }
+  let saleData = SaleCollection(sale);
+
+  
+  const cwd = process.cwd();
+  // const logoUrl = `file://${cwd}/public/images/logo.png`;
+  const logoUrl = `public/images/logo.png`;
+  // const logoUrl = process.env.BASE_URL + "public/images/logo.png";
+
+  const bitmap = fs.readFileSync(logoUrl);
+  const logo = bitmap.toString("base64");
+
+  let footerhtml = `
+              <div class="invoice" style="width: 96%; margin: 0px; background-color: #f9f9f9;">
+                  <hr/>
+                  <table cellpadding="0" cellspacing="1"  style="margin:auto; width:100%" >
+                      <tbody>
+                          <tr>
+                              <td><table cellspacing="0" cellpadding="0"
+                                    border="0"
+                                    align="center" width="90%">
+                                    <div style="display: table; width:
+                                        100%; font-size: 11px;">
+                                        <div style="display: table-cell;
+                                            width: 65%;">
+                                            <h5 style="margin: 0px;
+                                                font-size: 11px;
+                                                font-weight:
+                                                600; text-transform:
+                                                uppercase;">NOTE</h5>
+                                            <ul style="margin: 0;
+                                                padding: 0px;
+                                                list-style: none;">
+                                                <span style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400; ">*
+                                                    Goods once sold will
+                                                    be taken back with
+                                                    condition</span>
+
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">Returning
+                                                    minimum product
+                                                    value of Rs 5000/-
+                                                    above</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">Returning
+                                                    product taken back
+                                                    Less than 20-30% of
+                                                    my billing amount</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">If any Damage
+                                                    charge as per making
+                                                    cost only</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">No Charges
+                                                    taken on Sale
+                                                    product returning
+                                                    within 7 days from
+                                                    bill date</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">All disputes
+                                                    are subject to Patna
+                                                    Juridiction only</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">Charges may
+                                                    be appling cancel of
+                                                    order product making
+                                                    only</li>
+
+                                            </ul>
+                                        </div>
+                                        <div style="display: table-cell;
+                                            width: 35%;">
+                                            
+                                            <div style="margin-top:5px">
+                                                <p style="
+                                                  font-size: 11px; 
+                                                  margin: 0;
+                                                    line-height: 1.2; ">
+                                                    Company Name - ${saleData.user_details.company_name}</p>
+                                                <p style="font-size:
+                                                    11px; margin: 0;
+                                                    line-height: 1.2; ">
+                                                      Ac. No - ${saleData.user_details.bank_account_no}</p>
+                                                <p style="font-size:
+                                                    11px; margin: 0;
+                                                    line-height: 1.2; ">
+                                                    IFSC Code -
+                                                    ${saleData.user_details.bank_ifsc}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </table></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+          `;
+
+  let html = `<!DOCTYPE html>
+  <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta http-equiv="X-UA-Compatible" content="IE=edge">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Bill</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <style>
+          html {
+            -webkit-print-color-adjust: exact;
+          }
+          </style>
+      </head>
+      <body style="box-sizing: border-box; padding: 0px; margin: 0px; font-family:
+          'Poppins', sans-serif;">
+          <div class="invoice" style="width: 96%; margin: 15px;  background-color: #f9f9f9;">
+              <table cellpadding="0" cellspacing="0" width="100%">
+                  <tbody>
+                      <tr>
+                          <td>
+                              <table cellspacing="0" cellpadding="0" border="0"
+                                  align="center" width="100%">
+                                  <h1 style="font-size: 14px; text-align:
+                                      center; margin-bottom: 5px; font-weight:
+                                      300;">SALE ITEM LIST INVOICE</h1>
+                              </table>
+                              <table cellspacing="0" cellpadding="0" border="0"
+                                  align="center" width="100%">
+                                  <div style="display: table; width: 100%;">
+                                      <div style="width: 65%; display: table-cell;
+                                          vertical-align: bottom;">
+                                          <img src="data:image/png;base64,${logo}" style="width:
+                                              220px; margin-left: 10px;">
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">Corporate Office -
+                                              P210 Strand Bank Road Brabzar
+                                              Kolkata 700 011</h3>
+  
+                                      </div>
+                                      <div style="width: 35%; display: table-cell;
+                                          vertical-align: middle; text-align:
+                                          left;">
+                                          <h3 style="margin: 0;">
+                                              <span style="font-size: 16px;
+                                                  font-weight: 600;">Prakriti
+                                                  Patna</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 14px;">GST No -
+                                              <span style="font-weight: 600;">10CIUPK2654L1ZY</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">User Id - <span>${saleData.sale_by_name}</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">Address - G100
+                                              RBI CPC Colony Kankarbagh Patna
+                                              Bihar 800 020</h3>
+                                          <h3 style="font-weight: 600; font-size:
+                                              12px; margin: 0;">
+                                              support@Prakriti.com, +91 98744
+                                              45878
+                                          </h3>
+                                      </div>
+                                  </div>
+                              </table>
+                              <table cellspacing="0" cellpadding="0" border="0"
+                                  align="center" width="100%">
+                                  <tbody>
+                                      <tr>
+                                          <hr style="border: 1px solid #1E2757; width:97%">
+                                      </tr>
+                                  </tbody>
+                              </table>
+
+                              <table cellspacing="0" cellpadding="5" border="0"
+                                  align="center" width="100%">
+                                  <thead>
+                                      <!-- <tr style="background-color: #000;">
+                                          <th style="text-align: left; color:
+                                              #fff;">Company: Ratn Alankar
+                                              Jewellers</th>
+                                          <th style="text-align: left; color:
+                                              #fff;">Name: Mukund Singhaindi</th>
+                                          <th style="text-align: left; color:
+                                              #fff;">Cont: 91919191919</th>
+                                          <th style="text-align: left; color:
+                                              #fff;">City: Muzaffarpur</th>
+                                      </tr>-->
+                                  </thead> 
+                                      <tbody>
+                                          <!-- <tr style="background-color: #fff;">
+                                          <td style="">
+                                              <span style="font-weight: 600;"> GST
+                                                  IN ${saleData.user_details.gst} </span>
+                                          </td>
+                                          <td style="">
+                                              Ad:
+                                          </td>
+                                          <td style="">
+  
+                                          </td>
+                                          <td style="">
+                                              Pin Code: 800 020
+                                          </td>
+                                      </tr> -->
+                                          <tr>
+                                              <td style="padding: 0;">
+                                                  <div class="comp-part-one">
+                                                      <ul style="margin: 0;
+                                                          padding: 0; list-style:
+                                                          none; display: flex;
+                                                          gap: 15px;
+                                                          justify-content:
+                                                          space-between;">
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Company -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.company_name}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">GST IN</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.gst}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Cont -
+                                                              </span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_mobile}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Invoice Date
+                                                                  -
+                                                              </span> <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.invoice_date}</span></li>
+                                                                  
+                                                      </ul>
+                                                  </div>
+                                                  <div class="comp-part-two">
+                                                      <ul style="margin: 0;
+                                                          padding: 0; list-style:
+                                                          none; display: flex;
+                                                          gap: 15px;
+                                                          justify-content:
+                                                          space-between;">
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Address -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.address}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">City -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.city}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Pin -
+                                                              </span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.pincode}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Invoice No -
+                                                              </span> <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.invoice_number}</span></li>
+                                                      </ul>
+                                                      <!--ul style="margin: 0;
+                                                          padding: 0;margin-left:52px; list-style:
+                                                          none; display: flex;
+                                                          gap: 15px;
+                                                         ">
+                                                       <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">City -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.city}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Pin -
+                                                              </span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.pincode}</span></li>
+                                                                  </ul-->
+                                                  </div>
+                                              </td>
+                                          </tr>
+                                      </tbody>
+                                  </table>
+                              
+                                  <table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+                                      border="0"
+                                      align="center" width="100%">
+                                      <thead style="">
+                                          <tr style="background-color: #000000;">
+                                              <th style="text-align: left; color:
+                                                  #fff; border: 1px solid #000000;
+                                                  font-size: 12px; font-weight:
+                                                  400; width: 25px;">#</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 100; width:
+                                                  125px;">Product Name</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400; width: 50px;">Certificate No.</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400; width: 90px;">Gross Weight</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 40px;">Stone Weight</th>
+                                              <th style="text-align: left; color:
+                                                #fff; font-size: 12px;
+                                                font-weight: 400; width: 130px">Gold Amt.</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 90px;">Stone Amt.</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 90px;">Making</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 90px;">Total Amt.</th>
+                                          </tr>
+                                      </thead>
+                                      <tbody>`;
+  let totalGoldAmt = 0;
+  let totalStoneAmt = 0;
+  let totalMaterialAmt = 0;
+  let totalAmt = 0;
+  for (let i = 0; i < saleData.products.length; i++) {
+    let bgTrColor = i % 2 == 0 ? "#1E2757" : "#1E2757";
+    let grossWeight = 0;
+    let stoneWeight = 0;
+    let goldAmt = 0;
+    let stoneAmt = 0;
+    let productAmt = 0;
+    for (let x = 0; x < saleData.products[i].materials.length; x++) {
+      grossWeight += saleData.products[i].materials[x].pakka_weight
+              ? 
+                  parseFloat(saleData.products[i].materials[x].pakka_weight)
+              : 
+                  parseFloat(saleData.products[i].materials[x].weight);
+      
+      if(saleData.products[i].materials[x].unit_name.toUpperCase() != "GM"){
+          stoneWeight += parseFloat(saleData.products[i].materials[x].weight);
+          stoneAmt += saleData.products[i].materials[x].material_cost
+              ? parseFloat(saleData.products[i].materials[x].material_cost)
+              : 0;
+      } else {
+        goldAmt += saleData.products[i].materials[x].material_cost
+              ? 
+                  parseFloat(saleData.products[i].materials[x].material_cost)
+              : 
+                  0;
+      }
+    }
+    productAmt = goldAmt + stoneAmt + parseFloat(saleData.products[i].making_charge);
+    totalGoldAmt += goldAmt;
+    totalStoneAmt += stoneAmt;
+    totalMaterialAmt += parseFloat(saleData.products[i].making_charge);
+    totalAmt += productAmt;
+    html += `<tr style="background-color: ${bgTrColor}; color:#FFFFFF;">
+                                              <td style="text-align: left;
+                                                  font-size: 11px;
+                                                  font-weight: 400; width: 25px;">
+                                                  ${
+                                                    i < 9
+                                                      ? "0" + (i + 1)
+                                                      : i + 1
+                                                  }
+                                              </td>
+                                              <td style="text-align: left;
+                                                  font-size: 11px;
+                                                  font-weight: 400;font-size: 10px; width:125px;">
+                                                  ${
+                                                    saleData.products[i]
+                                                      .product_name
+                                                  } - ${saleData.products[i].product_code ? saleData.products[i].product_code : ""}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${
+                                                      saleData.products[i]
+                                                        .certificate_no
+                                                    }
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${weightFormat(grossWeight)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${weightFormat(stoneWeight)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${priceFormat(goldAmt)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${priceFormat(stoneAmt)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${priceFormat(saleData.products[i].making_charge)}
+                                              </td>
+                                              <td colspan="7" style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400;">
+                                                    ${priceFormat(productAmt)}
+                                              </td>
+  
+                                          </tr>
+                                          `;
+  }
+  html += `<tr style="
+                                              vertical-align: top;">
+                                              <td colspan="5"
+                                                  style="
+                                                  border:none;">
+
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalGoldAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalStoneAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalMaterialAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              
+                                          </tr>`;
+
+  html += ` <tr style="
+                                                    vertical-align: top;">
+                                                    
+                                                    <td colspan="11"
+                                                          style="
+                                                          border:none; padding: 0;">
+                                                          ${footerhtml}
+                                                      </td>
+                                                      
+  
+                                                  </tr>
+                                              </tbody>
+                                          </table>
+
+                                          
+                                          <!-- Footer -->
+                                          
+                                          
+                                      </td>
+                                  </tr>
+  
+                              </tbody>
+                          </table>
+                      </div>
+                  </body>
+              </html>`;
+
+  try {
+    let file_path = "public/invoices/" + saleData.invoice_number + "_item_list.pdf";
+    const options = { format: "A4" };
+
+    (async () => {
+      const file = { content: html };
+
+      // Generate PDF
+      const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+
+      // Save PDF to file
+      fs.writeFileSync(file_path, pdfBuffer);
+      console.log("PDF generated successfully!");
+
+        res.send(
+          formatResponse(
+            {
+              file_name: saleData.invoice_number + "_item_list.pdf",
+              url: getFileAbsulatePathPDF(file_path),
+              html : html,
+              saleData
+            },
+            "Invoice pdf"
+          )
+        );
+    })();
+  } catch (error) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse(error.toString()));
+  }
+};
+
+/**
+ * Download Invoice Item Details
+ *
+ * @param {*} req
+ * @param {*} res
+ */
+exports.downloadInvoiceItemDetails = async (req, res) => {
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   let sale = await SaleModel.findOne({
     where: { id: req.params.id, sale_by: userID },
@@ -8034,7 +8743,7 @@ exports.downloadInvoiceItems = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">SALE LIST INVOICE</h1>
+                                      300;">SALE ITEM DETAILS INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -8299,7 +9008,7 @@ exports.downloadInvoiceItems = async (req, res) => {
                                                   font-size: 11px;
                                                   font-weight: 400; width: 25px;">
                                                   ${
-                                                    i < 10
+                                                    i < 9
                                                       ? "0" + (i + 1)
                                                       : i + 1
                                                   }
@@ -9268,7 +9977,7 @@ exports.downloadInvoiceItems = async (req, res) => {
   /* -------------- commented by Soumalya Nandy ------------ */
 
   try {
-    let file_path = "public/invoices/" + saleData.invoice_number + "_lists.pdf";
+    let file_path = "public/invoices/" + saleData.invoice_number + "_item_details.pdf";
     const options = { format: "A4" };
 
     (async () => {
@@ -9284,7 +9993,7 @@ exports.downloadInvoiceItems = async (req, res) => {
         res.send(
           formatResponse(
             {
-              file_name: saleData.invoice_number + "_lists.pdf",
+              file_name: saleData.invoice_number + "_item_details.pdf",
               url: getFileAbsulatePathPDF(file_path),
               html : html,
               saleData,
