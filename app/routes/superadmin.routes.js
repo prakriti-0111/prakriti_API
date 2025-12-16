@@ -960,9 +960,14 @@ module.exports = (app, express, io) => {
     purchaseController.downloadInvoiceInfo
   );
   router.post(
-    "/purchases/download-invoice-items/:id",
+    "/purchases/download-invoice-item-list/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
-    purchaseController.downloadInvoiceItems
+    purchaseController.downloadInvoiceItemList
+  );
+  router.post(
+    "/purchases/download-invoice-item-details/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    purchaseController.downloadInvoiceItemDetails
   );
 
   // purchase on approval
@@ -1034,9 +1039,14 @@ module.exports = (app, express, io) => {
     saleController.downloadInvoiceInfo
   );
   router.post(
-    "/sales/download-invoice-items/:id",
+    "/sales/download-invoice-item-list/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
-    saleController.downloadInvoiceItems
+    saleController.downloadInvoiceItemList
+  );
+  router.post(
+    "/sales/download-invoice-item-details/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    saleController.downloadInvoiceItemDetails
   );
   router.post(
     "/sales-on-approve/status/:id",
