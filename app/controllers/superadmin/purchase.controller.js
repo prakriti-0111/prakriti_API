@@ -69,6 +69,7 @@ const MaterialModel = db.materials;
 const SizeModel = db.sizes;
 const StockModel = db.stocks;
 const StockMaterialModel = db.stock_materials;
+const PrePurchaseModel = db.pre_purchases;
 const PurchaseModel = db.purchases;
 const PurchaseProductModel = db.purchase_products;
 const PurchaseProductMaterialModel = db.purchase_product_materials;
@@ -988,6 +989,94 @@ exports.downloadTxnLedger = async (req, res) => {
 }
 
 /**
+ * Store pre purchase data
+ * 
+ * @param {*} req 
+ * @param {*} res 
+ */
+exports.pre_store = async (req, res) => {
+  let data = req.body;
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  try { 
+    console.log("pre purchase store payload : ", data);
+    //return false;
+    let req_data = data; //JSON.stringify(data);
+    //req_data = new Buffer.from(req_data).toString("base64");
+    req_data = encodeForStorage(req_data);  
+    let prePurchaseObj = {
+      user_id: userID,
+      req_data: req_data
+    };
+
+    /* create and return create id */
+    let prePurchase = await PrePurchaseModel.create(prePurchaseObj);   
+    //prePurchase.record_id = prePurchase.id;
+
+    res.send(formatResponse(prePurchase, "Pre Purchase data stored successfully!"));
+  } catch (error) {
+    addLog('err: ' + error.toString());
+    return res.status(errorCodes.default).send(formatErrorResponse('Pre Purchase data does not success due to some error'));
+  }
+
+};
+
+/**
+ * Fetch all pre purchase data
+ */
+exports.pre_purchase_list = async (req, res) => {
+  try {
+    let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+    let prePurchases = await PrePurchaseModel.findAll({
+      where: { user_id: userID },
+      order: [['createdAt', 'DESC']]
+    });
+    
+    /* decode req_data and send */
+    let items = [];
+    prePurchases = prePurchases.map(item => {
+      let decodedData = decodeFromStorage(item.req_data);
+      decodedData.id = item.id;
+      items.push(decodedData);
+    });
+
+    let result = {
+      pre_purchase_items: items,
+      total: items.length,
+    };
+
+    res.send(formatResponse(result, "Pre Purchase data fetched successfully!"));
+  } catch (error) {
+    addLog('err: ' + error.toString());
+    return res.status(errorCodes.default).send(formatErrorResponse('Pre Purchase data does not fetch due to some error'));
+  }
+};
+
+/**
+ * delete pre purchase item single/all
+ */
+exports.pre_purchase_delete = async (req, res) => {
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  try {
+    let id = req.params.id;
+    console.log("----pre purchase delete id",id, " ", userID);
+    if(id == 'all'){
+      await PrePurchaseModel.destroy({
+        where: { user_id: userID }
+      });
+    }else{
+      await PrePurchaseModel.destroy({
+        where: { id: id, user_id: userID }
+      });
+    }
+    res.send(formatResponse([], "Pre Purchase item deleted successfully!"));
+  } catch (error) {
+    addLog('err: ' + error.toString());
+    return res.status(errorCodes.default).send(formatErrorResponse('Pre Purchase item does not delete due to some error'));
+  }
+};
+
+
+/**
  * Store purchase
  *
  * @param {*} req
@@ -1398,22 +1487,36 @@ console.log("is_certificate_exist : ", is_certificate_exist);
 
     //if paid from advance amount
     if (parseFloat(data.advance_amount) > 0 && data.pay_from_advance) {
-      let thisAmnt =
+      /* let thisAmnt =
         parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
           ? data.advance_amount
           : priceFormat(
               parseFloat(data.advance_amount) - parseFloat(data.total_payable)
+            ); */
+
+      let theDebitAmount = parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
+          ? parseFloat(data.advance_amount)
+          : parseFloat(data.total_payable);
+
+      let thisCreditAmnt =
+        parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
+          ? 0.00
+          : priceFormat(
+              parseFloat(data.advance_amount) - parseFloat(data.total_payable)
             );
-      let payment = await paymentModel.create({
-        payment_mode: "advance",
-        amount: priceFormat(thisAmnt),
+
+      /* debit advance amount */
+      let paymentD = await paymentModel.create({
+        //payment_mode: "advance",
+        payment_mode: data.payment_mode,
+        amount: priceFormat(theDebitAmount),
         user_id: userID,
         payment_by: req.userId,
         payment_date: moment().format("YYYY-MM-DD"),
         // txn_id: data.transaction_no,
         // cheque_no: data.cheque_no,
         status: "success",
-        type: "advance_adjust",
+        type: "debit", //advance_adjust
         table_type: "purchase",
         table_id: purchase.id,
         payment_belongs: data.supplier_id,
@@ -1422,9 +1525,51 @@ console.log("is_certificate_exist : ", is_certificate_exist);
         is_advance: true,
       });
 
-      await updateWalletRemainingBalance(data.supplier_id, payment.id);
+      await updateWalletRemainingBalance(data.supplier_id, paymentD.id);
 
-      await updateAdvanceAmount(userID, data.supplier_id, thisAmnt, false);
+      /* credit remaining advance amount */
+      /* let payment = await paymentModel.create({
+        parent_id: paymentD.id,
+        payment_mode: "advance",
+        amount: priceFormat(thisCreditAmnt),
+        user_id: userID,
+        payment_by: req.userId,
+        payment_date: moment().format("YYYY-MM-DD"),
+        // txn_id: data.transaction_no,
+        // cheque_no: data.cheque_no,
+        status: "success",
+        type: "credit", //advance_adjust
+        table_type: "purchase",
+        table_id: purchase.id,
+        payment_belongs: data.supplier_id,
+        purpose: "purchase adjust from advance",
+        can_accept: true,
+        is_advance: true,
+      });
+
+      await updateWalletRemainingBalance(data.supplier_id, payment.id); */     
+
+      /* let payment = await paymentModel.create({
+        payment_mode: "advance",
+        amount: priceFormat(thisAmnt),
+        user_id: userID,
+        payment_by: req.userId,
+        payment_date: moment().format("YYYY-MM-DD"),
+        // txn_id: data.transaction_no,
+        // cheque_no: data.cheque_no,
+        status: "success",
+        type: "credit", //advance_adjust
+        table_type: "purchase",
+        table_id: purchase.id,
+        payment_belongs: data.supplier_id,
+        purpose: "purchase adjust from advance",
+        can_accept: true,
+        is_advance: true,
+      }); */
+
+      /* await updateWalletRemainingBalance(data.supplier_id, payment.id); */
+
+      await updateAdvanceAmount(userID, data.supplier_id, thisCreditAmnt, false);
     }
 
     res.send(formatResponse([], "Purchase successfully!"));
@@ -3398,12 +3543,32 @@ exports.returnProducts = async (req, res) => {
           });
           await updateWalletRemainingBalance(userID, payment2.id);
         } else {
-          await PaymentModel.update(
-            {
-              is_advance: "1"
-            },
-            { where: { table_type: "purchase", table_id: purchase.id } }
-          );
+          // await PaymentModel.update(
+          //   {
+          //     is_advance: "1"
+          //   },
+          //   { where: { table_type: "purchase", table_id: purchase.id } }
+          // );
+          let payment2 = await paymentModel.create({
+            user_id: purchase.supplier_id,
+            payment_by: userID,
+            table_type: "purchase",
+            table_id: purchase.id,
+            amount: data.return_amount_from_wallet,
+            payment_mode: data.return_payment_mode,
+            remaining_balance: 0,
+            status: "success",
+            payment_date: data.return_date
+              ? moment(data.return_date, "MM/DD/YYYY").format("YYYY-MM-DD")
+              : moment().format("YYYY-MM-DD"),
+            payment_belongs: userID,
+            type: "credit",
+            purpose: "return purchase",
+            can_accept: false,
+            is_advance: true,
+          });
+          await updateWalletRemainingBalance(userID, payment2.id);
+
           await updateAdvanceAmount(
             userID,
             purchase.supplier_id,
@@ -5286,12 +5451,734 @@ const removeCurrencyAndDecimalFromPrice = (str) => {
 };
 
 /**
+ * Download Invoice Item List
+ *
+ * @param {*} req
+ * @param {*} res
+ */
+exports.downloadInvoiceItemList = async (req, res) => {
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let purchase = await PurchaseModel.findOne({
+    where: { id: req.params.id /*, user_id: userID*/ },
+    include: [
+      {
+        model: PurchaseProductModel,
+        as: "purchaseProducts",
+        separate: true,
+        include: [
+          {
+            model: ProductModel,
+            as: "product",
+            include: [
+              {
+                model: CategoryModel,
+                as: "category",
+              },
+              {
+                model: SubCategoryModel,
+                as: "sub_category",
+              },
+              {
+                model: taxSlabModel,
+                as: "tax",
+              },
+            ],
+          },
+          {
+            model: SizeModel,
+            as: "size",
+          },
+          {
+            model: PurchaseProductMaterialModel,
+            as: "purchaseMaterials",
+            separate: true,
+            include: [
+              {
+                model: MaterialModel,
+                as: "material",
+              },
+              {
+                model: PurityModel,
+                as: "purity",
+              },
+              {
+                model: UnitModel,
+                as: "unit",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        model: UserModel,
+        as: "supplier",
+      },
+      {
+        model: UserModel,
+        as: "purchaseBy",
+      },
+    ],
+  });
+  if (!purchase) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Purchase not found"));
+  }
+
+  let purchaseData = PurchaseViewCollection(purchase);
+
+  /* let payments = await PaymentModel.findAll({
+    where: {
+      table_type: "purchase",
+      table_id: req.params.id,
+    },
+    include: [
+      {
+        model: UserModel,
+        as: "user",
+      },
+    ],
+  });
+  payments = await PaymentCollection(payments); */
+  const cwd = process.cwd();
+  // const logoUrl = `file://${cwd}/public/images/logo.png`;
+  const logoUrl = `public/images/logo.png`;
+  // const logoUrl = process.env.BASE_URL + "public/images/logo.png";
+
+  const bitmap = fs.readFileSync(logoUrl);
+  const logo = bitmap.toString("base64");
+
+  let footerhtml = `
+              <div class="invoice" style="width: 96%; margin: 0px; background-color: #f9f9f9;">
+                  <hr/>
+                  <table cellpadding="0" cellspacing="1"  style="margin:auto; width:100%" >
+                      <tbody>
+                          <tr>
+                              <td><table cellspacing="0" cellpadding="0"
+                                    border="0"
+                                    align="center" width="90%">
+                                    <div style="display: table; width:
+                                        100%; font-size: 11px;">
+                                        <div style="display: table-cell;
+                                            width: 65%;">
+                                            <h5 style="margin: 0px;
+                                                font-size: 11px;
+                                                font-weight:
+                                                600; text-transform:
+                                                uppercase;">NOTE</h5>
+                                            <ul style="margin: 0;
+                                                padding: 0px;
+                                                list-style: none;">
+                                                <span style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400; ">*
+                                                    Goods once sold will
+                                                    be taken back with
+                                                    condition</span>
+
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">Returning
+                                                    minimum product
+                                                    value of Rs 5000/-
+                                                    above</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">Returning
+                                                    product taken back
+                                                    Less than 20-30% of
+                                                    my billing amount</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">If any Damage
+                                                    charge as per making
+                                                    cost only</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">No Charges
+                                                    taken on Sale
+                                                    product returning
+                                                    within 7 days from
+                                                    bill date</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">All disputes
+                                                    are subject to Patna
+                                                    Juridiction only</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">Charges may
+                                                    be appling cancel of
+                                                    order product making
+                                                    only</li>
+
+                                            </ul>
+                                        </div>
+                                        <div style="display: table-cell;
+                                            width: 35%;">
+                                            
+                                            <div style="margin-top:5px">
+                                                <p style="
+                                                  font-size: 11px; 
+                                                  margin: 0;
+                                                    line-height: 1.2; ">
+                                                    Company Name - ${purchaseData.supplier_details.company_name}</p>
+                                                <p style="font-size:
+                                                    11px; margin: 0;
+                                                    line-height: 1.2; ">
+                                                      Ac. No - ${purchaseData.supplier_details.bank_account_no}</p>
+                                                <p style="font-size:
+                                                    11px; margin: 0;
+                                                    line-height: 1.2; ">
+                                                    IFSC Code -
+                                                    ${purchaseData.supplier_details.bank_ifsc}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </table></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+          `;
+
+  let html = `<!DOCTYPE html>
+  <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta http-equiv="X-UA-Compatible" content="IE=edge">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Bill</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <style>
+          html {
+            -webkit-print-color-adjust: exact;
+          }
+          </style>
+      </head>
+      <body style="box-sizing: border-box; padding: 0px; margin: 0px; font-family:
+          'Poppins', sans-serif;">
+          <div class="invoice" style="width: 96%; margin: 15px;  background-color: #f9f9f9;">
+              <table cellpadding="0" cellspacing="0" width="100%">
+                  <tbody>
+                      <tr>
+                          <td>
+                              <table cellspacing="0" cellpadding="0" border="0"
+                                  align="center" width="100%">
+                                  <h1 style="font-size: 14px; text-align:
+                                      center; margin-bottom: 5px; font-weight:
+                                      300;">PURCHASE ITEM LIST INVOICE</h1>
+                              </table>
+                              <table cellspacing="0" cellpadding="0" border="0"
+                                  align="center" width="100%">
+                                  <div style="display: table; width: 100%;">
+                                      <div style="width: 65%; display: table-cell;
+                                          vertical-align: bottom;">
+                                          <img src="data:image/png;base64,${logo}" style="width:
+                                              220px; margin-left: 10px;">
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">Corporate Office -
+                                              P210 Strand Bank Road Brabzar
+                                              Kolkata 700 011</h3>
+  
+                                      </div>
+                                      <div style="width: 35%; display: table-cell;
+                                          vertical-align: middle; text-align:
+                                          left;">
+                                          <h3 style="margin: 0;">
+                                              <span style="font-size: 16px;
+                                                  font-weight: 600;">Prakriti
+                                                  Patna</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 14px;">GST No -
+                                              <span style="font-weight: 600;">10CIUPK2654L1ZY</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">User Id - <span>${purchaseData.purchase_by_name}</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">Address - G100
+                                              RBI CPC Colony Kankarbagh Patna
+                                              Bihar 800 020</h3>
+                                          <h3 style="font-weight: 600; font-size:
+                                              12px; margin: 0;">
+                                              support@Prakriti.com, +91 98744
+                                              45878
+                                          </h3>
+                                      </div>
+                                  </div>
+                              </table>
+                              <table cellspacing="0" cellpadding="0" border="0"
+                                  align="center" width="100%">
+                                  <tbody>
+                                      <tr>
+                                          <hr style="border: 1px solid #1E2757; width:97%">
+                                      </tr>
+                                  </tbody>
+                              </table>
+
+                              <table cellspacing="0" cellpadding="5" border="0"
+                                  align="center" width="100%">
+                                  <thead>
+                                      <!-- <tr style="background-color: #000;">
+                                          <th style="text-align: left; color:
+                                              #fff;">Company: Ratn Alankar
+                                              Jewellers</th>
+                                          <th style="text-align: left; color:
+                                              #fff;">Name: Mukund Singhaindi</th>
+                                          <th style="text-align: left; color:
+                                              #fff;">Cont: 91919191919</th>
+                                          <th style="text-align: left; color:
+                                              #fff;">City: Muzaffarpur</th>
+                                      </tr>-->
+                                  </thead> 
+                                      <tbody>
+                                          <!-- <tr style="background-color: #fff;">
+                                          <td style="">
+                                              <span style="font-weight: 600;"> GST
+                                                  IN ${purchaseData.supplier_details.gst} </span>
+                                          </td>
+                                          <td style="">
+                                              Ad:
+                                          </td>
+                                          <td style="">
+  
+                                          </td>
+                                          <td style="">
+                                              Pin Code: 800 020
+                                          </td>
+                                      </tr> -->
+                                          <tr>
+                                              <td style="padding: 0;">
+                                                  <div class="comp-part-one">
+                                                      <ul style="margin: 0;
+                                                          padding: 0; list-style:
+                                                          none; display: flex;
+                                                          gap: 15px;
+                                                          justify-content:
+                                                          space-between;">
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Company -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${purchaseData.supplier_details.company_name}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">GST IN</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${purchaseData.supplier_details.gst}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Cont -
+                                                              </span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${purchaseData.supplier_mobile}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Invoice Date
+                                                                  -
+                                                              </span> <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${purchaseData.invoice_date}</span></li>
+                                                                  
+                                                      </ul>
+                                                  </div>
+                                                  <div class="comp-part-two">
+                                                      <ul style="margin: 0;
+                                                          padding: 0; list-style:
+                                                          none; display: flex;
+                                                          gap: 15px;
+                                                          justify-content:
+                                                          space-between;">
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Address -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${purchaseData.supplier_details.address}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">City -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${purchaseData.supplier_details.city}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Pin -
+                                                              </span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${purchaseData.supplier_details.pincode}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Invoice No -
+                                                              </span> <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${purchaseData.invoice_number}</span></li>
+                                                      </ul>
+                                                      <!--ul style="margin: 0;
+                                                          padding: 0;margin-left:52px; list-style:
+                                                          none; display: flex;
+                                                          gap: 15px;
+                                                         ">
+                                                       <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">City -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${purchaseData.supplier_details.city}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Pin -
+                                                              </span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${purchaseData.supplier_details.pincode}</span></li>
+                                                                  </ul-->
+                                                  </div>
+                                              </td>
+                                          </tr>
+                                      </tbody>
+                                  </table>
+                              
+                                  <table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+                                      border="0"
+                                      align="center" width="100%">
+                                      <thead style="">
+                                          <tr style="background-color: #000000;">
+                                              <th style="text-align: left; color:
+                                                  #fff; border: 1px solid #000000;
+                                                  font-size: 12px; font-weight:
+                                                  400; width: 25px;">#</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 100; width:
+                                                  125px;">Product Name</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400; width: 50px;">Certificate No.</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400; width: 90px;">Gross Weight</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 40px;">Stone Weight</th>
+                                              <th style="text-align: left; color:
+                                                #fff; font-size: 12px;
+                                                font-weight: 400; width: 130px">Gold Amt.</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 90px;">Stone Amt.</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 90px;">Making</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 90px;">Total Amt.</th>
+                                          </tr>
+                                      </thead>
+                                      <tbody>`;
+  let totalGoldAmt = 0;
+  let totalStoneAmt = 0;
+  let totalMaterialAmt = 0;
+  let totalAmt = 0;
+  for (let i = 0; i < purchaseData.products.length; i++) {
+    let bgTrColor = i % 2 == 0 ? "#1E2757" : "#1E2757";
+    let grossWeight = 0;
+    let stoneWeight = 0;
+    let goldAmt = 0;
+    let stoneAmt = 0;
+    let productAmt = 0;
+    for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
+      grossWeight += purchaseData.products[i].materials[x].pakka_weight
+              ? 
+                  parseFloat(purchaseData.products[i].materials[x].pakka_weight)
+              : 
+                  parseFloat(purchaseData.products[i].materials[x].weight);
+      
+      if(purchaseData.products[i].materials[x].unit_name.toUpperCase() != "GM"){
+          stoneWeight += parseFloat(purchaseData.products[i].materials[x].weight);
+          stoneAmt += purchaseData.products[i].materials[x].material_cost
+              ? parseFloat(purchaseData.products[i].materials[x].material_cost)
+              : 0;
+      } else {
+        goldAmt += purchaseData.products[i].materials[x].material_cost
+              ? 
+                  parseFloat(purchaseData.products[i].materials[x].material_cost)
+              : 
+                  0;
+      }
+    }
+    productAmt = goldAmt + stoneAmt + parseFloat(purchaseData.products[i].making_charge);
+    totalGoldAmt += goldAmt;
+    totalStoneAmt += stoneAmt;
+    totalMaterialAmt += parseFloat(purchaseData.products[i].making_charge);
+    totalAmt += productAmt;
+    html += `<tr style="background-color: ${bgTrColor}; color:#FFFFFF;">
+                                              <td style="text-align: left;
+                                                  font-size: 11px;
+                                                  font-weight: 400; width: 25px;">
+                                                  ${
+                                                    i < 9
+                                                      ? "0" + (i + 1)
+                                                      : i + 1
+                                                  }
+                                              </td>
+                                              <td style="text-align: left;
+                                                  font-size: 11px;
+                                                  font-weight: 400;font-size: 10px; width:125px;">
+                                                  ${
+                                                    purchaseData.products[i]
+                                                      .product_name
+                                                  } - ${purchaseData.products[i].product_code ? purchaseData.products[i].product_code : ""}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${
+                                                      purchaseData.products[i]
+                                                        .certificate_no
+                                                    }
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${weightFormat(grossWeight)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${weightFormat(stoneWeight)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${priceFormat(goldAmt)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${priceFormat(stoneAmt)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px;">
+                                                    ${priceFormat(purchaseData.products[i].making_charge)}
+                                              </td>
+                                              <td colspan="7" style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400;">
+                                                    ${priceFormat(productAmt)}
+                                              </td>
+  
+                                          </tr>
+                                          `;
+  }
+  html += `<tr style="
+                                              vertical-align: top;">
+                                              <td colspan="5"
+                                                  style="
+                                                  border:none;">
+
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalGoldAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalStoneAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalMaterialAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              
+                                          </tr>`;
+
+  html += ` <tr style="
+                                                    vertical-align: top;">
+                                                    
+                                                    <td colspan="11"
+                                                          style="
+                                                          border:none; padding: 0;">
+                                                          ${footerhtml}
+                                                      </td>
+                                                      
+  
+                                                  </tr>
+                                              </tbody>
+                                          </table>
+
+                                          
+                                          <!-- Footer -->
+                                          
+                                          
+                                      </td>
+                                  </tr>
+  
+                              </tbody>
+                          </table>
+                      </div>
+                  </body>
+              </html>`;
+
+  try {
+    let file_path = "public/invoices/" + purchaseData.invoice_number + "_item_list.pdf";
+    const options = { format: "A4" };
+
+    (async () => {
+      const file = { content: html };
+
+      // Generate PDF
+      const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+
+      // Save PDF to file
+      fs.writeFileSync(file_path, pdfBuffer);
+      console.log("PDF generated successfully!");
+
+        res.send(
+          formatResponse(
+            {
+              file_name: purchaseData.invoice_number + "_item_list.pdf",
+              url: getFileAbsulatePathPDF(file_path),
+              html : html,
+              purchaseData
+            },
+            "Invoice pdf"
+          )
+        );
+    })();
+  } catch (error) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse(error.toString()));
+  }
+};
+
+/**
  * Download Invoice
  *
  * @param {*} req
  * @param {*} res
  */
-exports.downloadInvoiceItems = async (req, res) => {
+exports.downloadInvoiceItemDetails = async (req, res) => {
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   let purchase = await PurchaseModel.findOne({
     where: { id: req.params.id /*, user_id: userID*/ },
@@ -5635,7 +6522,7 @@ exports.downloadInvoiceItems = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">PURCHASE LIST INVOICE</h1>
+                                      300;">PURCHASE ITEM DETAILS INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -5899,7 +6786,7 @@ exports.downloadInvoiceItems = async (req, res) => {
                                                   font-size: 11px;
                                                   font-weight: 400; width: 25px;">
                                                   ${
-                                                    i < 10
+                                                    i < 9
                                                       ? "0" + (i + 1)
                                                       : i + 1
                                                   }
@@ -6882,7 +7769,7 @@ exports.downloadInvoiceItems = async (req, res) => {
 
   try {
     let file_path =
-      "public/invoices/" + purchaseData.invoice_number + "_lists.pdf";
+      "public/invoices/" + purchaseData.invoice_number + "_item_details.pdf";
     const options = { format: "A4" };
 
     (async () => {
@@ -6898,7 +7785,7 @@ exports.downloadInvoiceItems = async (req, res) => {
       res.send(
         formatResponse(
           {
-            file_name: purchaseData.invoice_number + "_lists.pdf",
+            file_name: purchaseData.invoice_number + "_item_details.pdf",
             url: getFileAbsulatePathPDF(file_path),
             purchaseData,
             payments,
