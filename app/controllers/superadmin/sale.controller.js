@@ -1583,7 +1583,7 @@ exports.store = async (req, res) => {
         payment_mode: data.payment_mode,
         amount: priceFormat(theDebitAmount),
         user_id: data.user_id,
-        payment_by: req.userId,
+        payment_by: userID,
         payment_date: moment().format("YYYY-MM-DD"),
         // txn_id: data.transaction_no,
         // cheque_no: data.cheque_no,
@@ -1599,13 +1599,13 @@ exports.store = async (req, res) => {
 
       await updateWalletRemainingBalance(userID, paymentD.id);
 
-      /* credit remaining advance amount */
-      /* let payment = await paymentModel.create({
+      /* credit advance amount as paid amount */
+      let payment = await paymentModel.create({
         parent_id: paymentD.id,
-        payment_mode: "advance",
-        amount: priceFormat(thisCreditAmnt),
+        payment_mode: data.payment_mode,
+        amount: priceFormat(theDebitAmount),
         user_id: data.user_id,
-        payment_by: req.userId,
+        payment_by: userID,
         payment_date: moment().format("YYYY-MM-DD"),
         // txn_id: data.transaction_no,
         // cheque_no: data.cheque_no,
@@ -1614,12 +1614,12 @@ exports.store = async (req, res) => {
         table_type: "sale",
         table_id: sale.id,
         payment_belongs: userID,
-        purpose: "sale adjust from advance",
+        purpose: "advance amount changed to paid amount for the sale",
         can_accept: true,
-        is_advance: true,
+        is_advance: false,
       });
 
-      await updateWalletRemainingBalance(userID, payment.id); */
+      await updateWalletRemainingBalance(userID, payment.id);
 
       await updateAdvanceAmount(data.user_id, userID, thisCreditAmnt, false);
     }
