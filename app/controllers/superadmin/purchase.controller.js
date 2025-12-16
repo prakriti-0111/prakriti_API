@@ -1511,7 +1511,7 @@ console.log("is_certificate_exist : ", is_certificate_exist);
         payment_mode: data.payment_mode,
         amount: priceFormat(theDebitAmount),
         user_id: userID,
-        payment_by: req.userId,
+        payment_by: userID,
         payment_date: moment().format("YYYY-MM-DD"),
         // txn_id: data.transaction_no,
         // cheque_no: data.cheque_no,
@@ -1528,12 +1528,12 @@ console.log("is_certificate_exist : ", is_certificate_exist);
       await updateWalletRemainingBalance(data.supplier_id, paymentD.id);
 
       /* credit remaining advance amount */
-      /* let payment = await paymentModel.create({
+      let payment = await paymentModel.create({
         parent_id: paymentD.id,
-        payment_mode: "advance",
-        amount: priceFormat(thisCreditAmnt),
+        payment_mode: data.payment_mode,
+        amount: priceFormat(theDebitAmount),
         user_id: userID,
-        payment_by: req.userId,
+        payment_by: userID,
         payment_date: moment().format("YYYY-MM-DD"),
         // txn_id: data.transaction_no,
         // cheque_no: data.cheque_no,
@@ -1542,12 +1542,12 @@ console.log("is_certificate_exist : ", is_certificate_exist);
         table_type: "purchase",
         table_id: purchase.id,
         payment_belongs: data.supplier_id,
-        purpose: "purchase adjust from advance",
+        purpose: "advance amount changed to paid amount for the purchase",
         can_accept: true,
-        is_advance: true,
+        is_advance: false,
       });
 
-      await updateWalletRemainingBalance(data.supplier_id, payment.id); */     
+      await updateWalletRemainingBalance(data.supplier_id, payment.id);    
 
       /* let payment = await paymentModel.create({
         payment_mode: "advance",
