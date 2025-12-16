@@ -286,9 +286,16 @@ exports.index = async (req, res) => {
         let ownUserIds = await avlStockUserIdsNew(req, adminRoleId);
         ownUserIds.push(userID);
         conditions.user_id = { [Op.in]: ownUserIds };
+      } else if (by_specific == 1 && own_se == 1) {
+        let seData = await UserModel.findAll({
+          attributes: ["id"],
+          where: { role_id: seRoleId, parent_id: userID },
+        });
+        let seIds = arrayColumn(seData, "id");
+        conditions.user_id = { [Op.in]: seIds };
       } else if (total_avl_stock == 1) {
         let ownUserIds = await avlStockUserIdsNew(req, superAdminRoleId);
-        ownUserIds.push(userID);
+        //ownUserIds.push(userID);
         conditions.user_id = { [Op.in]: ownUserIds };
       }
     } else if (isDistributor(req)) {
@@ -934,6 +941,14 @@ exports.getStockPriceByCategory = async (req, res) => {
       let ownUserIds = await avlStockUserIdsNew(req, adminRoleId);
       ownUserIds.push(userID);
       userIdArr = ownUserIds;
+      bySpecific = true;
+    } else if (by_specific == 1 && own_se == 1) {
+      let seData = await UserModel.findAll({
+        attributes: ["id"],
+        where: { role_id: getRoleId("sales_executive"), parent_id: userID },
+      });
+      let seIds = arrayColumn(seData, "id");
+      userIdArr = seIds;
       bySpecific = true;
     }
   } else if (isSalesExecutive(req)) {
