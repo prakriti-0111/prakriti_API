@@ -88,6 +88,7 @@ const getModelObject = (data) => {
             //let stockItem = saleStocks[i];
             //let productSelected = products.filter((itm) => itm.id === stockItem.product_id);
             let productSelected = products[i];
+            console.log("productSelected : ", productSelected); 
             /* categorise product details by sub categories */
             if(productSelected.product_name != ''){
                 //productSelected = productSelected[0];

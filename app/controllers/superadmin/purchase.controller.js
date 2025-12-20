@@ -1669,6 +1669,14 @@ exports.onapprove_view = async (req, res) => {
                 model: CategoryModel,
                 as: "category",
               },
+              {
+                model: SubCategoryModel,
+                as: "sub_category",
+              },
+              {
+                model: taxSlabModel,
+                as: "tax",
+              },
             ],
           },
           {
@@ -3978,7 +3986,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">PURCHASE TAX INVOICE</h1>
+                                      300;">PURCHASE${purchaseData.is_approved == "3"?" ON APPROVAL":""} TAX INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -5693,7 +5701,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">PURCHASE ITEM LIST INVOICE</h1>
+                                      300;">PURCHASE${purchaseData.is_approved == "3"?" ON APPROVAL":""} ITEM LIST INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -5926,10 +5934,10 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                   font-weight: 400; width: 50px;">Certificate No.</th>
                                               <th style="text-align: left; color:
                                                   #fff; font-size: 12px;
-                                                  font-weight: 400; width: 90px;">Gross Weight</th>
+                                                  font-weight: 400; width: 90px;">Gross Wt.</th>
                                               <th style="text-align: left; color:
                                                   #fff; font-size: 12px;
-                                                  font-weight: 400;width: 40px;">Stone Weight</th>
+                                                  font-weight: 400;width: 40px;">Stone Wt.</th>
                                               <th style="text-align: left; color:
                                                 #fff; font-size: 12px;
                                                 font-weight: 400; width: 130px">Gold Amt.</th>
@@ -5945,6 +5953,10 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                           </tr>
                                       </thead>
                                       <tbody>`;
+  
+  
+  let totalGrossWeight = 0;
+  let totalStoneWeight = 0;
   let totalGoldAmt = 0;
   let totalStoneAmt = 0;
   let totalMaterialAmt = 0;
@@ -5977,6 +5989,8 @@ exports.downloadInvoiceItemList = async (req, res) => {
       }
     }
     productAmt = goldAmt + stoneAmt + parseFloat(purchaseData.products[i].making_charge);
+    totalGrossWeight += grossWeight;
+    totalStoneWeight += stoneWeight;
     totalGoldAmt += goldAmt;
     totalStoneAmt += stoneAmt;
     totalMaterialAmt += parseFloat(purchaseData.products[i].making_charge);
@@ -5984,7 +5998,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
     html += `<tr style="background-color: ${bgTrColor}; color:#FFFFFF;">
                                               <td style="text-align: left;
                                                   font-size: 11px;
-                                                  font-weight: 400; width: 25px;">
+                                                  font-weight: 400; width: 25px; border-bottom: 1px solid #FFFFFF !important;">
                                                   ${
                                                     i < 9
                                                       ? "0" + (i + 1)
@@ -5993,15 +6007,15 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                               </td>
                                               <td style="text-align: left;
                                                   font-size: 11px;
-                                                  font-weight: 400;font-size: 10px; width:125px;">
+                                                  font-weight: 400;font-size: 10px; width:125px; border-bottom: 1px solid #FFFFFF !important;">
                                                   ${
                                                     purchaseData.products[i]
                                                       .product_name
-                                                  } - ${purchaseData.products[i].product_code ? purchaseData.products[i].product_code : ""}
+                                                  } 
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${
                                                       purchaseData.products[i]
                                                         .certificate_no
@@ -6009,32 +6023,32 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${weightFormat(grossWeight)}
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${weightFormat(stoneWeight)}
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${priceFormat(goldAmt)}
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${priceFormat(stoneAmt)}
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${priceFormat(purchaseData.products[i].making_charge)}
                                               </td>
                                               <td colspan="7" style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400;">
+                                                    font-weight: 400; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${priceFormat(productAmt)}
                                               </td>
   
@@ -6043,10 +6057,40 @@ exports.downloadInvoiceItemList = async (req, res) => {
   }
   html += `<tr style="
                                               vertical-align: top;">
-                                              <td colspan="5"
+                                              <td colspan="3"
                                                   style="
                                                   border:none;">
 
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalGrossWeight
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalStoneWeight
+                                                          )}</div></h4>
+                                                  </div>
                                               </td>
                                               <td style="">
                                                   <div style="padding-top:5px;">
@@ -6522,7 +6566,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">PURCHASE ITEM DETAILS INVOICE</h1>
+                                      300;">PURCHASE${purchaseData.is_approved == "3"?" ON APPROVAL":""} ITEM DETAILS INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
