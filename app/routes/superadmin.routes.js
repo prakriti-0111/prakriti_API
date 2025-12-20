@@ -971,6 +971,22 @@ module.exports = (app, express, io) => {
   );
 
   // purchase on approval
+  router.post(
+    "/purchases-on-approve/download-invoice-info/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    purchaseController.downloadInvoiceInfo
+  );
+  router.post(
+    "/purchases-on-approve/download-invoice-item-list/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    purchaseController.downloadInvoiceItemList
+  );
+  router.post(
+    "/purchases-on-approve/download-invoice-item-details/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    purchaseController.downloadInvoiceItemDetails
+  );
+  
   router.get(
     "/purchases-on-approve",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
@@ -1047,6 +1063,26 @@ module.exports = (app, express, io) => {
     "/sales/download-invoice-item-details/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     saleController.downloadInvoiceItemDetails
+  );
+  router.post(
+    "/sales-on-approve/download-invoice-info/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    saleController.downloadInvoiceInfo
+  );
+  router.post(
+    "/sales-on-approve/download-invoice-item-list/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    saleController.downloadInvoiceItemList
+  );
+  router.post(
+    "/sales-on-approve/download-invoice-item-details/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    saleController.downloadInvoiceItemDetails
+  );
+  router.get(
+    "/sales-on-approve/view/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    saleController.view
   );
   router.post(
     "/sales-on-approve/status/:id",
