@@ -6132,18 +6132,14 @@ exports.downloadInvoiceItemList = async (req, res) => {
   let totalMaterialAmt = 0;
   let totalAmt = 0;
   for (let i = 0; i < purchaseData.products.length; i++) {
-    let bgTrColor = i % 2 == 0 ? "#1E2757" : "#1E2757";
-    let grossWeight = 0;
+    let bgTrColor = i % 2 == 0 ? "#050508ff" : "#1E2757";
+    let grossWeight = parseFloat(purchaseData.products[i].total_weight);
     let stoneWeight = 0;
     let goldAmt = 0;
     let stoneAmt = 0;
     let productAmt = 0;
     for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
-      grossWeight += purchaseData.products[i].materials[x].pakka_weight
-              ? 
-                  parseFloat(purchaseData.products[i].materials[x].pakka_weight)
-              : 
-                  parseFloat(purchaseData.products[i].materials[x].weight);
+      //grossWeight += parseFloat(purchaseData.products[i].total_weight);
       
       if(purchaseData.products[i].materials[x].unit_name.toUpperCase() != "GM"){
           stoneWeight += parseFloat(purchaseData.products[i].materials[x].weight);
