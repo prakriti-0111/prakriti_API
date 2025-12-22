@@ -221,7 +221,7 @@ exports.txnLedger = async (req, res) => {
   is_assigned = is_assigned === undefined ? false : true;
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let conditions = { is_assigned: is_assigned, is_approval: is_approval };
+  let conditions = { is_assigned: is_assigned }; /* , is_approval: is_approval */
   if (status !== undefined && status != "") {
     conditions.is_approved = status;
   }
@@ -271,6 +271,23 @@ exports.txnLedger = async (req, res) => {
     // Flatten sales and payments into a single table structure
     let tableData = [];
     allSales.forEach((sale, index) => {
+      let approve_status = 'Pending';
+      if(sale.is_approved == 1){
+          approve_status = "Accepted";
+      }else if(sale.is_approved == 2){
+          approve_status = "Declined";
+      }else if(sale.is_approved == 3){
+          approve_status = "On Approval";
+      }else if(sale.is_approved == 4){
+          approve_status = "Transfer To Sale";
+      }
+
+      if(sale.status == "returned"){
+          approve_status = "Returned";
+      }else if(sale.status == "return_pending"){
+          approve_status = "Return Pending";
+      }
+
       // Add Purchase row
       tableData.push({
         id: sale.id,
@@ -278,11 +295,16 @@ exports.txnLedger = async (req, res) => {
         txn_date: sale.invoice_date,
         invoice_number: sale.invoice_number,
         remarks: sale.notes || "-",
+        purpose: "",
         bill_amount: displayAmount(sale.bill_amount),
         txn_amount : parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
-        type: "Sale"
+        type: "Sale",
+        txn_type: "",
+        is_approved: sale.is_approved,
+        approve_status: approve_status,
+        is_advance: 0
       });
 
       // Add related payment rows
@@ -293,11 +315,16 @@ exports.txnLedger = async (req, res) => {
           txn_date: pay.payment_date,
           invoice_number: sale.invoice_number,
           remarks: pay.notes || "-",
+          purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
           txn_amount : parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
-          type: "Payment"
+          type: "Payment",
+          txn_type: pay.type,
+          is_approved: 1,
+          approve_status: "Accepted",
+          is_advance: pay.is_advance,
         });
       });
     });
@@ -313,14 +340,56 @@ exports.txnLedger = async (req, res) => {
       tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
     }
 
+    console.log("tableData: ", tableData);
+
+    let temp_invoice_no = '';
+    let temp_invoice_index = -1;
+    let temp_balance = 0;
+    for(let i = 0; i < tableData.length; i++){
+      let tx = tableData[i];
+
+      if(temp_invoice_no == ""){
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      } else if(temp_invoice_no != "" && temp_invoice_no != tx.invoice_number){
+        tableData[temp_invoice_index].txn_amount = temp_balance;
+        //tableData[temp_invoice_index].payment_amount = displayAmount(temp_balance);
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      }
+
+      if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
+        //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
+        temp_balance -= tx.txn_amount;
+        temp_balance = temp_balance > 0?temp_balance:0;
+      } else if(tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
+        temp_balance = tx.txn_amount;
+      }
+      //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
+    }
+
+    //console.log("after tableData: ", tableData);
+
     // Compute running balance (Due Amount)
     let runningBalance = 0;
+    let tempAdvanceDebitInvoice_idx = -1;
+    let hasAdvanceDebit = false;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Sale') {
+      if(tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index){
+        tempAdvanceDebitInvoice_idx = -1;
+      }
+      if (tx.txn_type == '' && tx.is_approved != 2) {
         runningBalance += tx.txn_amount;
-      } else if (tx.type === 'Payment') {
+      } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
+        runningBalance += tx.txn_amount;
+      } else if (tx.txn_type == "debit" && tx.is_advance) {
+        runningBalance -= tx.txn_amount;
+        tempAdvanceDebitInvoice_idx = index,
+        hasAdvanceDebit = true;
+      } else if(tx.txn_type == "debit"){
         runningBalance -= tx.txn_amount;
       }
+      
       return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
     }).reverse();
 
@@ -346,7 +415,7 @@ exports.downloadTxnLedger = async (req, res) => {
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   let user = await UserModel.findByPk(userID);
-  let conditions = { is_assigned: is_assigned, is_approval: is_approval };
+  let conditions = { is_assigned: is_assigned }; /* , is_approval: is_approval */
   if (status !== undefined && status != "") {
     conditions.is_approved = status;
   }
@@ -397,18 +466,40 @@ exports.downloadTxnLedger = async (req, res) => {
     // Flatten sales and payments into a single table structure
     let tableData = [];
     allSales.forEach((sale, index) => {
-      // Add Sale row
+      let approve_status = 'Pending';
+      if(sale.is_approved == 1){
+          approve_status = "Accepted";
+      }else if(sale.is_approved == 2){
+          approve_status = "Declined";
+      }else if(sale.is_approved == 3){
+          approve_status = "On Approval";
+      }else if(sale.is_approved == 4){
+          approve_status = "Transfer To Sale";
+      }
+
+      if(sale.status == "returned"){
+          approve_status = "Returned";
+      }else if(sale.status == "return_pending"){
+          approve_status = "Return Pending";
+      }
+
+      // Add Purchase row
       tableData.push({
         id: sale.id,
         date: formatDateTime(sale.invoice_date, 8),
         txn_date: sale.invoice_date,
         invoice_number: sale.invoice_number,
         remarks: sale.notes || "-",
+        purpose: "",
         bill_amount: displayAmount(sale.bill_amount),
         txn_amount : parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
-        type: "Sale"
+        type: "Sale",
+        txn_type: "",
+        is_approved: sale.is_approved,
+        approve_status: approve_status,
+        is_advance: 0
       });
 
       // Add related payment rows
@@ -419,11 +510,16 @@ exports.downloadTxnLedger = async (req, res) => {
           txn_date: pay.payment_date,
           invoice_number: sale.invoice_number,
           remarks: pay.notes || "-",
+          purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
           txn_amount : parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
-          type: "Payment"
+          type: "Payment",
+          txn_type: pay.type,
+          is_approved: 1,
+          approve_status: "Accepted",
+          is_advance: pay.is_advance,
         });
       });
     });
@@ -439,14 +535,56 @@ exports.downloadTxnLedger = async (req, res) => {
       tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
     }
 
+    console.log("tableData: ", tableData);
+
+    let temp_invoice_no = '';
+    let temp_invoice_index = -1;
+    let temp_balance = 0;
+    for(let i = 0; i < tableData.length; i++){
+      let tx = tableData[i];
+
+      if(temp_invoice_no == ""){
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      } else if(temp_invoice_no != "" && temp_invoice_no != tx.invoice_number){
+        tableData[temp_invoice_index].txn_amount = temp_balance;
+        //tableData[temp_invoice_index].payment_amount = displayAmount(temp_balance);
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      }
+
+      if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
+        //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
+        temp_balance -= tx.txn_amount;
+        temp_balance = temp_balance > 0?temp_balance:0;
+      } else if(tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
+        temp_balance = tx.txn_amount;
+      }
+      //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
+    }
+
+    //console.log("after tableData: ", tableData);
+
     // Compute running balance (Due Amount)
     let runningBalance = 0;
+    let tempAdvanceDebitInvoice_idx = -1;
+    let hasAdvanceDebit = false;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Sale') {
+      if(tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index){
+        tempAdvanceDebitInvoice_idx = -1;
+      }
+      if (tx.txn_type == '' && tx.is_approved != 2) {
         runningBalance += tx.txn_amount;
-      } else if (tx.type === 'Payment') {
+      } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
+        runningBalance += tx.txn_amount;
+      } else if (tx.txn_type == "debit" && tx.is_advance) {
+        runningBalance -= tx.txn_amount;
+        tempAdvanceDebitInvoice_idx = index,
+        hasAdvanceDebit = true;
+      } else if(tx.txn_type == "debit"){
         runningBalance -= tx.txn_amount;
       }
+      
       return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
     }).reverse();
 
@@ -853,6 +991,9 @@ exports.downloadTxnLedger = async (req, res) => {
                                       <th  style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400; ">Remarks</th>
+                                      <th  style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400; ">Purpose</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400;">Bill Amt</th>
@@ -865,6 +1006,9 @@ exports.downloadTxnLedger = async (req, res) => {
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400;">Type</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400;">Status</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400;">Balance(Due)</th>
@@ -899,6 +1043,14 @@ exports.downloadTxnLedger = async (req, res) => {
                                               .remarks
                                           }
                                       </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .purpose
+                                          }
+                                      </td>
                                       <td  style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
@@ -931,6 +1083,14 @@ exports.downloadTxnLedger = async (req, res) => {
                                           ${
                                             passbook[i]
                                               .type
+                                          }${passbook[i].is_advance?"(Advance)":""}
+                                      </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .approve_status
                                           }
                                       </td>
                                       <td style="text-align:
