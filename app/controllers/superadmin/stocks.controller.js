@@ -286,9 +286,16 @@ exports.index = async (req, res) => {
         let ownUserIds = await avlStockUserIdsNew(req, adminRoleId);
         ownUserIds.push(userID);
         conditions.user_id = { [Op.in]: ownUserIds };
+      } else if (by_specific == 1 && own_se == 1) {
+        let seData = await UserModel.findAll({
+          attributes: ["id"],
+          where: { role_id: seRoleId, parent_id: userID },
+        });
+        let seIds = arrayColumn(seData, "id");
+        conditions.user_id = { [Op.in]: seIds };
       } else if (total_avl_stock == 1) {
         let ownUserIds = await avlStockUserIdsNew(req, superAdminRoleId);
-        ownUserIds.push(userID);
+        //ownUserIds.push(userID);
         conditions.user_id = { [Op.in]: ownUserIds };
       }
     } else if (isDistributor(req)) {
@@ -353,7 +360,7 @@ exports.index = async (req, res) => {
     }*/
 
     let sCond = [];
-    if (!isEmpty(search) && isNaN(search)) {
+    if (!isEmpty(search)/*  && isNaN(search) */) {
       let sArr = search.split(",");
       /* console.log(sArr); */
       for (let i = 0; i < sArr.length; i++) {
@@ -364,10 +371,13 @@ exports.index = async (req, res) => {
           s = s.replace("gm", "").trim();
           sCond.push({ total_weight: { [Op.lte]: `${s}` } });
           //conditions = { ...conditions, [Op.or]: [{ 'total_weight': { [Op.lte]: `${s}` } }] };
-        } else if (isNaN(s)) {
+        }
+        else {/* if((/^\d+$/.test(str) || isNaN(s)) && s.length == 12){
+          sCond.push({ certificate_no: s });
+        }
+        else if (isNaN(s)) { */
           if (type == "product" || type == "return") {
             sCond.push({ "$product.name$": { [Op.like]: `%${s}%` } });
-            sCond.push({ certificate_no: s });
             sCond.push({ "$product.product_code$": { [Op.like]: `%${s}%` } });
             //conditions = { ...conditions, [Op.or]: [{ '$product.name$': { [Op.like]: `%${s}%` } }, { certificate_no: s }, { '$product.product_code$': { [Op.like]: `%${s}%` } }, /*{ '$user.name$': { [Op.like]: `%${search}%` } }, { '$user.company_name$': { [Op.like]: `%${search}%` } }*/] };
           } else {
@@ -375,6 +385,7 @@ exports.index = async (req, res) => {
             sCond.push({ "$spurity.name$": { [Op.like]: `%${s}%` } });
             //conditions = { ...conditions, [Op.or]: [{ '$material.name$': { [Op.like]: `%${s}%` } }] };
           }
+          sCond.push({ certificate_no: s });
         }
       }
       /* console.log(sCond); */
@@ -555,6 +566,7 @@ exports.index = async (req, res) => {
       .then(async (data) => {
         //
         console.log("-------this is actual value ",data.rows.length);
+        //return false;
         let result = {
           items:
             type == "product" || type == "return"
@@ -929,6 +941,14 @@ exports.getStockPriceByCategory = async (req, res) => {
       let ownUserIds = await avlStockUserIdsNew(req, adminRoleId);
       ownUserIds.push(userID);
       userIdArr = ownUserIds;
+      bySpecific = true;
+    } else if (by_specific == 1 && own_se == 1) {
+      let seData = await UserModel.findAll({
+        attributes: ["id"],
+        where: { role_id: getRoleId("sales_executive"), parent_id: userID },
+      });
+      let seIds = arrayColumn(seData, "id");
+      userIdArr = seIds;
       bySpecific = true;
     }
   } else if (isSalesExecutive(req)) {

@@ -1,20 +1,21 @@
 const { isObject, formatDateTime, isEmpty, displayAmount, paymentModeDisplay } = require("@helpers/helper");
+const { getWalletBalance } = require("@library/common");
 const db = require("@models");
 const PaymentModel = db.payments;
 
-const WalletCollection = async(data) => {
+const WalletCollection = async(data, p_mode = null) => {
     if(isObject(data)){
-        return await getModelObject(data);
+        return await getModelObject(data, null, p_mode);
     }else{
         let arr = [];
         for(let i = 0; i < data.length; i++){
-            arr.push(await getModelObject(data[i]));
+            arr.push(await getModelObject(data[i], i, p_mode));
         }
         return arr;
     }
 }
 
-const getModelObject = async(data) => {
+const getModelObject = async(data, index = null, p_mode = null) => {
     let debit_amount = 0;
     let credit_amount = 0;
     if(data.type == 'debit'){
@@ -67,6 +68,12 @@ const getModelObject = async(data) => {
     if(!isEmpty(data.notes)){
         purpose.push(data.notes);
     }
+
+    /* show wallet actual wallet balance if payment mode is 'advance' */
+    let remaining_balance = 0;
+    if(index == 0 && p_mode == "advance"){ 
+        remaining_balance = await getWalletBalance(data.payment_belongs, "Advance");
+    } else remaining_balance = data.remaining_balance || 0;
     
     return {
         id: data.id,
@@ -77,7 +84,7 @@ const getModelObject = async(data) => {
         debit: (debit_amount),
         credit: (credit_amount),
         txn_id: data.txn_id || '',
-        remaining_balance: displayAmount(data.remaining_balance || 0),
+        remaining_balance: displayAmount(remaining_balance),
         payment_date: formatDateTime(data.payment_date, 8),
         payment_to: data.user ? data.user.name : '',
         status: data.status,

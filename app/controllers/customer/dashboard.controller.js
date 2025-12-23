@@ -215,7 +215,7 @@ exports.stock_products_slider = async (req, res) => {
  */
 exports.bestRetailers = async (req, res) => {
     let { state, city } = req.query;
-    let query = "SELECT users.id, users.profile_image, users.name, users.company_name, states.name as `state_name`, districts.name as `district_name`, users.city, users.mobile, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    let query = "SELECT users.id, users.profile_image, users.name, users.company_name, states.name as `state_name`, districts.name as `district_name`, users.city, users.mobile, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.user_id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
     if(state){
         query += ` AND users.state_id='${state}'`;
     }
@@ -256,7 +256,7 @@ exports.bestRetailers = async (req, res) => {
 
 exports.bestRetailerStates = async (req, res) => {
     /* let { state } = req.query; */
-    let query = "SELECT DISTINCT states.id, states.name FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    let query = "SELECT DISTINCT states.id, states.name FROM sales INNER JOIN users ON (users.id = sales.user_id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
     /* if(state){
         query += ` AND states.name LIKE '%${state}%'`;
     } */
@@ -275,7 +275,7 @@ exports.bestRetailerStates = async (req, res) => {
 
 exports.bestRetailerCities = async (req, res) => {
     let { state } = req.query;
-    let query = "SELECT DISTINCT users.city FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    let query = "SELECT DISTINCT users.city FROM sales INNER JOIN users ON (users.id = sales.user_id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
     if(state){
         query += ` AND users.state_id='${state}'`;
     }
@@ -297,7 +297,7 @@ exports.bestRetailerCities = async (req, res) => {
 exports.bestRetailerView = async (req, res) => {
     let { id } = req.query;
 
-    let query = "SELECT users.id, users.profile_image, users.name, users.company_name, states.name as `state_name`, districts.name as `district_name`, users.city, users.landmark, users.mobile, users.email, users.gst, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
+    let query = "SELECT users.id, users.profile_image, users.name, users.company_name, states.name as `state_name`, districts.name as `district_name`, users.city, users.landmark, users.mobile, users.email, users.gst, users.state_id, users.created_at, SUM(sales.bill_amount) AS total_amount FROM sales INNER JOIN users ON (users.id = sales.user_id) LEFT JOIN districts ON (districts.id = users.district_id) LEFT JOIN states ON (states.id = users.state_id) WHERE users.role_id = 5 AND users.partner=1 AND sales.is_approved != 2 AND users.deleted_at IS NULL AND sales.deleted_at IS NULL";
     if(id){
         query += ` AND users.id = '${id}'`;
     }

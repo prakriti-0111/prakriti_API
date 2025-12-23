@@ -19,7 +19,10 @@ const {
   convertUnitToGram,
   arrayColumn,
   removeBlankZero,
-  formatDateTime
+  formatDateTime,
+  encodeForStorage, 
+  decodeFromStorage,
+  cleanInput
 } = require("@helpers/helper");
 const {
   updateOrCreate,
@@ -218,7 +221,7 @@ exports.txnLedger = async (req, res) => {
   is_assigned = is_assigned === undefined ? false : true;
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let conditions = { is_assigned: is_assigned, is_approval: is_approval };
+  let conditions = { is_assigned: is_assigned }; /* , is_approval: is_approval */
   if (status !== undefined && status != "") {
     conditions.is_approved = status;
   }
@@ -268,6 +271,23 @@ exports.txnLedger = async (req, res) => {
     // Flatten sales and payments into a single table structure
     let tableData = [];
     allSales.forEach((sale, index) => {
+      let approve_status = 'Pending';
+      if(sale.is_approved == 1){
+          approve_status = "Accepted";
+      }else if(sale.is_approved == 2){
+          approve_status = "Declined";
+      }else if(sale.is_approved == 3){
+          approve_status = "On Approval";
+      }else if(sale.is_approved == 4){
+          approve_status = "Transfer To Sale";
+      }
+
+      if(sale.status == "returned"){
+          approve_status = "Returned";
+      }else if(sale.status == "return_pending"){
+          approve_status = "Return Pending";
+      }
+
       // Add Purchase row
       tableData.push({
         id: sale.id,
@@ -275,11 +295,16 @@ exports.txnLedger = async (req, res) => {
         txn_date: sale.invoice_date,
         invoice_number: sale.invoice_number,
         remarks: sale.notes || "-",
+        purpose: "",
         bill_amount: displayAmount(sale.bill_amount),
         txn_amount : parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
-        type: "Sale"
+        type: "Sale",
+        txn_type: "",
+        is_approved: sale.is_approved,
+        approve_status: approve_status,
+        is_advance: 0
       });
 
       // Add related payment rows
@@ -290,11 +315,16 @@ exports.txnLedger = async (req, res) => {
           txn_date: pay.payment_date,
           invoice_number: sale.invoice_number,
           remarks: pay.notes || "-",
+          purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
           txn_amount : parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
-          type: "Payment"
+          type: "Payment",
+          txn_type: pay.type,
+          is_approved: 1,
+          approve_status: "Accepted",
+          is_advance: pay.is_advance,
         });
       });
     });
@@ -310,14 +340,56 @@ exports.txnLedger = async (req, res) => {
       tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
     }
 
+    console.log("tableData: ", tableData);
+
+    let temp_invoice_no = '';
+    let temp_invoice_index = -1;
+    let temp_balance = 0;
+    for(let i = 0; i < tableData.length; i++){
+      let tx = tableData[i];
+
+      if(temp_invoice_no == ""){
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      } else if(temp_invoice_no != "" && temp_invoice_no != tx.invoice_number){
+        tableData[temp_invoice_index].txn_amount = temp_balance;
+        //tableData[temp_invoice_index].payment_amount = displayAmount(temp_balance);
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      }
+
+      if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
+        //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
+        temp_balance -= tx.txn_amount;
+        temp_balance = temp_balance > 0?temp_balance:0;
+      } else if(tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
+        temp_balance = tx.txn_amount;
+      }
+      //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
+    }
+
+    //console.log("after tableData: ", tableData);
+
     // Compute running balance (Due Amount)
     let runningBalance = 0;
+    let tempAdvanceDebitInvoice_idx = -1;
+    let hasAdvanceDebit = false;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Sale') {
+      if(tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index){
+        tempAdvanceDebitInvoice_idx = -1;
+      }
+      if (tx.txn_type == '' && tx.is_approved != 2) {
         runningBalance += tx.txn_amount;
-      } else if (tx.type === 'Payment') {
+      } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
+        runningBalance += tx.txn_amount;
+      } else if (tx.txn_type == "debit" && tx.is_advance) {
+        runningBalance -= tx.txn_amount;
+        tempAdvanceDebitInvoice_idx = index,
+        hasAdvanceDebit = true;
+      } else if(tx.txn_type == "debit"){
         runningBalance -= tx.txn_amount;
       }
+      
       return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
     }).reverse();
 
@@ -343,7 +415,7 @@ exports.downloadTxnLedger = async (req, res) => {
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   let user = await UserModel.findByPk(userID);
-  let conditions = { is_assigned: is_assigned, is_approval: is_approval };
+  let conditions = { is_assigned: is_assigned }; /* , is_approval: is_approval */
   if (status !== undefined && status != "") {
     conditions.is_approved = status;
   }
@@ -394,18 +466,40 @@ exports.downloadTxnLedger = async (req, res) => {
     // Flatten sales and payments into a single table structure
     let tableData = [];
     allSales.forEach((sale, index) => {
-      // Add Sale row
+      let approve_status = 'Pending';
+      if(sale.is_approved == 1){
+          approve_status = "Accepted";
+      }else if(sale.is_approved == 2){
+          approve_status = "Declined";
+      }else if(sale.is_approved == 3){
+          approve_status = "On Approval";
+      }else if(sale.is_approved == 4){
+          approve_status = "Transfer To Sale";
+      }
+
+      if(sale.status == "returned"){
+          approve_status = "Returned";
+      }else if(sale.status == "return_pending"){
+          approve_status = "Return Pending";
+      }
+
+      // Add Purchase row
       tableData.push({
         id: sale.id,
         date: formatDateTime(sale.invoice_date, 8),
         txn_date: sale.invoice_date,
         invoice_number: sale.invoice_number,
         remarks: sale.notes || "-",
+        purpose: "",
         bill_amount: displayAmount(sale.bill_amount),
         txn_amount : parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
-        type: "Sale"
+        type: "Sale",
+        txn_type: "",
+        is_approved: sale.is_approved,
+        approve_status: approve_status,
+        is_advance: 0
       });
 
       // Add related payment rows
@@ -416,11 +510,16 @@ exports.downloadTxnLedger = async (req, res) => {
           txn_date: pay.payment_date,
           invoice_number: sale.invoice_number,
           remarks: pay.notes || "-",
+          purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
           txn_amount : parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
-          type: "Payment"
+          type: "Payment",
+          txn_type: pay.type,
+          is_approved: 1,
+          approve_status: "Accepted",
+          is_advance: pay.is_advance,
         });
       });
     });
@@ -436,14 +535,56 @@ exports.downloadTxnLedger = async (req, res) => {
       tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
     }
 
+    console.log("tableData: ", tableData);
+
+    let temp_invoice_no = '';
+    let temp_invoice_index = -1;
+    let temp_balance = 0;
+    for(let i = 0; i < tableData.length; i++){
+      let tx = tableData[i];
+
+      if(temp_invoice_no == ""){
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      } else if(temp_invoice_no != "" && temp_invoice_no != tx.invoice_number){
+        tableData[temp_invoice_index].txn_amount = temp_balance;
+        //tableData[temp_invoice_index].payment_amount = displayAmount(temp_balance);
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      }
+
+      if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
+        //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
+        temp_balance -= tx.txn_amount;
+        temp_balance = temp_balance > 0?temp_balance:0;
+      } else if(tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
+        temp_balance = tx.txn_amount;
+      }
+      //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
+    }
+
+    //console.log("after tableData: ", tableData);
+
     // Compute running balance (Due Amount)
     let runningBalance = 0;
+    let tempAdvanceDebitInvoice_idx = -1;
+    let hasAdvanceDebit = false;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Sale') {
+      if(tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index){
+        tempAdvanceDebitInvoice_idx = -1;
+      }
+      if (tx.txn_type == '' && tx.is_approved != 2) {
         runningBalance += tx.txn_amount;
-      } else if (tx.type === 'Payment') {
+      } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
+        runningBalance += tx.txn_amount;
+      } else if (tx.txn_type == "debit" && tx.is_advance) {
+        runningBalance -= tx.txn_amount;
+        tempAdvanceDebitInvoice_idx = index,
+        hasAdvanceDebit = true;
+      } else if(tx.txn_type == "debit"){
         runningBalance -= tx.txn_amount;
       }
+      
       return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
     }).reverse();
 
@@ -850,6 +991,9 @@ exports.downloadTxnLedger = async (req, res) => {
                                       <th  style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400; ">Remarks</th>
+                                      <th  style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400; ">Purpose</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400;">Bill Amt</th>
@@ -862,6 +1006,9 @@ exports.downloadTxnLedger = async (req, res) => {
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400;">Type</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400;">Status</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400;">Balance(Due)</th>
@@ -896,6 +1043,14 @@ exports.downloadTxnLedger = async (req, res) => {
                                               .remarks
                                           }
                                       </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .purpose
+                                          }
+                                      </td>
                                       <td  style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
@@ -928,6 +1083,14 @@ exports.downloadTxnLedger = async (req, res) => {
                                           ${
                                             passbook[i]
                                               .type
+                                          }${passbook[i].is_advance?"(Advance)":""}
+                                      </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .approve_status
                                           }
                                       </td>
                                       <td style="text-align:
@@ -1007,7 +1170,7 @@ exports.downloadTxnLedger = async (req, res) => {
  */
 exports.store = async (req, res) => {
   let data = req.body;
-  console.log("sale store payload : ", data);
+  console.log("sale store payload : ", data); 
   let reportCharge = await ReportChargeModel.findAll({ 
     order:[['amount', 'ASC']],
     where: {}
@@ -1067,8 +1230,9 @@ exports.store = async (req, res) => {
     }
     //insert into sale table
     let invoice_number = data.invoice_number || null;
-    let req_data = JSON.stringify(data);
-    req_data = new Buffer.from(req_data).toString("base64");
+    /* let req_data = JSON.stringify(data);
+    req_data = new Buffer.from(req_data).toString("base64"); */
+    let req_data = encodeForStorage(data);
     let req_data_for_purchase = data;
     let status = "due",
       paid_amount = 0,
@@ -1093,6 +1257,12 @@ exports.store = async (req, res) => {
     }
     if (data.order_from_customer) {
       is_approved = 1; // customer
+    }
+
+    if(data.already_paid_amount && data.already_paid_amount > 0){
+      paid_amount = priceFormat(
+          paid_amount + parseFloat(data.already_paid_amount)
+        );
     }
 
     if (data.pay_from_advance) {
@@ -1147,7 +1317,8 @@ exports.store = async (req, res) => {
 
     let purchase = null;
     //if(!isSuperAdmin(req)){
-    if (!data.on_approval && !data.order_from_customer) {
+    //if (!data.on_approval && !data.order_from_customer) {
+    if (!data.order_from_customer) {
       let purchaseObj = {
         supplier_id: userID,
         is_assigned: data.is_assigned,
@@ -1173,7 +1344,8 @@ exports.store = async (req, res) => {
           ? moment(data.due_date).format("YYYY-MM-DD")
           : null,
         status: status,
-        is_approved: is_approved,
+        is_approved: data.on_approval ? 3 : is_approved,
+        is_approval: data.on_approval,
         image: image,
       };
       console.log("purchase create : ", purchaseObj);
@@ -1190,7 +1362,7 @@ exports.store = async (req, res) => {
         stock_id: thisItem.stock_id,
         product_id: thisItem.product_id,
         size_id: thisItem.size_id || null,
-        certificate_no: thisItem.certificate_no,
+        certificate_no: cleanInput(thisItem.certificate_no),
         total_weight: weightFormat(thisItem.total_weight),
         sub_price: priceFormat(thisItem.sub_price),
         making_charge: priceFormat(thisItem.making_charge),
@@ -1221,6 +1393,7 @@ exports.store = async (req, res) => {
       console.log("sale product create : ", thisObj);
       let saleProduct = await SaleProductModel.create(thisObj);
       let product = await ProductModel.findByPk(thisItem.product_id);
+      
       let sale_product_id = null;
       if ("sale_product_id" in thisItem && !isEmpty(thisItem.sale_product_id)) {
         sale_product_id = thisItem.sale_product_id;
@@ -1276,7 +1449,7 @@ exports.store = async (req, res) => {
           product_id: thisItem.product_id,
           current_image: current_image,
           size_id: thisItem.size_id || null,
-          certificate_no: thisItem.certificate_no,
+          certificate_no: cleanInput(thisItem.certificate_no),
           total_weight: weightFormat(thisItem.total_weight),
           sub_price: priceFormat(thisItem.sub_price),
           making_charge: priceFormat(thisItem.making_charge),
@@ -1479,10 +1652,11 @@ exports.store = async (req, res) => {
     }
 
     if (purchase) {
-      req_data_for_purchase = JSON.stringify(req_data_for_purchase);
+      /* req_data_for_purchase = JSON.stringify(req_data_for_purchase);
       req_data_for_purchase = new Buffer.from(req_data_for_purchase).toString(
         "base64"
-      );
+      ); */
+      req_data_for_purchase = encodeForStorage(req_data_for_purchase);
       await PurchaseModel.update(
         {
           invoice_number: purchase_invoice_number,
@@ -1491,6 +1665,8 @@ exports.store = async (req, res) => {
         { where: { id: purchase.id } }
       );
     }
+
+    
 
     //insert into payment table
     if (!data.is_assigned && priceFormat(data.paid_amount) > 0) {
@@ -1550,22 +1726,29 @@ exports.store = async (req, res) => {
 
     //if paid from advance amount
     if (parseFloat(data.advance_amount) > 0 && data.pay_from_advance) {
-      let thisAmnt =
+      let theDebitAmount = parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
+          ? parseFloat(data.advance_amount)
+          : parseFloat(data.total_payable);
+
+      let thisCreditAmnt =
         parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
-          ? data.advance_amount
+          ? 0.00
           : priceFormat(
               parseFloat(data.advance_amount) - parseFloat(data.total_payable)
             );
-      let payment = await paymentModel.create({
-        payment_mode: "advance",
-        amount: priceFormat(thisAmnt),
+
+      /* debit advance amount */
+      let paymentD = await paymentModel.create({
+        //payment_mode: "advance",
+        payment_mode: data.payment_mode,
+        amount: priceFormat(theDebitAmount),
         user_id: data.user_id,
-        payment_by: req.userId,
+        payment_by: userID,
         payment_date: moment().format("YYYY-MM-DD"),
         // txn_id: data.transaction_no,
         // cheque_no: data.cheque_no,
         status: "success",
-        type: "advance_adjust",
+        type: "debit", //advance_adjust
         table_type: "sale",
         table_id: sale.id,
         payment_belongs: userID,
@@ -1574,9 +1757,31 @@ exports.store = async (req, res) => {
         is_advance: true,
       });
 
+      await updateWalletRemainingBalance(userID, paymentD.id);
+
+      /* credit advance amount as paid amount */
+      let payment = await paymentModel.create({
+        parent_id: paymentD.id,
+        payment_mode: data.payment_mode,
+        amount: priceFormat(theDebitAmount),
+        user_id: data.user_id,
+        payment_by: userID,
+        payment_date: moment().format("YYYY-MM-DD"),
+        // txn_id: data.transaction_no,
+        // cheque_no: data.cheque_no,
+        status: "success",
+        type: "credit", //advance_adjust
+        table_type: "sale",
+        table_id: sale.id,
+        payment_belongs: userID,
+        purpose: "advance amount changed to paid amount for the sale",
+        can_accept: true,
+        is_advance: false,
+      });
+
       await updateWalletRemainingBalance(userID, payment.id);
 
-      await updateAdvanceAmount(data.user_id, userID, thisAmnt, false);
+      await updateAdvanceAmount(data.user_id, userID, thisCreditAmnt, false);
     }
 
     //complete order
@@ -1661,7 +1866,23 @@ exports.store = async (req, res) => {
           },
           { where: { id: saleApproval.id } }
         );
-        console.log("saleOnApproval update : ", {
+        
+        /* check if purchase on approval record exists */
+        let purchaseOnApproval = await PurchaseModel.findOne({
+          where: { sale_id: saleApproval.id }
+        });
+        /* update status only for purchase on approval if sale on approval change to sale */
+        if(!isEmpty(purchaseOnApproval)){
+          await PurchaseModel.update(
+            {
+              is_approved: 4,
+              accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
+            },
+            { where: { id: purchaseOnApproval.id } }
+          );
+        }
+        
+        console.log("saleOnApproval & purchaseOnApproval updated : ", {
             is_approved: 4,
             accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
           });
@@ -1706,7 +1927,7 @@ exports.store = async (req, res) => {
               product_id: thisItem.product_id,
               size_id: thisItem.size_id || null,
               purity_id: thisItem.saleMaterials[0]?.purity_id || null,
-              certificate_no: thisItem.certificate_no,
+              certificate_no: cleanInput(thisItem.certificate_no),
               current_image: thisItem.current_image,
               quantity: 1,
               total_weight: thisItem.total_weight,
@@ -1804,7 +2025,9 @@ exports.store = async (req, res) => {
     }
 
     //send notification
-    if (purchase) {
+    if (purchase && purchase.is_approval == 1) {
+      sendNotification("purchase_on_approval", req, { sale: sale, purchase: purchase });
+    } else {
       sendNotification("sale", req, { sale: sale, purchase: purchase });
     }
 
@@ -1889,6 +2112,23 @@ exports.statuschange = async (req, res) => {
         },
         { where: { id: sale.id } }
       );
+      /* if sale is declined */
+      if(data.approve_status == 2){
+        /* check if purchase on approval record exists */
+        let purchaseExists = await PurchaseModel.findOne({
+          where: { sale_id: sale.id }
+        });
+        /* update status only for purchase on approval if sale is declined */
+        if(!isEmpty(purchaseExists) && purchaseExists.is_approved == 3 && purchaseExists.is_approval == 1){
+          await PurchaseModel.update(
+            {
+              is_approved: data.approve_status,
+              accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
+            },
+            { where: { id: purchaseExists.id } }
+          );
+        }
+      }
     }
 
     if (data.approve_status == 2) {
@@ -1949,7 +2189,15 @@ exports.statuschange = async (req, res) => {
         });
         if (payment && payment.status == "pending") {
           paidAmnt = priceFormat(paidAmnt - parseFloat(payment.amount));
+        } else {
+          await paymentModel.update(
+            {
+              is_advance: "1"
+            },
+            { where: { table_type: "sale", table_id: sale.id } }
+          );
         }
+        
         await updateAdvanceAmount(sale.user_id, sale.sale_by, paidAmnt, true);
       }
 
@@ -2031,7 +2279,7 @@ exports.statuschange = async (req, res) => {
             product_id: thisItem.product_id,
             size_id: thisItem.size_id || null,
             purity_id: thisItem.saleMaterials[0]?.purity_id || null,
-            certificate_no: thisItem.certificate_no,
+            certificate_no: cleanInput(thisItem.certificate_no),
             current_image: current_image,
             quantity: 1,
             total_weight: thisItem.total_weight,
@@ -2128,7 +2376,7 @@ exports.statuschange = async (req, res) => {
           size_id: item.size_id || null,
           quantity: quantity,
           total_weight: item.total_weight || null,
-          certificate_no: item.certificate_no,
+          certificate_no: cleanInput(item.certificate_no),
           sale_product_id: item.id,
           type: "sale",
         });
@@ -2448,9 +2696,9 @@ exports.returnSale = async (req, res) => {
   try {
     const trans = await sequelize.transaction(async (t) => {
       let sale_products = sale.saleProducts;
-      let req_data = JSON.stringify(data);
-      req_data = new Buffer.from(req_data).toString("base64");
-
+      /* let req_data = JSON.stringify(data);
+      req_data = new Buffer.from(req_data).toString("base64"); */
+      let req_data = encodeForStorage(data);
       let saleReturnObj = await ReturnModel.create(
         {
           user_id: sale.user_id,
@@ -2601,7 +2849,7 @@ exports.returnSale = async (req, res) => {
             {
               product_id: return_data.products[i].product_id,
               size_id: return_data.products[i].size_id || null,
-              certificate_no: return_data.products[i].certificate_no,
+              certificate_no: cleanInput(return_data.products[i].certificate_no),
               quantity: return_data.products[i].certificate_no != ""?1:return_data.products[i].materials[0]?.quantity,
               current_image: current_image,
               total_weight: weight_in_gram,
@@ -2797,6 +3045,35 @@ exports.returnSale = async (req, res) => {
             });
             await updateWalletRemainingBalance(userID, payment2.id);
           } else {
+            // await PaymentModel.update(
+            //   {
+            //     is_advance: "1"
+            //   },
+            //   { where: { table_type: "sale", table_id: sale.id } }
+            // );
+            let payment2 = await PaymentModel.create({
+              user_id: sale.user_id,
+              payment_by: userID,
+              table_type: "sale",
+              table_id: sale.id,
+              amount: data.return_amount_from_wallet,
+              payment_mode: data.return_payment_mode,
+              remaining_balance: 0,
+              status: "success",
+              payment_date: data.return_date
+                ? moment(data.return_date, "MM/DD/YYYY").format("YYYY-MM-DD")
+                : moment().format("YYYY-MM-DD"),
+              payment_belongs: userID,
+              type: "credit",
+              purpose:
+                sale.is_approval == 1
+                  ? "sale on apporval refund"
+                  : "sale refund",
+              can_accept: false,
+              is_advance: true,
+            });
+            await updateWalletRemainingBalance(userID, payment2.id);
+
             await updateAdvanceAmount(
               sale.user_id,
               userID,
@@ -2886,6 +3163,7 @@ const formatStockMaterials = (stockMaterials) => {
 exports.returnSaleNew = async (req, res) => {
   let retailerRoleId = getRoleId("retailer");
 
+  /* get sale details from id */
   let sale = await SaleModel.findOne({
     where: { id: req.params.id },
     include: [
@@ -2901,6 +3179,7 @@ exports.returnSaleNew = async (req, res) => {
       .send(formatErrorResponse("Sale not found"));
   }
   console.log("---------------------- sale ----------------------");
+  /* get purchase details from sale id */
   let purchase = await PurchaseModel.findOne({
     where: { sale_id: sale.id },
     include: [
@@ -2916,11 +3195,14 @@ exports.returnSaleNew = async (req, res) => {
       .send(formatErrorResponse("Purchase not found"));
   }
   console.log("---------------------- purchase ----------------------");
+
+  /* posted data */
   let data = req.body;
   let return_products = req.body.return_products;
   let return_data = req.body.return_data;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
 
+  /* buyer */
   let saleToUserId = sale.user_id;
   let saleToUserRole = await getUserColumnValue(saleToUserId, "role_id");
 
@@ -2933,7 +3215,7 @@ exports.returnSaleNew = async (req, res) => {
       }
 
       stockPurchse = null;
-      if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
+      if (return_data.products[i].product_type == "material") {
         if (!isEmpty(return_data.products[i].product_id)) {
           /* check for purchase record in stock */
           stockPurchse = await StockModel.findOne({
@@ -2988,7 +3270,8 @@ exports.returnSaleNew = async (req, res) => {
           where: {
             product_id: return_data.products[i].product_id,
             user_id: sale.user_id,
-            certificate_no: return_data.products[i].certificate_no,
+            certificate_no: cleanInput(return_data.products[i].certificate_no),
+            purity_id: return_data.products[i].materials[0].purity_id,
             size_id: return_data.products[i].size_id,
           },
           include: [
@@ -3049,16 +3332,20 @@ exports.returnSaleNew = async (req, res) => {
     /* --------------- check if product stock is assigned to the buyerId ---------------- */
   }
 
+  /* check if we returning stocks */
   let is_return_stock = false;
   for (let i = 0; i < return_products.length; i++) {
     if (!return_products[i].is_return) {
       continue;
     }
+    /* if charges apply then it will be return stock flow */
     if (return_data.products[i].return_charge_percent > 0) {
       is_return_stock = true;
       break;
     }
   }
+
+  /* returning from retailer customer if requested by SE or distributor */
   let from_retailer_customer = false,
     show_superadmin = false;
   if (isSalesExecutive(req) || isDistributor(req)) {
@@ -3066,6 +3353,8 @@ exports.returnSaleNew = async (req, res) => {
   } else {
     is_return_stock = false;
   }
+
+  /* return status will be if from_retailer_customer and (charges not applied) then "completed" else "pending" */
   let return_status = "pending";
   if (from_retailer_customer) {
     if (is_return_stock) {
@@ -3076,14 +3365,16 @@ exports.returnSaleNew = async (req, res) => {
   } else {
     return_status = "pending";
   }
-  console.log("---------------------- return_status ----------------------");
+  console.log("---------------------- return_status ----------------------", return_status);
+
   //check has amount in wallet
   let return_amount_from_wallet = data.return_amount_from_wallet;
   if (
     data.payment_type == "return" &&
     (!from_retailer_customer ||
       (from_retailer_customer && return_status == "completed"))
-  ) {
+  ) { 
+    /* not retailer customer or retailer customer and charges not applied */
     let walletBalance = await getWalletBalance(
       userID,
       data.return_payment_mode
@@ -3097,13 +3388,18 @@ exports.returnSaleNew = async (req, res) => {
         .send(formatErrorResponse("Insufficient wallet balance."));
     }
   }
+
   console.log("---------------------- returnSaleNew ----------------------");
   try {
+    /* start transaction */
     const trans = await sequelize.transaction(async (t) => {
-      let sale_products = sale.saleProducts;
-      let req_data = JSON.stringify(data);
-      req_data = new Buffer.from(req_data).toString("base64");
 
+      let sale_products = sale.saleProducts;
+
+      /* convert all return data into Base64 */
+      /* let req_data = JSON.stringify(data);
+      req_data = new Buffer.from(req_data).toString("base64"); */
+      let req_data = encodeForStorage(data);
       let saleReturnObj = await ReturnModel.create(
         {
           user_id: sale.user_id,
@@ -3129,7 +3425,7 @@ exports.returnSaleNew = async (req, res) => {
         },
         { transaction: t }
       );
-      console.log("---------------------- ReturnModel ----------------------");
+      console.log("---------------------- ReturnModel create ----------------------");
       /**
        * Return Products
        */
@@ -3150,13 +3446,14 @@ exports.returnSaleNew = async (req, res) => {
           ],
         });
         console.log(
-          "---------------------- saleProduct ----------------------"
+          "---------------------- saleProduct fetch ----------------------", saleProduct.id
         );
         let purchaseProduct = await PurchaseProductModel.findOne({
           where: {
             purchase_id: purchase.id,
             product_id: saleProduct.product_id,
-            certificate_no: saleProduct.certificate_no
+            certificate_no: cleanInput(saleProduct.certificate_no),
+            size_id: saleProduct.size_id,
           },
           include: [
             {
@@ -3166,15 +3463,18 @@ exports.returnSaleNew = async (req, res) => {
           ],
         });
         console.log(
-          "---------------------- purchaseProduct ----------------------"
+          "---------------------- purchaseProduct fetch ----------------------", purchaseProduct.id
         );
         /**
          * moved to stock
          */
+        console.log("---------------------- preparing stock entry ----------------------");
         let stock_type = "product";
         if (return_data.products[i].return_charge_percent > 0) {
           stock_type = "return";
         }
+        console.log("---------------------- stock_type ----------------------", stock_type);
+
         let quantity = 0,
           weight_in_gram = 0;
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
@@ -3222,7 +3522,7 @@ exports.returnSaleNew = async (req, res) => {
                 quantity: quantity,
                 total_weight: weight_in_gram,
                 user_id: req.userId,
-                type: stock_type,
+                type: stock_type, // "return" as stock type
                 return_id: saleReturnObj.id,
                 purity_id: return_data.products[i].materials[0].purity_id,
               },
@@ -3273,7 +3573,7 @@ exports.returnSaleNew = async (req, res) => {
               product_id: return_data.products[i].product_id,
               size_id: return_data.products[i].size_id || null,
               purity_id: return_data.products[i].materials[0].purity_id,
-              certificate_no: return_data.products[i].certificate_no,
+              certificate_no: cleanInput(return_data.products[i].certificate_no),
               quantity: !isEmpty(return_data.products[i].certificate_no)?1:parseInt(return_data.products[i].materials[0].return_qty),
               current_image: current_image,
               total_weight: weight_in_gram,
@@ -3284,7 +3584,7 @@ exports.returnSaleNew = async (req, res) => {
             { transaction: t }
           );
         }
-        console.log("---------------------- StockModel ----------------------");
+        console.log("---------------------- StockModel create as return ----------------------");
         //insert into return product table
         let returnSaleProduct = await ReturnProductModel.create(
           {
@@ -3296,7 +3596,7 @@ exports.returnSaleNew = async (req, res) => {
           { transaction: t }
         );
         console.log(
-          "---------------------- ReturnProductModel ----------------------"
+          "---------------------- ReturnProductModel create ----------------------"
         );
         //insert into return product materials table
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
@@ -3321,7 +3621,7 @@ exports.returnSaleNew = async (req, res) => {
             { transaction: t }
           );
           console.log(
-            "---------------------- ReturnProductMaterialModel ----------------------"
+            "---------------------- ReturnProductMaterialModel create ----------------------"
           );
           /**
            * add to stock materials
@@ -3390,14 +3690,15 @@ exports.returnSaleNew = async (req, res) => {
           }
         }
         console.log(
-          "---------------------- StockMaterialModel ----------------------"
+          "---------------------- StockMaterialModel create ----------------------"
         );
-        if (
+        /* if (
           !from_retailer_customer ||
           (from_retailer_customer && return_status == "completed")
-        ) {
-          //update sale product is return and return weight & qty into sale product material table
+        ) { */
+          //update sale product is return and return weight & qty into sale product material table 
           if (return_data.products[i].product_type == "material") {
+            console.log("update sale product is return and return weight & qty into sale & purchase product material table");
             let total_return_weight =
               parseFloat(saleProduct.saleMaterials[0].return_weight) +
               parseFloat(return_data.products[i].materials[0].return_weight);
@@ -3439,6 +3740,9 @@ exports.returnSaleNew = async (req, res) => {
                 transaction: t,
               }
             );
+            console.log(
+              "---------------------- Weight updated into Product Material for purchae and sale Model ----------------------"
+            );
           } else {
             await SaleProductModel.update(
               { is_return: true },
@@ -3450,19 +3754,23 @@ exports.returnSaleNew = async (req, res) => {
               { where: { id: purchaseProduct.id }, transaction: t }
             );
           }
-        }
+          console.log(
+            "---------------------- Weight updated into Product for purchae and sale Model ----------------------"
+          );
+        //} 
 
-        console.log(
-          "---------------------- Weight updated into Product & Material for purchae and sale Model ----------------------"
-        );
+        
 
+        //if(from_retailer_customer && return_status == "pending") {
         /**
          * START - Remove from stock table
          */
         //if (purchase.is_approved == 1) {
+        console.log("---------------------- Removing from stock ----------------------");
         stock = null;
         stockPurchse = null;
         if (return_data.products[i].product_type == "material") {
+          console.log("+++++++++++++++ material stock +++++++++++++++");
           if (!isEmpty(return_data.products[i].product_id)) {
             console.log("+++++++++++++++ product stock +++++++++++++++");
             console.log({
@@ -3480,7 +3788,7 @@ exports.returnSaleNew = async (req, res) => {
             console.log("+++++++++++++++ purchase stock +++++++++++++++");
             console.log({
                 product_id: return_data.products[i].product_id,
-                user_id: req.userId,
+                user_id: sale.userId,
               });
             stockPurchse = await StockModel.findOne({
               where: {
@@ -3503,7 +3811,7 @@ exports.returnSaleNew = async (req, res) => {
             });
           }
 
-          if (!stock) {
+          /* if (!stock) {
             // Try to get current_image from multiple sources
             let current_image = null;
             
@@ -3576,7 +3884,7 @@ exports.returnSaleNew = async (req, res) => {
               },
               { transaction: t }
             );
-          }
+          } */
 
           let quantity = 0,
             weight = 0,
@@ -3607,7 +3915,7 @@ exports.returnSaleNew = async (req, res) => {
             console.log(stockMPurchase);
             weight += mItem.return_weight ? parseInt(mItem.return_weight) : 0;
             if (stockM) {
-              await StockMaterialModel.update(
+              /* await StockMaterialModel.update(
                 {
                   weight: weightFormat(
                     parseFloat(stockM.weight) + parseFloat(mItem.return_weight)
@@ -3616,9 +3924,9 @@ exports.returnSaleNew = async (req, res) => {
                     parseFloat(stockM.quantity) + parseInt(mItem.return_qty),
                 },
                 { where: { id: stockM?.id }, transaction: t }
-              );
+              ); */
             } else {
-              await StockMaterialModel.create(
+              /* await StockMaterialModel.create(
                 {
                   stock_id: stock?.id,
                   material_id: mItem.material_id,
@@ -3630,7 +3938,7 @@ exports.returnSaleNew = async (req, res) => {
                   category_id: return_data.products[i].category_id,
                 },
                 { transaction: t }
-              );
+              ); */
             }
             console.log("---------------------- After stockM update ----------------------");
             if (stockMPurchase) {
@@ -3646,23 +3954,22 @@ exports.returnSaleNew = async (req, res) => {
                 },
                 { where: { id: stockMPurchase?.id }, transaction: t }
               );
-              /* weight += mItem.return_weight
-                ? parseInt(mItem.return_weight)
-                : 0; */
+              
             }
             console.log("---------------------- After stockMPurchase update ----------------------");
             unit_name = mItem.unit_name;
             weight = convertUnitToGram(unit_name, weight);
             quantity += parseInt(mItem.return_qty);
           }
-          if (parseFloat(stock.total_weight) <= weight) {
+          
+          if (stock && parseFloat(stock.total_weight) <= weight) {
             //await StockModel.destroy({ where: { id: stock.id }, transaction: t });
           } else {
             let return_weight_in_gram = convertUnitToGram(
               unit_name,
               return_data.products[i].materials[0].return_weight
             );
-            await StockModel.update(
+            /* await StockModel.update(
               {
                 quantity: parseFloat(stock.quantity) + parseFloat(quantity),
                 total_weight:
@@ -3670,7 +3977,7 @@ exports.returnSaleNew = async (req, res) => {
                   parseFloat(return_weight_in_gram),
               },
               { where: { id: stock?.id }, transaction: t }
-            );
+            ); */
           }
           console.log("---------------------- stockPurchse update ----------------------");
           if(stockPurchse){
@@ -3698,11 +4005,12 @@ exports.returnSaleNew = async (req, res) => {
           }
           console.log("---------------------- End of stockPurchse update ----------------------");
         } else {
+          console.log("+++++++++++++++ product stock +++++++++++++++");
           stock = await StockModel.findOne({
             where: {
               product_id: return_data.products[i].product_id,
               user_id: req.userId,
-              certificate_no: return_data.products[i].certificate_no,
+              certificate_no: cleanInput(return_data.products[i].certificate_no),
               size_id: return_data.products[i].size_id,
               purity_id : return_data.products[i].materials[0].purity_id
             },
@@ -3719,7 +4027,7 @@ exports.returnSaleNew = async (req, res) => {
             "---------------------- Stock to check for create ----------------------"
           );
           console.log(stock);
-          if (!stock) {
+          /* if (!stock) {
             // Try to get current_image from multiple sources
             let current_image = null;
             
@@ -3817,13 +4125,13 @@ exports.returnSaleNew = async (req, res) => {
             console.log(
               "---------------------- Created Stock Materials ----------------------"
             );
-          }
+          } */
 
           stockPurchse = await StockModel.findOne({
             where: {
               product_id: return_data.products[i].product_id,
               user_id: sale.user_id,
-              certificate_no: return_data.products[i].certificate_no,
+              certificate_no: cleanInput(return_data.products[i].certificate_no),
               size_id: return_data.products[i].size_id,
             },
             include: [
@@ -3840,6 +4148,7 @@ exports.returnSaleNew = async (req, res) => {
           );
           console.log(stock);
           console.log(stockPurchse);
+
           /* if (stock) {
             let numMatched = 0;
             let stockMaterials = formatStockMaterials(stock.stockMaterials);
@@ -3938,6 +4247,7 @@ exports.returnSaleNew = async (req, res) => {
           }
         }
         //}
+        //}
 
         /**
          * END - Remove from stock table
@@ -3958,27 +4268,6 @@ exports.returnSaleNew = async (req, res) => {
         let paid_amount = parseFloat(sale.paid_amount);
         let due_amount = priceFormat(total_payable - paid_amount, true);
         due_amount = due_amount < 0 ? 0 : due_amount;
-
-        let allReturnSale = await SaleProductModel.count({
-          where: { sale_id: sale.id, is_return: true },
-          transaction: t 
-        });
-        allReturnSale = allReturnSale ?? 0;
-        console.log(allReturnSale);
-        console.log(sale.saleProducts.length);
-        await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
-        let allReturnPurchase = await PurchaseProductModel.count({
-          where: { purchase_id: purchase.id, is_return: true },
-          transaction: t 
-        });
-        allReturnPurchase = allReturnPurchase ?? 0;
-        console.log(allReturnPurchase);
-        console.log(purchase.purchaseProducts.length);
-        await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
-        if (allReturnSale == sale.saleProducts.length && allReturnPurchase == purchase.purchaseProducts.length) {
-          //due_amount = 0;
-          //paid_amount = total_payable;
-        }
         
 
         let return_amount_from_wallet = parseFloat(
@@ -4043,6 +4332,38 @@ exports.returnSaleNew = async (req, res) => {
             console.log(`---------------------- updateWalletRemainingBalance for return purchase ----------------------`);
             await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
           } else {
+            // await PaymentModel.update(
+            //   {
+            //     is_advance: "1"
+            //   },
+            //   { where: { table_type: "sale", table_id: sale.id } }
+            // );
+            
+            let payment = await PaymentModel.create({
+              user_id: sale.user_id,
+              payment_by: userID,
+              table_type: "sale",
+              table_id: sale.id,
+              amount: data.return_amount_from_wallet,
+              payment_mode: data.return_payment_mode,
+              remaining_balance: 0,
+              status: "success",
+              payment_date: data.return_date
+                ? moment(data.return_date, "MM/DD/YYYY").format("YYYY-MM-DD")
+                : moment().format("YYYY-MM-DD"),
+              payment_belongs: userID,
+              type: "credit",
+              purpose:
+                sale.is_approval == 1
+                  ? "sale on apporval refund"
+                  : "sale refund",
+              can_accept: false,
+              is_advance: true,
+            });
+            console.log("---------------------- PaymentModel create for return purchase ----------------------");
+            await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
+            await updateWalletRemainingBalance(sale.user_id, payment.id);
+
             await updateAdvanceAmount(
               sale.user_id,
               userID,
@@ -4121,40 +4442,22 @@ exports.returnSaleNew = async (req, res) => {
           "---------------------- StockModel find for return_id ----------------------"
         );  
         await new Promise((resolve) => setTimeout(resolve, 500));
-        if(stock){
+        /* if(stock){
           await StockMaterialModel.destroy({
             where: { stock_id: stock.id },
             transaction: t,
           });
-        }
+        } */
         console.log(
           "---------------------- StockMaterialModel destroy for return_id ----------------------"
         );
         await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
-        await StockModel.destroy({
+        /* await StockModel.destroy({
           where: { return_id: saleReturnObj.id },
           transaction: t,
-        });
+        }); */
         console.log(
           "---------------------- make return as complete ----------------------"
-        );
-      } else {
-        await SaleModel.update(
-          {
-            status: "return_pending",
-          },
-          { where: { id: req.params.id }, transaction: t }
-        );
-        console.log("---------------------- update status in sale ----------------------");
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        await PurchaseModel.update(
-          {
-            status: "return_pending",
-          },
-          { where: { sale_id: sale.id }, transaction: t }
-        );
-        console.log(
-          "---------------------- update status in purchase ----------------------"
         );
       }
     });
@@ -4172,12 +4475,12 @@ exports.returnSaleNew = async (req, res) => {
     if (allReturnSale == sale.saleProducts.length) {
       await SaleModel.update(
         {
-          status: "returned",
+          status: return_status == "completed"?"returned":"return_pending",
         },
         { where: { id: req.params.id } }
       );
     }
-    console.log("---------------------- SaleModel Update ----------------------");
+    console.log("---------------------- SaleModel Status Update ----------------------");
     let allReturnPurchase = await PurchaseProductModel.count({
       where: { purchase_id: purchase.id, is_return: true },
     });
@@ -4187,12 +4490,12 @@ exports.returnSaleNew = async (req, res) => {
     if (allReturnPurchase == purchase.purchaseProducts.length) {
       await PurchaseModel.update(
         {
-          status: "returned",
+          status: return_status == "completed"?"returned":"return_pending",
         },
         { where: { sale_id: sale.id } }
       );
     }
-    console.log("---------------------- Final Status ----------------------");
+    console.log("---------------------- PurchaseModel Status Update ----------------------");
 
     res.send(formatResponse([], "Returned successfully!"));
   } catch (error) {
@@ -4482,7 +4785,7 @@ exports.returnStockTransfer = async (req, res) => {
         sale_id: sale.id,
         product_id: thisItem.product_id,
         size_id: thisItem.size_id || null,
-        certificate_no: thisItem.certificate_no,
+        certificate_no: cleanInput(thisItem.certificate_no),
         total_weight: weightFormat(thisItem.total_weight),
       };
       let saleProduct = await SaleProductModel.create(thisObj);
@@ -4491,7 +4794,7 @@ exports.returnStockTransfer = async (req, res) => {
         purchase_id: purchase.id,
         product_id: thisItem.product_id,
         size_id: thisItem.size_id || null,
-        certificate_no: thisItem.certificate_no,
+        certificate_no: cleanInput(thisItem.certificate_no),
         total_weight: weightFormat(thisItem.total_weight),
         current_image: thisItem.current_image || null,
       };
@@ -4544,7 +4847,7 @@ exports.returnStockTransfer = async (req, res) => {
         id: purchaseProduct.id,
         product_id: thisItem.product_id,
         size_id: thisItem.size_id,
-        certificate_no: thisItem.certificate_no,
+        certificate_no: cleanInput(thisItem.certificate_no),
         total_weight: thisItem.total_weight,
         current_image: thisItem.current_image || null,
         materials: reqDataM,
@@ -4559,8 +4862,10 @@ exports.returnStockTransfer = async (req, res) => {
     if (isEmpty(invoice_number)) {
       invoice_number = "RV-T-" + sale.id;
       purchase_invoice_number = invoice_number;
-      req_data = JSON.stringify(req_data);
-      req_data = new Buffer.from(req_data).toString("base64");
+      /* req_data = JSON.stringify(req_data);
+      req_data = new Buffer.from(req_data).toString("base64"); */
+      req_data = encodeForStorage(req_data);
+
       await SaleModel.update(
         {
           invoice_number: invoice_number,
@@ -6474,7 +6779,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">SALE TAX INVOICE</h1>
+                                      300;">SALE${saleData.is_approved == "3"?" ON APPROVAL":""} TAX INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -7587,12 +7892,752 @@ exports.downloadInvoiceInfo = async (req, res) => {
 };
 
 /**
- * Download Invoice
+ * Download Invoice Item List
  *
  * @param {*} req
  * @param {*} res
  */
-exports.downloadInvoiceItems = async (req, res) => {
+exports.downloadInvoiceItemList = async (req, res) => {
+  let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
+  let sale = await SaleModel.findOne({
+    where: { id: req.params.id, sale_by: userID },
+    include: [
+      {
+        model: SaleProductModel,
+        as: "saleProducts",
+        separate: true,
+        include: [
+          {
+            model: ProductModel,
+            as: "product",
+            include: [
+              {
+                model: CategoryModel,
+                as: "category",
+              },
+              {
+                model: SubCategoryModel,
+                as: "sub_category",
+              },
+              {
+                model: taxSlabModel,
+                as: "tax",
+              },
+            ],
+          },
+          {
+            model: SizeModel,
+            as: "size",
+          },
+          {
+            model: SaleProductMaterialModel,
+            as: "saleMaterials",
+            separate: true,
+            include: [
+              {
+                model: MaterialModel,
+                as: "material",
+              },
+              {
+                model: PurityModel,
+                as: "purity",
+              },
+              {
+                model: UnitModel,
+                as: "unit",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        model: UserModel,
+        as: "user",
+      },
+      {
+        model: UserModel,
+        as: "saleBy",
+      },
+    ],
+  });
+  if (!sale) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Sale not found"));
+  }
+  let saleData = SaleCollection(sale);
+
+  
+  const cwd = process.cwd();
+  // const logoUrl = `file://${cwd}/public/images/logo.png`;
+  const logoUrl = `public/images/logo.png`;
+  // const logoUrl = process.env.BASE_URL + "public/images/logo.png";
+
+  const bitmap = fs.readFileSync(logoUrl);
+  const logo = bitmap.toString("base64");
+
+  let footerhtml = `
+              <div class="invoice" style="width: 96%; margin: 0px; background-color: #f9f9f9;">
+                  <hr/>
+                  <table cellpadding="0" cellspacing="1"  style="margin:auto; width:100%" >
+                      <tbody>
+                          <tr>
+                              <td><table cellspacing="0" cellpadding="0"
+                                    border="0"
+                                    align="center" width="90%">
+                                    <div style="display: table; width:
+                                        100%; font-size: 11px;">
+                                        <div style="display: table-cell;
+                                            width: 65%;">
+                                            <h5 style="margin: 0px;
+                                                font-size: 11px;
+                                                font-weight:
+                                                600; text-transform:
+                                                uppercase;">NOTE</h5>
+                                            <ul style="margin: 0;
+                                                padding: 0px;
+                                                list-style: none;">
+                                                <span style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400; ">*
+                                                    Goods once sold will
+                                                    be taken back with
+                                                    condition</span>
+
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">Returning
+                                                    minimum product
+                                                    value of Rs 5000/-
+                                                    above</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">Returning
+                                                    product taken back
+                                                    Less than 20-30% of
+                                                    my billing amount</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">If any Damage
+                                                    charge as per making
+                                                    cost only</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">No Charges
+                                                    taken on Sale
+                                                    product returning
+                                                    within 7 days from
+                                                    bill date</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">All disputes
+                                                    are subject to Patna
+                                                    Juridiction only</li>
+                                                <li style="margin: 0;
+                                                    text-align: left;
+                                                    font-size: 11px;
+                                                    font-weight: 400;
+                                                    list-style-type:
+                                                    disc; margin-left:
+                                                    35px;">Charges may
+                                                    be appling cancel of
+                                                    order product making
+                                                    only</li>
+
+                                            </ul>
+                                        </div>
+                                        <div style="display: table-cell;
+                                            width: 35%;">
+                                            
+                                            <div style="margin-top:5px">
+                                                <p style="
+                                                  font-size: 11px; 
+                                                  margin: 0;
+                                                    line-height: 1.2; ">
+                                                    Company Name - ${saleData.user_details.company_name}</p>
+                                                <p style="font-size:
+                                                    11px; margin: 0;
+                                                    line-height: 1.2; ">
+                                                      Ac. No - ${saleData.user_details.bank_account_no}</p>
+                                                <p style="font-size:
+                                                    11px; margin: 0;
+                                                    line-height: 1.2; ">
+                                                    IFSC Code -
+                                                    ${saleData.user_details.bank_ifsc}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </table></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+          `;
+
+  let html = `<!DOCTYPE html>
+  <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta http-equiv="X-UA-Compatible" content="IE=edge">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Bill</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <style>
+          html {
+            -webkit-print-color-adjust: exact;
+          }
+          </style>
+      </head>
+      <body style="box-sizing: border-box; padding: 0px; margin: 0px; font-family:
+          'Poppins', sans-serif;">
+          <div class="invoice" style="width: 96%; margin: 15px;  background-color: #f9f9f9;">
+              <table cellpadding="0" cellspacing="0" width="100%">
+                  <tbody>
+                      <tr>
+                          <td>
+                              <table cellspacing="0" cellpadding="0" border="0"
+                                  align="center" width="100%">
+                                  <h1 style="font-size: 14px; text-align:
+                                      center; margin-bottom: 5px; font-weight:
+                                      300;">SALE${saleData.is_approved == "3"?" ON APPROVAL":""} ITEM LIST INVOICE</h1>
+                              </table>
+                              <table cellspacing="0" cellpadding="0" border="0"
+                                  align="center" width="100%">
+                                  <div style="display: table; width: 100%;">
+                                      <div style="width: 65%; display: table-cell;
+                                          vertical-align: bottom;">
+                                          <img src="data:image/png;base64,${logo}" style="width:
+                                              220px; margin-left: 10px;">
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">Corporate Office -
+                                              P210 Strand Bank Road Brabzar
+                                              Kolkata 700 011</h3>
+  
+                                      </div>
+                                      <div style="width: 35%; display: table-cell;
+                                          vertical-align: middle; text-align:
+                                          left;">
+                                          <h3 style="margin: 0;">
+                                              <span style="font-size: 16px;
+                                                  font-weight: 600;">Prakriti
+                                                  Patna</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 14px;">GST No -
+                                              <span style="font-weight: 600;">10CIUPK2654L1ZY</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">User Id - <span>${saleData.sale_by_name}</span></h3>
+                                          <h3 style="margin: 0; font-weight: 400;
+                                              font-size: 12px;">Address - G100
+                                              RBI CPC Colony Kankarbagh Patna
+                                              Bihar 800 020</h3>
+                                          <h3 style="font-weight: 600; font-size:
+                                              12px; margin: 0;">
+                                              support@Prakriti.com, +91 98744
+                                              45878
+                                          </h3>
+                                      </div>
+                                  </div>
+                              </table>
+                              <table cellspacing="0" cellpadding="0" border="0"
+                                  align="center" width="100%">
+                                  <tbody>
+                                      <tr>
+                                          <hr style="border: 1px solid #1E2757; width:97%">
+                                      </tr>
+                                  </tbody>
+                              </table>
+
+                              <table cellspacing="0" cellpadding="5" border="0"
+                                  align="center" width="100%">
+                                  <thead>
+                                      <!-- <tr style="background-color: #000;">
+                                          <th style="text-align: left; color:
+                                              #fff;">Company: Ratn Alankar
+                                              Jewellers</th>
+                                          <th style="text-align: left; color:
+                                              #fff;">Name: Mukund Singhaindi</th>
+                                          <th style="text-align: left; color:
+                                              #fff;">Cont: 91919191919</th>
+                                          <th style="text-align: left; color:
+                                              #fff;">City: Muzaffarpur</th>
+                                      </tr>-->
+                                  </thead> 
+                                      <tbody>
+                                          <!-- <tr style="background-color: #fff;">
+                                          <td style="">
+                                              <span style="font-weight: 600;"> GST
+                                                  IN ${saleData.user_details.gst} </span>
+                                          </td>
+                                          <td style="">
+                                              Ad:
+                                          </td>
+                                          <td style="">
+  
+                                          </td>
+                                          <td style="">
+                                              Pin Code: 800 020
+                                          </td>
+                                      </tr> -->
+                                          <tr>
+                                              <td style="padding: 0;">
+                                                  <div class="comp-part-one">
+                                                      <ul style="margin: 0;
+                                                          padding: 0; list-style:
+                                                          none; display: flex;
+                                                          gap: 15px;
+                                                          justify-content:
+                                                          space-between;">
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Company -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.company_name}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">GST IN</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.gst}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Cont -
+                                                              </span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_mobile}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Invoice Date
+                                                                  -
+                                                              </span> <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.invoice_date}</span></li>
+                                                                  
+                                                      </ul>
+                                                  </div>
+                                                  <div class="comp-part-two">
+                                                      <ul style="margin: 0;
+                                                          padding: 0; list-style:
+                                                          none; display: flex;
+                                                          gap: 15px;
+                                                          justify-content:
+                                                          space-between;">
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Address -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.address}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">City -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.city}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Pin -
+                                                              </span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.pincode}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Invoice No -
+                                                              </span> <span
+                                                                  style="font-weight:
+                                                                  600; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.invoice_number}</span></li>
+                                                      </ul>
+                                                      <!--ul style="margin: 0;
+                                                          padding: 0;margin-left:52px; list-style:
+                                                          none; display: flex;
+                                                          gap: 15px;
+                                                         ">
+                                                       <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">City -</span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.city}</span></li>
+                                                          <li><span
+                                                                  style="font-weight:
+                                                                  400; font-size:
+                                                                  12px; margin:
+                                                                  0;">Pin -
+                                                              </span>
+                                                              <span
+                                                                  style="font-weight:
+                                                                  500; font-size:
+                                                                  12px; margin:
+                                                                  0;">${saleData.user_details.pincode}</span></li>
+                                                                  </ul-->
+                                                  </div>
+                                              </td>
+                                          </tr>
+                                      </tbody>
+                                  </table>
+                              
+                                  <table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+                                      border="0"
+                                      align="center" width="100%">
+                                      <thead style="">
+                                          <tr style="background-color: #000000;">
+                                              <th style="text-align: left; color:
+                                                  #fff; border: 1px solid #000000;
+                                                  font-size: 12px; font-weight:
+                                                  400; width: 25px;">#</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 100; width:
+                                                  125px;">Product Name</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400; width: 50px;">Certificate No.</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400; width: 90px;">Gross Wt.</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 40px;">Stone Wt.</th>
+                                              <th style="text-align: left; color:
+                                                #fff; font-size: 12px;
+                                                font-weight: 400; width: 130px">Gold Amt.</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 90px;">Stone Amt.</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 90px;">Making</th>
+                                              <th style="text-align: left; color:
+                                                  #fff; font-size: 12px;
+                                                  font-weight: 400;width: 90px;">Total Amt.</th>
+                                          </tr>
+                                      </thead>
+                                      <tbody>`;
+  
+  let totalGrossWeight = 0;
+  let totalStoneWeight = 0;
+  let totalGoldAmt = 0;
+  let totalStoneAmt = 0;
+  let totalMaterialAmt = 0;
+  let totalAmt = 0;
+  for (let i = 0; i < saleData.products.length; i++) {
+    let bgTrColor = i % 2 == 0 ? "#1E2757" : "#1E2757";
+    let grossWeight = parseFloat(saleData.products[i].total_weight);
+    let stoneWeight = 0;
+    let goldAmt = 0;
+    let stoneAmt = 0;
+    let productAmt = 0;
+    for (let x = 0; x < saleData.products[i].materials.length; x++) {
+      //grossWeight += parseFloat(saleData.products[i].total_weight);
+      
+      if(saleData.products[i].materials[x].unit_name.toUpperCase() != "GM"){
+          stoneWeight += parseFloat(saleData.products[i].materials[x].weight);
+          stoneAmt += saleData.products[i].materials[x].material_cost
+              ? parseFloat(saleData.products[i].materials[x].material_cost)
+              : 0;
+      } else {
+        goldAmt += saleData.products[i].materials[x].material_cost
+              ? 
+                  parseFloat(saleData.products[i].materials[x].material_cost)
+              : 
+                  0;
+      }
+    }
+    productAmt = goldAmt + stoneAmt + parseFloat(saleData.products[i].making_charge);
+    totalGrossWeight += grossWeight;
+    totalStoneWeight += stoneWeight;
+    totalGoldAmt += goldAmt;
+    totalStoneAmt += stoneAmt;
+    totalMaterialAmt += parseFloat(saleData.products[i].making_charge);
+    totalAmt += productAmt;
+    html += `<tr style="background-color: ${bgTrColor}; color:#FFFFFF;">
+                                              <td style="text-align: left;
+                                                  font-size: 11px;
+                                                  font-weight: 400; width: 25px; border-bottom: 1px solid #FFFFFF !important;">
+                                                  ${
+                                                    i < 9
+                                                      ? "0" + (i + 1)
+                                                      : i + 1
+                                                  }
+                                              </td>
+                                              <td style="text-align: left;
+                                                  font-size: 11px;
+                                                  font-weight: 400;font-size: 10px; width:125px; border-bottom: 1px solid #FFFFFF !important;">
+                                                  ${
+                                                    saleData.products[i]
+                                                      .product_name
+                                                  }
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
+                                                    ${
+                                                      saleData.products[i]
+                                                        .certificate_no
+                                                    }
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
+                                                    ${weightFormat(grossWeight)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
+                                                    ${weightFormat(stoneWeight)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
+                                                    ${priceFormat(goldAmt)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
+                                                    ${priceFormat(stoneAmt)}
+                                              </td>
+                                              <td style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
+                                                    ${priceFormat(saleData.products[i].making_charge)}
+                                              </td>
+                                              <td colspan="7" style="text-align:
+                                                    left; font-size: 11px;
+                                                    font-weight: 400; border-bottom: 1px solid #FFFFFF !important;">
+                                                    ${priceFormat(productAmt)}
+                                              </td>
+  
+                                          </tr>
+                                          `;
+  }
+  html += `<tr style="
+                                              vertical-align: top;">
+                                              <td colspan="3"
+                                                  style="
+                                                  border:none;">
+
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalGrossWeight
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalStoneWeight
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalGoldAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalStoneAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalMaterialAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalAmt
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              
+                                          </tr>`;
+
+  html += ` <tr style="
+                                                    vertical-align: top;">
+                                                    
+                                                    <td colspan="11"
+                                                          style="
+                                                          border:none; padding: 0;">
+                                                          ${footerhtml}
+                                                      </td>
+                                                      
+  
+                                                  </tr>
+                                              </tbody>
+                                          </table>
+
+                                          
+                                          <!-- Footer -->
+                                          
+                                          
+                                      </td>
+                                  </tr>
+  
+                              </tbody>
+                          </table>
+                      </div>
+                  </body>
+              </html>`;
+
+  try {
+    let file_path = "public/invoices/" + saleData.invoice_number + "_item_list.pdf";
+    const options = { format: "A4" };
+
+    (async () => {
+      const file = { content: html };
+
+      // Generate PDF
+      const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+
+      // Save PDF to file
+      fs.writeFileSync(file_path, pdfBuffer);
+      console.log("PDF generated successfully!");
+
+        res.send(
+          formatResponse(
+            {
+              file_name: saleData.invoice_number + "_item_list.pdf",
+              url: getFileAbsulatePathPDF(file_path),
+              html : html,
+              saleData
+            },
+            "Invoice pdf"
+          )
+        );
+    })();
+  } catch (error) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse(error.toString()));
+  }
+};
+
+/**
+ * Download Invoice Item Details
+ *
+ * @param {*} req
+ * @param {*} res
+ */
+exports.downloadInvoiceItemDetails = async (req, res) => {
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   let sale = await SaleModel.findOne({
     where: { id: req.params.id, sale_by: userID },
@@ -7889,7 +8934,7 @@ exports.downloadInvoiceItems = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">SALE LIST INVOICE</h1>
+                                      300;">SALE${saleData.is_approved == "3"?" ON APPROVAL":""} ITEM DETAILS INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -8154,7 +9199,7 @@ exports.downloadInvoiceItems = async (req, res) => {
                                                   font-size: 11px;
                                                   font-weight: 400; width: 25px;">
                                                   ${
-                                                    i < 10
+                                                    i < 9
                                                       ? "0" + (i + 1)
                                                       : i + 1
                                                   }
@@ -9123,7 +10168,7 @@ exports.downloadInvoiceItems = async (req, res) => {
   /* -------------- commented by Soumalya Nandy ------------ */
 
   try {
-    let file_path = "public/invoices/" + saleData.invoice_number + "_lists.pdf";
+    let file_path = "public/invoices/" + saleData.invoice_number + "_item_details.pdf";
     const options = { format: "A4" };
 
     (async () => {
@@ -9139,7 +10184,7 @@ exports.downloadInvoiceItems = async (req, res) => {
         res.send(
           formatResponse(
             {
-              file_name: saleData.invoice_number + "_lists.pdf",
+              file_name: saleData.invoice_number + "_item_details.pdf",
               url: getFileAbsulatePathPDF(file_path),
               html : html,
               saleData,

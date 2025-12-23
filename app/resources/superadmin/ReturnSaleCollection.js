@@ -1,4 +1,4 @@
-const { isObject, formatDateTime, priceFormat, displayAmount, isEmpty, weightFormat, ucWords } = require("@helpers/helper");
+const { isObject, formatDateTime, priceFormat, displayAmount, isEmpty, weightFormat, ucWords, encodeForStorage, decodeFromStorage } = require("@helpers/helper");
 const db = require("@models");
 const SaleModel = db.sales;
 
@@ -43,8 +43,11 @@ const getModelObject = async(data) => {
     }
     
     let sale = data.sale;
-    req_data = new Buffer.from(data.req_data, "base64").toString('ascii');
-    req_data = JSON.parse(req_data);
+    /* req_data = new Buffer.from(data.req_data, "base64").toString('ascii');
+    req_data = req_data.replace(/[\u0000-\u001F]+/g, ""); // remove invisible and invalid characters
+    
+    req_data = JSON.parse(req_data); */
+    let req_data = decodeFromStorage(req_data);
     let payment_type = req_data.payment_type;
     let return_payment_mode = req_data.return_payment_mode;
     let return_amount_from_wallet = 'return_amount_from_wallet' in req_data ? parseFloat(req_data.return_amount_from_wallet) : 0;

@@ -50,12 +50,15 @@ const getModelObject = async(data) => {
             }
         }
     }
+    console.log("data.orderFrom : ", data.orderFrom);
     let customer_name = data.orderFrom ? data.orderFrom.name : '';
+    let customer_company_name = data.orderFrom ? data.orderFrom.company_name : '';
 
     return {
         id: data.id,
         user_id: data.user_id,
         order_no: data.order_no,
+        is_viewed: data.is_viewed,
         sub_total: !isEmpty(data.sub_total) ? displayAmount(data.sub_total) : '',
         discount_amount: !isEmpty(data.discount_amount) ? displayAmount(data.discount_amount) : '',
         total_amount: !isEmpty(data.total_amount) ? displayAmount(data.total_amount) : '',
@@ -73,6 +76,7 @@ const getModelObject = async(data) => {
         expected_delivery_date: expected_delivery_date,
         status_progress: status_progress,
         customer_name: customer_name,
+        customer_company_name: customer_company_name,
         cancel_reason: data.cancel_reason ?? "",
         paid_amount: priceFormat(data.paid_amount),
         notes: data.notes ?? "",
