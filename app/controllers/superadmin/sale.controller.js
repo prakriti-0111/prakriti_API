@@ -221,7 +221,7 @@ exports.txnLedger = async (req, res) => {
   is_assigned = is_assigned === undefined ? false : true;
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let conditions = { is_assigned: is_assigned, is_approval: is_approval };
+  let conditions = { is_assigned: is_assigned }; /* , is_approval: is_approval */
   if (status !== undefined && status != "") {
     conditions.is_approved = status;
   }
@@ -271,6 +271,23 @@ exports.txnLedger = async (req, res) => {
     // Flatten sales and payments into a single table structure
     let tableData = [];
     allSales.forEach((sale, index) => {
+      let approve_status = 'Pending';
+      if(sale.is_approved == 1){
+          approve_status = "Accepted";
+      }else if(sale.is_approved == 2){
+          approve_status = "Declined";
+      }else if(sale.is_approved == 3){
+          approve_status = "On Approval";
+      }else if(sale.is_approved == 4){
+          approve_status = "Transfer To Sale";
+      }
+
+      if(sale.status == "returned"){
+          approve_status = "Returned";
+      }else if(sale.status == "return_pending"){
+          approve_status = "Return Pending";
+      }
+
       // Add Purchase row
       tableData.push({
         id: sale.id,
@@ -278,11 +295,16 @@ exports.txnLedger = async (req, res) => {
         txn_date: sale.invoice_date,
         invoice_number: sale.invoice_number,
         remarks: sale.notes || "-",
+        purpose: "",
         bill_amount: displayAmount(sale.bill_amount),
         txn_amount : parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
-        type: "Sale"
+        type: "Sale",
+        txn_type: "",
+        is_approved: sale.is_approved,
+        approve_status: approve_status,
+        is_advance: 0
       });
 
       // Add related payment rows
@@ -293,11 +315,16 @@ exports.txnLedger = async (req, res) => {
           txn_date: pay.payment_date,
           invoice_number: sale.invoice_number,
           remarks: pay.notes || "-",
+          purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
           txn_amount : parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
-          type: "Payment"
+          type: "Payment",
+          txn_type: pay.type,
+          is_approved: 1,
+          approve_status: "Accepted",
+          is_advance: pay.is_advance,
         });
       });
     });
@@ -313,14 +340,56 @@ exports.txnLedger = async (req, res) => {
       tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
     }
 
+    console.log("tableData: ", tableData);
+
+    let temp_invoice_no = '';
+    let temp_invoice_index = -1;
+    let temp_balance = 0;
+    for(let i = 0; i < tableData.length; i++){
+      let tx = tableData[i];
+
+      if(temp_invoice_no == ""){
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      } else if(temp_invoice_no != "" && temp_invoice_no != tx.invoice_number){
+        tableData[temp_invoice_index].txn_amount = temp_balance;
+        //tableData[temp_invoice_index].payment_amount = displayAmount(temp_balance);
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      }
+
+      if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
+        //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
+        temp_balance -= tx.txn_amount;
+        temp_balance = temp_balance > 0?temp_balance:0;
+      } else if(tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
+        temp_balance = tx.txn_amount;
+      }
+      //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
+    }
+
+    //console.log("after tableData: ", tableData);
+
     // Compute running balance (Due Amount)
     let runningBalance = 0;
+    let tempAdvanceDebitInvoice_idx = -1;
+    let hasAdvanceDebit = false;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Sale') {
+      if(tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index){
+        tempAdvanceDebitInvoice_idx = -1;
+      }
+      if (tx.txn_type == '' && tx.is_approved != 2) {
         runningBalance += tx.txn_amount;
-      } else if (tx.type === 'Payment') {
+      } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
+        runningBalance += tx.txn_amount;
+      } else if (tx.txn_type == "debit" && tx.is_advance) {
+        runningBalance -= tx.txn_amount;
+        tempAdvanceDebitInvoice_idx = index,
+        hasAdvanceDebit = true;
+      } else if(tx.txn_type == "debit"){
         runningBalance -= tx.txn_amount;
       }
+      
       return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
     }).reverse();
 
@@ -346,7 +415,7 @@ exports.downloadTxnLedger = async (req, res) => {
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   let user = await UserModel.findByPk(userID);
-  let conditions = { is_assigned: is_assigned, is_approval: is_approval };
+  let conditions = { is_assigned: is_assigned }; /* , is_approval: is_approval */
   if (status !== undefined && status != "") {
     conditions.is_approved = status;
   }
@@ -397,18 +466,40 @@ exports.downloadTxnLedger = async (req, res) => {
     // Flatten sales and payments into a single table structure
     let tableData = [];
     allSales.forEach((sale, index) => {
-      // Add Sale row
+      let approve_status = 'Pending';
+      if(sale.is_approved == 1){
+          approve_status = "Accepted";
+      }else if(sale.is_approved == 2){
+          approve_status = "Declined";
+      }else if(sale.is_approved == 3){
+          approve_status = "On Approval";
+      }else if(sale.is_approved == 4){
+          approve_status = "Transfer To Sale";
+      }
+
+      if(sale.status == "returned"){
+          approve_status = "Returned";
+      }else if(sale.status == "return_pending"){
+          approve_status = "Return Pending";
+      }
+
+      // Add Purchase row
       tableData.push({
         id: sale.id,
         date: formatDateTime(sale.invoice_date, 8),
         txn_date: sale.invoice_date,
         invoice_number: sale.invoice_number,
         remarks: sale.notes || "-",
+        purpose: "",
         bill_amount: displayAmount(sale.bill_amount),
         txn_amount : parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
-        type: "Sale"
+        type: "Sale",
+        txn_type: "",
+        is_approved: sale.is_approved,
+        approve_status: approve_status,
+        is_advance: 0
       });
 
       // Add related payment rows
@@ -419,11 +510,16 @@ exports.downloadTxnLedger = async (req, res) => {
           txn_date: pay.payment_date,
           invoice_number: sale.invoice_number,
           remarks: pay.notes || "-",
+          purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
           txn_amount : parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
-          type: "Payment"
+          type: "Payment",
+          txn_type: pay.type,
+          is_approved: 1,
+          approve_status: "Accepted",
+          is_advance: pay.is_advance,
         });
       });
     });
@@ -439,14 +535,56 @@ exports.downloadTxnLedger = async (req, res) => {
       tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
     }
 
+    console.log("tableData: ", tableData);
+
+    let temp_invoice_no = '';
+    let temp_invoice_index = -1;
+    let temp_balance = 0;
+    for(let i = 0; i < tableData.length; i++){
+      let tx = tableData[i];
+
+      if(temp_invoice_no == ""){
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      } else if(temp_invoice_no != "" && temp_invoice_no != tx.invoice_number){
+        tableData[temp_invoice_index].txn_amount = temp_balance;
+        //tableData[temp_invoice_index].payment_amount = displayAmount(temp_balance);
+        temp_invoice_no = tx.invoice_number;
+        temp_invoice_index = i;
+      }
+
+      if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
+        //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
+        temp_balance -= tx.txn_amount;
+        temp_balance = temp_balance > 0?temp_balance:0;
+      } else if(tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
+        temp_balance = tx.txn_amount;
+      }
+      //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
+    }
+
+    //console.log("after tableData: ", tableData);
+
     // Compute running balance (Due Amount)
     let runningBalance = 0;
+    let tempAdvanceDebitInvoice_idx = -1;
+    let hasAdvanceDebit = false;
     const passbook = tableData.reverse().map((tx, index) => {
-      if (tx.type === 'Sale') {
+      if(tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index){
+        tempAdvanceDebitInvoice_idx = -1;
+      }
+      if (tx.txn_type == '' && tx.is_approved != 2) {
         runningBalance += tx.txn_amount;
-      } else if (tx.type === 'Payment') {
+      } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
+        runningBalance += tx.txn_amount;
+      } else if (tx.txn_type == "debit" && tx.is_advance) {
+        runningBalance -= tx.txn_amount;
+        tempAdvanceDebitInvoice_idx = index,
+        hasAdvanceDebit = true;
+      } else if(tx.txn_type == "debit"){
         runningBalance -= tx.txn_amount;
       }
+      
       return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
     }).reverse();
 
@@ -853,6 +991,9 @@ exports.downloadTxnLedger = async (req, res) => {
                                       <th  style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400; ">Remarks</th>
+                                      <th  style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400; ">Purpose</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400;">Bill Amt</th>
@@ -865,6 +1006,9 @@ exports.downloadTxnLedger = async (req, res) => {
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400;">Type</th>
+                                      <th style="text-align: left; color:
+                                          #fff; font-size: 12px;
+                                          font-weight: 400;">Status</th>
                                       <th style="text-align: left; color:
                                           #fff; font-size: 12px;
                                           font-weight: 400;">Balance(Due)</th>
@@ -899,6 +1043,14 @@ exports.downloadTxnLedger = async (req, res) => {
                                               .remarks
                                           }
                                       </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .purpose
+                                          }
+                                      </td>
                                       <td  style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
@@ -931,6 +1083,14 @@ exports.downloadTxnLedger = async (req, res) => {
                                           ${
                                             passbook[i]
                                               .type
+                                          }${passbook[i].is_advance?"(Advance)":""}
+                                      </td>
+                                      <td style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .approve_status
                                           }
                                       </td>
                                       <td style="text-align:
@@ -1583,7 +1743,7 @@ exports.store = async (req, res) => {
         payment_mode: data.payment_mode,
         amount: priceFormat(theDebitAmount),
         user_id: data.user_id,
-        payment_by: req.userId,
+        payment_by: userID,
         payment_date: moment().format("YYYY-MM-DD"),
         // txn_id: data.transaction_no,
         // cheque_no: data.cheque_no,
@@ -1599,13 +1759,13 @@ exports.store = async (req, res) => {
 
       await updateWalletRemainingBalance(userID, paymentD.id);
 
-      /* credit remaining advance amount */
-      /* let payment = await paymentModel.create({
+      /* credit advance amount as paid amount */
+      let payment = await paymentModel.create({
         parent_id: paymentD.id,
-        payment_mode: "advance",
-        amount: priceFormat(thisCreditAmnt),
+        payment_mode: data.payment_mode,
+        amount: priceFormat(theDebitAmount),
         user_id: data.user_id,
-        payment_by: req.userId,
+        payment_by: userID,
         payment_date: moment().format("YYYY-MM-DD"),
         // txn_id: data.transaction_no,
         // cheque_no: data.cheque_no,
@@ -1614,12 +1774,12 @@ exports.store = async (req, res) => {
         table_type: "sale",
         table_id: sale.id,
         payment_belongs: userID,
-        purpose: "sale adjust from advance",
+        purpose: "advance amount changed to paid amount for the sale",
         can_accept: true,
-        is_advance: true,
+        is_advance: false,
       });
 
-      await updateWalletRemainingBalance(userID, payment.id); */
+      await updateWalletRemainingBalance(userID, payment.id);
 
       await updateAdvanceAmount(data.user_id, userID, thisCreditAmnt, false);
     }
@@ -6619,7 +6779,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">SALE TAX INVOICE</h1>
+                                      300;">SALE${saleData.is_approved == "3"?" ON APPROVAL":""} TAX INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -7961,7 +8121,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">SALE ITEM LIST INVOICE</h1>
+                                      300;">SALE${saleData.is_approved == "3"?" ON APPROVAL":""} ITEM LIST INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -8194,10 +8354,10 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                   font-weight: 400; width: 50px;">Certificate No.</th>
                                               <th style="text-align: left; color:
                                                   #fff; font-size: 12px;
-                                                  font-weight: 400; width: 90px;">Gross Weight</th>
+                                                  font-weight: 400; width: 90px;">Gross Wt.</th>
                                               <th style="text-align: left; color:
                                                   #fff; font-size: 12px;
-                                                  font-weight: 400;width: 40px;">Stone Weight</th>
+                                                  font-weight: 400;width: 40px;">Stone Wt.</th>
                                               <th style="text-align: left; color:
                                                 #fff; font-size: 12px;
                                                 font-weight: 400; width: 130px">Gold Amt.</th>
@@ -8213,23 +8373,22 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                           </tr>
                                       </thead>
                                       <tbody>`;
+  
+  let totalGrossWeight = 0;
+  let totalStoneWeight = 0;
   let totalGoldAmt = 0;
   let totalStoneAmt = 0;
   let totalMaterialAmt = 0;
   let totalAmt = 0;
   for (let i = 0; i < saleData.products.length; i++) {
     let bgTrColor = i % 2 == 0 ? "#1E2757" : "#1E2757";
-    let grossWeight = 0;
+    let grossWeight = parseFloat(saleData.products[i].total_weight);
     let stoneWeight = 0;
     let goldAmt = 0;
     let stoneAmt = 0;
     let productAmt = 0;
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
-      grossWeight += saleData.products[i].materials[x].pakka_weight
-              ? 
-                  parseFloat(saleData.products[i].materials[x].pakka_weight)
-              : 
-                  parseFloat(saleData.products[i].materials[x].weight);
+      //grossWeight += parseFloat(saleData.products[i].total_weight);
       
       if(saleData.products[i].materials[x].unit_name.toUpperCase() != "GM"){
           stoneWeight += parseFloat(saleData.products[i].materials[x].weight);
@@ -8245,6 +8404,8 @@ exports.downloadInvoiceItemList = async (req, res) => {
       }
     }
     productAmt = goldAmt + stoneAmt + parseFloat(saleData.products[i].making_charge);
+    totalGrossWeight += grossWeight;
+    totalStoneWeight += stoneWeight;
     totalGoldAmt += goldAmt;
     totalStoneAmt += stoneAmt;
     totalMaterialAmt += parseFloat(saleData.products[i].making_charge);
@@ -8252,7 +8413,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
     html += `<tr style="background-color: ${bgTrColor}; color:#FFFFFF;">
                                               <td style="text-align: left;
                                                   font-size: 11px;
-                                                  font-weight: 400; width: 25px;">
+                                                  font-weight: 400; width: 25px; border-bottom: 1px solid #FFFFFF !important;">
                                                   ${
                                                     i < 9
                                                       ? "0" + (i + 1)
@@ -8261,15 +8422,15 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                               </td>
                                               <td style="text-align: left;
                                                   font-size: 11px;
-                                                  font-weight: 400;font-size: 10px; width:125px;">
+                                                  font-weight: 400;font-size: 10px; width:125px; border-bottom: 1px solid #FFFFFF !important;">
                                                   ${
                                                     saleData.products[i]
                                                       .product_name
-                                                  } - ${saleData.products[i].product_code ? saleData.products[i].product_code : ""}
+                                                  }
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${
                                                       saleData.products[i]
                                                         .certificate_no
@@ -8277,32 +8438,32 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${weightFormat(grossWeight)}
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${weightFormat(stoneWeight)}
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${priceFormat(goldAmt)}
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${priceFormat(stoneAmt)}
                                               </td>
                                               <td style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400; width: 90px;">
+                                                    font-weight: 400; width: 90px; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${priceFormat(saleData.products[i].making_charge)}
                                               </td>
                                               <td colspan="7" style="text-align:
                                                     left; font-size: 11px;
-                                                    font-weight: 400;">
+                                                    font-weight: 400; border-bottom: 1px solid #FFFFFF !important;">
                                                     ${priceFormat(productAmt)}
                                               </td>
   
@@ -8311,10 +8472,40 @@ exports.downloadInvoiceItemList = async (req, res) => {
   }
   html += `<tr style="
                                               vertical-align: top;">
-                                              <td colspan="5"
+                                              <td colspan="3"
                                                   style="
                                                   border:none;">
 
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalGrossWeight
+                                                          )}</div></h4>
+                                                  </div>
+                                              </td>
+                                              <td style="">
+                                                  <div style="padding-top:5px;">
+                                                      <h4 style="margin:
+                                                          0;
+                                                          text-align:
+                                                          left; font-size:
+                                                          12px;
+                                                          font-weight:
+                                                          600; display:
+                                                          ;">
+                                                          <div>${removeCurrencyAndDecimalFromPrice(
+                                                            totalStoneWeight
+                                                          )}</div></h4>
+                                                  </div>
                                               </td>
                                               <td style="">
                                                   <div style="padding-top:5px;">
@@ -8743,7 +8934,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">SALE ITEM DETAILS INVOICE</h1>
+                                      300;">SALE${saleData.is_approved == "3"?" ON APPROVAL":""} ITEM DETAILS INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
