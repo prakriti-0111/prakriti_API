@@ -130,7 +130,7 @@ const getModelObject = (data) => {
                         subCatWiseProductMaterials[mItem.material_id] = {
                             "id" : mItem.material_id,
                             "name" : mItem.material_name,
-                            "weight" : parseFloat(mItem.pakka_weight),
+                            "weight" : parseFloat(mItem.weight), //mItem.pakka_weight
                             "unit" : mItem.unit_name,
                             "rate" : mItem.rate
                         };
@@ -141,6 +141,13 @@ const getModelObject = (data) => {
                 }
             }
             subCatWiseProductMaterials = subCatWiseProductMaterials.filter((itm) => itm != null);
+            subCatWiseProductMaterials = subCatWiseProductMaterials.map((itm) => {
+                return {
+                    ...itm,
+                    weight: parseFloat(itm.weight).toFixed(3),
+                    rate: parseFloat(itm.rate).toFixed(2)
+                };
+            });
 
             /* crate array */
             subCatItems.push({
@@ -150,7 +157,7 @@ const getModelObject = (data) => {
                 "hsn" : subCatHsn, /*subCatWiseProductHSNs,*/
                 "material" : subCatWiseProductMaterials,
                 "tax" : productTax,
-                "taxableAmount" : productTaxableAmount
+                "taxableAmount" : productTaxableAmount.toFixed(2)
             });
         }
     }
