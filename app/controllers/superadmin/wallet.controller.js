@@ -39,9 +39,15 @@ exports.index = async (req, res) => {
   if(!isEmpty(table_id)){
     conditions.table_id = table_id;
   }*/
-  if (!isEmpty(payment_mode)) {
+  if (!isEmpty(payment_mode) && payment_mode !== "advance") {
     conditions.payment_mode = payment_mode;
   }
+
+  if(!isEmpty(payment_mode) && payment_mode == "advance"){
+    conditions.is_advance = "1";
+    //conditions.type = "credit";
+  }
+
   conditions = {
     ...conditions,
     ...getDateFromToWhere(date_from, date_to, "payment_date"),
@@ -61,7 +67,7 @@ exports.index = async (req, res) => {
   })
     .then(async (data) => {
       let result = {
-        items: await WalletCollection(data.rows),
+        items: await WalletCollection(data.rows, payment_mode),
         total: data.count,
         balance_by_mode: {
           cash: displayAmount(await getWalletBalance(superAdminId, "cash")),
