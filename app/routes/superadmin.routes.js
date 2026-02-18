@@ -1021,7 +1021,7 @@ module.exports = (app, express, io) => {
   router.post(
     "/sales/download-invoice-items/:id",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
-    saleController.downloadInvoiceItems,
+    saleController.downloadInvoiceItemList,
   );
   router.post(
     "/sales-on-approve/status/:id",
