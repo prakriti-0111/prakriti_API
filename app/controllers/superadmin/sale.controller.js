@@ -7280,7 +7280,6 @@ exports.downloadInvoiceInfo = async (req, res) => {
                               </thead>
                               <tbody>`;
     let fine_metals = 0;
-    let wtByMaterials = {};  
     for (let i = 0; i < saleData.subCatItems.length; i++) {
       saleData.subCatItems[i].material
         .map((itm) => {
@@ -7289,35 +7288,20 @@ exports.downloadInvoiceInfo = async (req, res) => {
           } 
         });
 
-      saleData.subCatItems[i].material
-        .map((itm) => {
-          if (itm.id != 1) {
-            if(wtByMaterials[itm.id] == undefined){
-              wtByMaterials[itm.id] = {
-                name: itm.name,
-                unit: itm.unit,
-                rate: itm.rate,
-                weight: 0
-              };
-            }
-            wtByMaterials[itm.id].weight += parseFloat(itm.weight);
-          }
-        });
-
       let materialNames = saleData.subCatItems[i].material
         .map((itm) => itm.name)
         .join("<br/ >");
       let materialWts = saleData.subCatItems[i].material
-        .map((itm) => itm.weight)
+        .map((itm) => itm.weight.toFixed(2))
         .join("<br/ >");
       let materialUnits = saleData.subCatItems[i].material
         .map((itm) => itm.unit)
         .join("<br/ >");
       let materialRates = saleData.subCatItems[i].material
-        .map((itm) => itm.rate)
+        .map((itm) => itm.rate.toFixed(2))
         .join("<br/ >");
       let materialCosts = saleData.subCatItems[i].material
-        .map((itm) => itm.material_cost)
+        .map((itm) => itm.material_cost.toFixed(2))
         .join("<br/ >");
       let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
 
@@ -7376,12 +7360,11 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                           font-weight: 400;">
                                           ${saleData.subCatItems[
                                             i
-                                          ].taxableAmount}
+                                          ].taxableAmount.toFixed(2)}
                                       </td>
 
                                     </tr>`;
     }
-    console.log("wtByMaterials : ", wtByMaterials);
     let receive_metal = 0;
     let metalExists = true;
     payments.map((itm) => {
@@ -7472,54 +7455,6 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                       <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${rest_metal.toFixed(2)} GM</td>
                                       <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
-                          }
-
-                          html += `<tr style="
-                                      vertical-align: top;">
-                                      <td colspan="6"
-                                          style="
-                                          border:none;">
-
-                                      </td>
-                                  </tr>`;
-
-                          if(wtByMaterials != undefined){
-                            html += `<tr style="
-                                        vertical-align: top;
-                                        background-color: #0A8AB8;
-                                        font-size: 12px; 
-                                        font-weight:400;
-                                        color:#ffffff;
-                                        ">
-                                        ${
-                                          Object.keys(wtByMaterials).map((key) => {
-                                            let item = wtByMaterials[key];
-                                            return `
-                                                      <td colspan="2" style="background-color: #0A8AB8; font-size: 12px; font-weight:400; color:#ffffff;">${item.name}</td>
-                                                     
-                                                      
-                                                  `;
-                                          })
-                                        }
-                                        <td colspan="${10 - Object.keys(wtByMaterials).length}" ></td>
-                                    </tr>`;
-                                    html += `<tr style="
-                                        vertical-align: top;
-                                        
-                                        ">
-                                        ${
-                                          Object.keys(wtByMaterials).map((key) => {
-                                            let item = wtByMaterials[key];
-                                            return `
-                                                      <td colspan="2" style="background-color: #C1BDBD; font-size: 14px; font-weight:400;">${item.weight.toFixed(2)} ${item.unit}</td>
-                                                     
-                                                      
-                                                  `;
-                                          })
-                                        }
-                                        <td colspan="${10 - Object.keys(wtByMaterials).length}" style="background-color: #C1BDBD; font-size: 14px; font-weight:400;"></td>
-                                    </tr>`;
-                            
                           }
                                           
                             html += ` </tbody>

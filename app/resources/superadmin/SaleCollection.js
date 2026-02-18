@@ -161,13 +161,6 @@ const getModelObject = (data) => {
                 }
             }
             subCatWiseProductMaterials = subCatWiseProductMaterials.filter((itm) => itm != null);
-            subCatWiseProductMaterials = subCatWiseProductMaterials.map((itm) => {
-                return {
-                    ...itm,
-                    weight: parseFloat(itm.weight).toFixed(3),
-                    rate: parseFloat(itm.rate).toFixed(2)
-                };
-            });
 
             /* crate array */
             subCatItems.push({
@@ -177,7 +170,7 @@ const getModelObject = (data) => {
                 "hsn" : subCatHsn, /*subCatWiseProductHSNs,*/
                 "material" : subCatWiseProductMaterials,
                 "tax" : productTax,
-                "taxableAmount" : productTaxableAmount.toFixed(2)
+                "taxableAmount" : productTaxableAmount
             });
         }
     //}
