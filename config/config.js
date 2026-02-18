@@ -1,4 +1,4 @@
-require("dotenv").config();
+require('dotenv').config();
 
 module.exports = {
   development: {
@@ -14,8 +14,8 @@ module.exports = {
       max: 20,
       min: 0,
       acquire: 60000,
-      idle: 10000,
-    },
+      idle: 10000
+    }
   },
   production: {
     username: process.env.DB_USERNAME || "mysql",
@@ -30,7 +30,8 @@ module.exports = {
       max: 20,
       min: 0,
       acquire: 60000,
-      idle: 10000,
-    },
-  },
+      idle: 10000
+    }
+  }
 };
+

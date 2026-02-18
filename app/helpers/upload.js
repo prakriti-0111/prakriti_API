@@ -16,12 +16,12 @@ const base64FileUpload = async (file, filepath) => {
       fileName: file_name,
     });
 
-    // console.log(process.env.UPLOAD_BASE_URL + "public");
+    // console.log(process.env.BASE_URL + "public");
 
     let config = {
       method: "post",
       maxBodyLength: Infinity,
-      url: process.env.UPLOAD_BASE_URL + "public",
+      url: process.env.BASE_URL + "public",
       headers: {
         "Content-Type": "application/json",
       },
@@ -64,12 +64,12 @@ const base64VideoFileUpload = async (file, filepath) => {
       fileName: file_name,
     });
 
-    // console.log(process.env.UPLOAD_BASE_URL + "public");
+    // console.log(process.env.BASE_URL + "public");
 
     let config = {
       method: "post",
       maxBodyLength: Infinity,
-      url: process.env.UPLOAD_BASE_URL + "public",
+      url: process.env.BASE_URL + "public",
       headers: {
         "Content-Type": "application/json",
       },
@@ -111,7 +111,7 @@ const removeFile = (filepath) => {
     let config = {
       method: "post",
       maxBodyLength: Infinity,
-      url: process.env.UPLOAD_BASE_URL + "remove-file",
+      url: process.env.BASE_URL + "remove-file",
       headers: {},
       data: data,
     };
@@ -138,7 +138,7 @@ const filterFilesFromRemove = (files, removeFiles) => {
     for (let i = 0; i < files.length; i++) {
       let isRemove = false;
       for (let x = 0; x < removeFiles.length; x++) {
-        if (files[i].file_name == removeFiles[x].file_name) {
+        if (files[i].file_name == (removeFiles[x].file_name)) {
           isRemove = true;
           break;
         }
@@ -161,7 +161,7 @@ const filterFilesFromRemove = (files, removeFiles) => {
 const uploadPDF = async (
   pathName = "invoices",
   pdfBuffer,
-  fileName = `file-${Date.now()}.pdf`,
+  fileName = `file-${Date.now()}.pdf`
 ) => {
   try {
     const data = {
@@ -174,7 +174,7 @@ const uploadPDF = async (
     const config = {
       method: "post",
       maxBodyLength: Infinity,
-      url: process.env.UPLOAD_BASE_URL + "upload-pdf",
+      url: process.env.BASE_URL + "upload-pdf",
       headers: {
         "Content-Type": "application/json",
       },
