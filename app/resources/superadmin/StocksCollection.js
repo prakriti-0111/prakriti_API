@@ -95,7 +95,11 @@ const getModelObject = async (data, user_id) => {
         mrp: priceMaterials.total_mrp_price,
         mrp_display: displayAmount(priceMaterials.total_mrp_price),
         can_add_cart: can_add_cart,
-        current_image:(data.current_image==null?null:getFileAbsulatePath(data.current_image)),
+        current_image:(data.current_image && data.current_image !== null
+            ? getFileAbsulatePath(data.current_image)
+            : (!isEmpty(data.product) && !isEmpty(data.product.main_image)
+                ? getFileAbsulatePath(data.product.main_image)
+                : null)),
         weight_display: weight_display,
         unit_display: unit_display,
         purity_display: purity_display,
