@@ -64,7 +64,7 @@ const base64VideoFileUpload = async (file, filepath) => {
       fileName: file_name,
     });
 
-    // console.log(process.env.UPLOAD_BASE_URL + "public");
+    // console.log(process.env.BASE_URL + "public");
 
     let config = {
       method: "post",
@@ -87,12 +87,8 @@ const base64VideoFileUpload = async (file, filepath) => {
       console.error(error);
       return false; // Return false in case of an error
     }
-
-    //const base64Data = file.replace(/^data:([A-Za-z-+/]+);base64,/, '');
-    fs.writeFileSync(path, base64Data, { encoding: "base64" });
-    console.log(" uploade the image ", { file_name: file_name, path: path });
-    return { file_name: file_name, path: path };
   } catch (e) {
+    console.error("Error in base64VideoFileUpload:", e.message);
     return false;
   }
 };
