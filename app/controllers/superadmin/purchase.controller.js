@@ -1400,20 +1400,34 @@ console.log("is_certificate_exist : ", is_certificate_exist);
     for (let i = 0; i < data.products.length; i++) {
       let thisItem = data.products[i];
       // console.log("--data.product[0].current_image",data.products[i].current_image)
-      let image_path = await base64FileUpload(
-        data.products[i].current_image,
-        "products"
-      );
+      let image_path = null;
+      let current_image = null;
+      // Prefer frontend-provided image if present; upload if base64
+      if (thisItem.current_image && typeof thisItem.current_image === 'string') {
+        if (thisItem.current_image.startsWith('data:') || thisItem.current_image.startsWith('iVBOR')) {
+          image_path = await base64FileUpload(thisItem.current_image, "products");
+          if (image_path && image_path.path) current_image = `${image_path.path}`;
+        } else {
+          current_image = thisItem.current_image; // already a stored path/URL
+        }
+      }
+      // Fallback to product main image if still empty
+      if (!current_image && thisItem.product_id) {
+        const fallbackProduct = await ProductModel.findByPk(thisItem.product_id);
+        if (fallbackProduct && fallbackProduct.main_image) {
+          current_image = fallbackProduct.main_image;
+        }
+      }
       // console.log(
       //   "image_path________________________________________________________",
       //   image_path
       // );
 
-      let current_image =
-        data.products[i].current_image == null ||
-        data.products[i].current_image === undefined
-          ? null
-          : `${image_path.path}`;
+      // let current_image =
+      //   data.products[i].current_image == null ||
+      //   data.products[i].current_image === undefined
+      //     ? null
+      //     : `${image_path.path}`;
       // console.log(current_image)
       // console.log("----------current image ",current_image )
       let worker_id = thisItem.worker_id || null;
@@ -2068,6 +2082,12 @@ exports.statuschange = async (req, res) => {
               let resData = await StockModel.findAll(query);
               let Current_image = await purchase.purchaseProducts[i]
                 .current_image;
+              if (!Current_image && thisItem.product_id) {
+                const fallbackProduct = await ProductModel.findByPk(thisItem.product_id);
+                if (fallbackProduct && fallbackProduct.main_image) {
+                  Current_image = fallbackProduct.main_image;
+                }
+              }
               stock = await StockModel.create(
                 {
                   purchase_id: purchase.id,
@@ -2404,15 +2424,30 @@ exports.statuschange = async (req, res) => {
                   stock = result.item;
                 } else {
                   // console.log("----else Stock 888",req_data.products[0].current_image)
-                  let current_image_path = await base64FileUpload(
-                    req_data.products[i].current_image,
-                    "products"
-                  );
+                  let resolved_image_path = null;
+                  let stock_current_image = null;
+                  const incomingImage = req_data.products[i] ? req_data.products[i].current_image : null;
+                  if (incomingImage && typeof incomingImage === 'string') {
+                    if (incomingImage.startsWith('data:') || incomingImage.startsWith('iVBOR')) {
+                      resolved_image_path = await base64FileUpload(incomingImage, "products");
+                      if (resolved_image_path && resolved_image_path.path) {
+                        stock_current_image = resolved_image_path.path;
+                      }
+                    } else {
+                      stock_current_image = incomingImage; // assume stored path/URL
+                    }
+                  }
+                  if (!stock_current_image && thisItem.product_id) {
+                    const fallbackProduct = await ProductModel.findByPk(thisItem.product_id);
+                    if (fallbackProduct && fallbackProduct.main_image) {
+                      stock_current_image = fallbackProduct.main_image;
+                    }
+                  }
 
                   stock = await StockModel.create(
                     {
                       purchase_id: purchase.id,
-                      current_image: current_image_path.path,
+                      current_image: stock_current_image,
                       purchase_product_id: thisItem.id,
                       product_id: thisItem.product_id,
                       size_id: thisItem.size_id || null,
@@ -3032,10 +3067,28 @@ exports.update = async (req, res) => {
           let worker_id = thisItem.worker_id || null;
           // console.log("----------------thisis purchases productv ",thisItem);
 
+          // Resolve current_image from frontend/base64 or fallback to product.main_image
+          let tx_current_image = null;
+          if (thisItem.current_image && typeof thisItem.current_image === 'string') {
+            if (thisItem.current_image.startsWith('data:') || thisItem.current_image.startsWith('iVBOR')) {
+              const uploaded = await base64FileUpload(thisItem.current_image, "products");
+              if (uploaded && uploaded.path) tx_current_image = uploaded.path;
+            } else {
+              tx_current_image = thisItem.current_image;
+            }
+          }
+          if (!tx_current_image && thisItem.product_id) {
+            const fallbackProduct2 = await ProductModel.findByPk(thisItem.product_id);
+            if (fallbackProduct2 && fallbackProduct2.main_image) {
+              tx_current_image = fallbackProduct2.main_image;
+            }
+          }
+
           let thisObj = {
             purchase_id: purchase.id,
             product_id: thisItem.product_id,
             worker_id: worker_id,
+            current_image: tx_current_image,
 
             size_id: thisItem.size_id || null,
             certificate_no: cleanInput(thisItem.certificate_no),
@@ -4711,8 +4764,10 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                           </tr>
                                       </thead>
                                       <tbody>`;
-    let fine_metals = 0;                      
+    let fine_metals = 0;        
+    let wtByMaterials = {};              
     for (let i = 0; i < purchaseData.subCatItems.length; i++) {
+
       purchaseData.subCatItems[i].material
         .map((itm) => {
           if(itm.id == 1){
@@ -4720,17 +4775,32 @@ exports.downloadInvoiceInfo = async (req, res) => {
           } 
         });
 
+      purchaseData.subCatItems[i].material
+        .map((itm) => {
+          if (itm.id != 1) {
+            if(wtByMaterials[itm.id] == undefined){
+              wtByMaterials[itm.id] = {
+                name: itm.name,
+                unit: itm.unit,
+                rate: itm.rate,
+                weight: 0
+              };
+            }
+            wtByMaterials[itm.id].weight += parseFloat(itm.weight);
+          }
+        });
+
       let materialNames = purchaseData.subCatItems[i].material
         .map((itm) => itm.name)
         .join("<br/ >");
       let materialWts = purchaseData.subCatItems[i].material
-        .map((itm) => itm.weight.toFixed(2))
+        .map((itm) => itm.weight)
         .join("<br/ >");
       let materialUnits = purchaseData.subCatItems[i].material
         .map((itm) => itm.unit)
         .join("<br/ >");
       let materialRates = purchaseData.subCatItems[i].material
-        .map((itm) => itm.rate.toFixed(2))
+        .map((itm) => itm.rate)
         .join("<br/ >");
       let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
 
@@ -4800,11 +4870,12 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                   font-weight: 400;">
                                                   ${purchaseData.subCatItems[
                                                     i
-                                                  ].taxableAmount.toFixed(2)}
+                                                  ].taxableAmount}
                                               </td>
   
                                           </tr>`;
     }
+    console.log("wtByMaterials : ", wtByMaterials);
     let receive_metal = 0;
     let metalExists = true;
     payments.map((itm) => {
@@ -4899,6 +4970,45 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                       <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${rest_metal.toFixed(2)} GM</td>
                                       <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
+                          }
+
+                          if(wtByMaterials != undefined){
+                            html += `<tr style="
+                                        vertical-align: top;
+                                        background-color: #0A8AB8;
+                                        font-size: 12px; 
+                                        font-weight:400;
+                                        color:#ffffff;
+                                        ">
+                                        ${
+                                          Object.keys(wtByMaterials).map((key) => {
+                                            let item = wtByMaterials[key];
+                                            return `
+                                                      <td colspan="2" style="background-color: #0A8AB8; font-size: 12px; font-weight:400; color:#ffffff;">${item.name}</td>
+                                                     
+                                                      
+                                                  `;
+                                          })
+                                        }
+                                        <td colspan="${10 - Object.keys(wtByMaterials).length}" ></td>
+                                    </tr>`;
+                                    html += `<tr style="
+                                        vertical-align: top;
+                                        
+                                        ">
+                                        ${
+                                          Object.keys(wtByMaterials).map((key) => {
+                                            let item = wtByMaterials[key];
+                                            return `
+                                                      <td colspan="2" style="background-color: #C1BDBD; font-size: 14px; font-weight:400;">${item.weight.toFixed(2)} ${item.unit}</td>
+                                                     
+                                                      
+                                                  `;
+                                          })
+                                        }
+                                        <td colspan="${10 - Object.keys(wtByMaterials).length}" style="background-color: #C1BDBD; font-size: 14px; font-weight:400;"></td>
+                                    </tr>`;
+                            
                           }
  
                                                   
