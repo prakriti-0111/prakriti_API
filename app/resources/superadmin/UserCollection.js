@@ -1,15 +1,23 @@
 const { isObject,getFileAbsulatePath, isEmpty, defaultProfileImage } = require("@helpers/helper");
 
 const UserCollection = (data) => {
+    if(isEmpty(data)){
+        return null;
+    }
+
     if(isObject(data)){
         return getModelObject(data);
-    }else{
+    }else if(Array.isArray(data)){
         let arr = [];
         for(let i = 0; i < data.length; i++){
-            arr.push(getModelObject(data[i]));
+            if(!isEmpty(data[i])){
+                arr.push(getModelObject(data[i]));
+            }
         }
         return arr;
     }
+
+    return null;
 }
 
 const getModelObject = (data) => {
