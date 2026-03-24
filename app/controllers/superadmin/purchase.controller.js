@@ -1172,6 +1172,16 @@ exports.pre_store = async (req, res) => {
     //return false;
     let req_data = data; //JSON.stringify(data);
     //req_data = new Buffer.from(req_data).toString("base64");
+    
+    let image_path = await base64FileUpload(
+      data.current_image,
+      "products",
+    );
+
+    data.current_image = image_path.path;
+
+    console.log("pre purchase store payload after image upload : ", data.current_image);
+    
     req_data = encodeForStorage(req_data);  
     let prePurchaseObj = {
       user_id: userID,
