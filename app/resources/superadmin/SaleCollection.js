@@ -137,7 +137,7 @@ const getModelObject = (data) => {
                 const pItem = subCatWiseProduct[i].product;
                 
                 //const pItem = subCatWiseProduct.product;
-                productTax = parseFloat(pItem.taxDetails.igst);
+                productTax = pItem.taxDetails ? parseFloat(pItem.taxDetails.igst) : 0.00;
                 productTaxableAmount += parseFloat(pItem.sub_total.replace(/[^\d]/,''));
                 
                 for (let j = 0; j < pItem.materials.length; j++) {

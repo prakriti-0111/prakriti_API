@@ -90,7 +90,7 @@ const getModelObject = (data) => {
             let productSelected = products[i];
             console.log("productSelected : ", productSelected); 
             /* categorise product details by sub categories */
-            if(productSelected.product_name != ''){
+            if(productSelected.product_name != '' && productSelected.sub_category_id != '' && productSelected.sub_category_id != null){
                 //productSelected = productSelected[0];
                 if(productSelected.sub_category_id && typeof subCatWiseProducts[productSelected.sub_category_id] === "undefined"){
                     subCatWiseProducts[productSelected.sub_category_id] = [];
@@ -122,7 +122,7 @@ const getModelObject = (data) => {
             let subCatWiseProductMaterials = [];
             for (let i = 0; i < subCatWiseProduct.length; i++) {
                 const pItem = subCatWiseProduct[i].product;
-                productTax = parseFloat(pItem.taxDetails.igst);
+                productTax = pItem.taxDetails ? parseFloat(pItem.taxDetails.igst) : 0.00;
                 productTaxableAmount += parseFloat(pItem.sub_total.replace(/[^\d]/,''));
                 for (let j = 0; j < pItem.materials.length; j++) {
                     const mItem = pItem.materials[j];

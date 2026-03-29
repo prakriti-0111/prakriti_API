@@ -1177,6 +1177,8 @@ exports.pre_store = async (req, res) => {
 
     data.current_image = image_path.path;
 
+    console.log("pre purchase store payload after image upload : ", data.current_image);
+
     let req_data = data; //JSON.stringify(data);
     //req_data = new Buffer.from(req_data).toString("base64");
     req_data = encodeForStorage(req_data);  
