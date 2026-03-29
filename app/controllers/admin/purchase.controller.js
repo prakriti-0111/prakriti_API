@@ -31,7 +31,6 @@ const paymentModel = db.payments;
 const ReturnModel = db.returns;
 const ReturnProductModel = db.return_products;
 const ReturnProductMaterialModel = db.return_product_materials;
-const SaleModel = db.sales;
 
 /**
  * Retrieve all purchase
@@ -518,44 +517,6 @@ exports.statuschange = async (req, res) => {
         is_approved: data.approve_status
       };
       await PurchaseModel.update(purchaseObj,{where: {id: purchase.id}, transaction: t});
-
-      /**
-       * Sync linked sale approval status
-       */
-      let linkedSale = null;
-      if (!isEmpty(purchase.sale_id)) {
-        linkedSale = await SaleModel.findByPk(purchase.sale_id, { transaction: t });
-      }
-      if (!linkedSale && !isEmpty(purchase.invoice_number)) {
-        linkedSale = await SaleModel.findOne({
-          where: {
-            invoice_number: purchase.invoice_number,
-            user_id: purchase.user_id,
-            sale_by: purchase.supplier_id,
-          },
-          order: [["id", "DESC"]],
-          transaction: t,
-        });
-      }
-      if (!linkedSale && !isEmpty(purchase.invoice_number)) {
-        linkedSale = await SaleModel.findOne({
-          where: { invoice_number: purchase.invoice_number },
-          order: [["id", "DESC"]],
-          transaction: t,
-        });
-      }
-      if (linkedSale) {
-        await SaleModel.update(
-          {
-            is_approved: data.approve_status,
-            accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
-          },
-          {
-            where: { id: linkedSale.id },
-            transaction: t,
-          }
-        );
-      }
 
       /**
        * START - add to super admin stock
