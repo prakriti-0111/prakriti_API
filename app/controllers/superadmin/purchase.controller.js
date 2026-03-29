@@ -18,9 +18,9 @@ const {
   convertUnitToGram,
   removeBlankZero,
   displayAmount,
-  encodeForStorage,
+  encodeForStorage, 
   decodeFromStorage,
-  cleanInput,
+  cleanInput
 } = require("@helpers/helper");
 const {
   updateOrCreate,
@@ -118,16 +118,16 @@ exports.index = async (req, res) => {
   let addedBy = userID;
   let isAddedByUser = false;
   /* check for manager/worker and other roles */
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 11].includes(req.role)) {
+  if(![1, 2, 3, 4, 5, 6, 7, 8, 11].includes(req.role)){
     addedBy = req.userId;
     isAddedByUser = true;
     /* check parent and assign as user id */
     let user = await UserModel.findByPk(addedBy);
-    if (user) {
+    if(user){
       userID = user.parent_id;
     }
   }
-  console.log("userID : ", userID);
+  console.log("userID : ",userID);
   let conditions = { type: { [Op.ne]: "order_purchase" } };
   if (all_purchase == 1) {
     conditions = {
@@ -137,7 +137,7 @@ exports.index = async (req, res) => {
       sale_id: { [Op.is]: null },
     };
   } else {
-    if (isAddedByUser) {
+    if(isAddedByUser){
       conditions = {
         //user_id: userID,
         added_by: addedBy,
@@ -182,7 +182,7 @@ exports.index = async (req, res) => {
     distinct: true,
   })
     .then(async (data) => {
-      console.log("data.count : ", data.count);
+      console.log("data.count : ",data.count);
       let result = {
         items: await PurchaseListCollection(data.rows, load_payments),
         total: data.count,
@@ -198,34 +198,18 @@ exports.index = async (req, res) => {
  * Retrive purchase txn ledger
  */
 exports.txnLedger = async (req, res) => {
-  let {
-    page,
-    limit,
-    supplier_id,
-    search,
-    is_assigned,
-    is_approval,
-    status,
-    date_from,
-    date_to,
-  } = req.query;
+  let { page, limit, supplier_id, search, is_assigned, is_approval, status, date_from, date_to } = req.query;
   is_assigned = is_assigned === undefined ? false : true;
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let conditions = {
-    user_id: userID,
-    is_assigned: is_assigned,
-  }; /* , is_approval: is_approval */
+  let conditions = { user_id: userID, is_assigned: is_assigned }; /* , is_approval: is_approval */
   if (status !== undefined && status != "") {
     conditions.is_approved = status;
   }
   if (!isEmpty(supplier_id)) {
     conditions.supplier_id = supplier_id;
   }
-  if (
-    !isEmpty(search) &&
-    !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")
-  ) {
+  if (!isEmpty(search) && !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")) {
     conditions[Op.or] = [
       { invoice_number: { [Op.like]: `%${search}%` } },
       { notes: { [Op.like]: `%${search}%` } },
@@ -243,51 +227,46 @@ exports.txnLedger = async (req, res) => {
     // Fetch all purchases with their related payments
     const allPurchases = await PurchaseModel.findAll({
       include: [
-        {
+      {
           model: PaymentModel,
           as: "payments",
           required: false,
-          where:
-            !isEmpty(search) &&
-            !(
-              search.toLowerCase() == "purchase" ||
-              search.toLowerCase() == "payment"
-            )
-              ? {
-                  [Op.or]: [
-                    /* { invoice_number: { [Op.like]: `%${search}%` } }, */
-                    { amount: { [Op.like]: `%${search}%` } },
-                    { payment_mode: { [Op.like]: `%${search}%` } },
-                    { notes: { [Op.like]: `%${search}%` } },
-                  ],
-                }
-              : undefined,
+          where: !isEmpty(search) && !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")
+            ? {
+                [Op.or]: [
+                  /* { invoice_number: { [Op.like]: `%${search}%` } }, */
+                  { amount: { [Op.like]: `%${search}%` } },
+                  { payment_mode: { [Op.like]: `%${search}%` } },
+                  { notes: { [Op.like]: `%${search}%` } },
+                ],
+              }
+            : undefined,
         },
       ],
       where: conditions,
       order: [["invoice_date", "DESC"]],
       offset: paginatorOptions.offset,
-      limit: paginatorOptions.limit,
+      limit: paginatorOptions.limit
     });
 
     // Flatten purchases and payments into a single table structure
     let tableData = [];
     allPurchases.forEach((purchase, index) => {
-      let approve_status = "Pending";
-      if (purchase.is_approved == 1) {
-        approve_status = "Accepted";
-      } else if (purchase.is_approved == 2) {
-        approve_status = "Declined";
-      } else if (purchase.is_approved == 3) {
-        approve_status = "On Approval";
-      } else if (purchase.is_approved == 4) {
-        approve_status = "Transfer To Purchase";
+      let approve_status = 'Pending';
+      if(purchase.is_approved == 1){
+          approve_status = "Accepted";
+      }else if(purchase.is_approved == 2){
+          approve_status = "Declined";
+      }else if(purchase.is_approved == 3){
+          approve_status = "On Approval";
+      }else if(purchase.is_approved == 4){
+          approve_status = "Transfer To Purchase";
       }
 
-      if (purchase.status == "returned") {
-        approve_status = "Returned";
-      } else if (purchase.status == "return_pending") {
-        approve_status = "Return Pending";
+      if(purchase.status == "returned"){
+          approve_status = "Returned";
+      }else if(purchase.status == "return_pending"){
+          approve_status = "Return Pending";
       }
 
       // Add Purchase row
@@ -299,14 +278,14 @@ exports.txnLedger = async (req, res) => {
         remarks: purchase.notes || "-",
         purpose: "",
         bill_amount: displayAmount(purchase.bill_amount),
-        txn_amount: parseFloat(purchase.bill_amount),
+        txn_amount : parseFloat(purchase.bill_amount),
         payment_amount: null,
         payment_mode: purchase.payment_mode || "-",
         type: "Purchase",
         txn_type: "",
         is_approved: purchase.is_approved,
         approve_status: approve_status,
-        is_advance: 0,
+        is_advance: 0
       });
 
       // Add related payment rows
@@ -320,7 +299,7 @@ exports.txnLedger = async (req, res) => {
           purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
-          txn_amount: parseFloat(pay.amount),
+          txn_amount : parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
           type: "Payment",
           txn_type: pay.type,
@@ -334,51 +313,37 @@ exports.txnLedger = async (req, res) => {
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      console.log(
-        "----------a.invoice_number,b.invoice_number----------",
-        a.invoice_number.split("").pop(),
-        b.invoice_number.split("").pop(),
-      );
-      return (
-        b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop()
-      );
+      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
     });
 
-    if (
-      !isEmpty(search) &&
-      (search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")
-    ) {
-      tableData = tableData.filter(
-        (table) => table.type.toLowerCase() == search.toLowerCase(),
-      );
+    if(!isEmpty(search) && (search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")){
+      tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
     }
 
     console.log("tableData: ", tableData);
 
-    let temp_invoice_no = "";
+    let temp_invoice_no = '';
     let temp_invoice_index = -1;
     let temp_balance = 0;
-    for (let i = 0; i < tableData.length; i++) {
+    for(let i = 0; i < tableData.length; i++){
       let tx = tableData[i];
 
-      if (temp_invoice_no == "") {
+      if(temp_invoice_no == ""){
         temp_invoice_no = tx.invoice_number;
         temp_invoice_index = i;
-      } else if (
-        temp_invoice_no != "" &&
-        temp_invoice_no != tx.invoice_number
-      ) {
+      } else if(temp_invoice_no != "" && temp_invoice_no != tx.invoice_number){
         tableData[temp_invoice_index].txn_amount = temp_balance;
         //tableData[temp_invoice_index].payment_amount = displayAmount(temp_balance);
         temp_invoice_no = tx.invoice_number;
         temp_invoice_index = i;
       }
 
-      if (tx.type.toLowerCase() == "payment" && tx.txn_type == "credit") {
+      if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
         //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
         temp_balance -= tx.txn_amount;
-        temp_balance = temp_balance > 0 ? temp_balance : 0;
-      } else if (tx.type.toLowerCase() == "purchase" && tx.is_approved != 2) {
+        temp_balance = temp_balance > 0?temp_balance:0;
+      } else if(tx.type.toLowerCase() == "purchase" && tx.is_approved != 2) {
         temp_balance = tx.txn_amount;
       }
       //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
@@ -390,45 +355,31 @@ exports.txnLedger = async (req, res) => {
     let runningBalance = 0;
     let tempAdvanceDebitInvoice_idx = -1;
     let hasAdvanceDebit = false;
-    const passbook = tableData
-      .reverse()
-      .map((tx, index) => {
-        /* if (tx.type === 'Purchase') {
+    const passbook = tableData.reverse().map((tx, index) => {
+      /* if (tx.type === 'Purchase') {
         runningBalance += tx.txn_amount;
       } else if (tx.type === 'Payment') {
         runningBalance -= tx.txn_amount;
       } */
-        if (
-          tempAdvanceDebitInvoice_idx > -1 &&
-          tempAdvanceDebitInvoice_idx + 1 != index
-        ) {
-          tempAdvanceDebitInvoice_idx = -1;
-        }
-        if (tx.txn_type == "" && tx.is_approved != 2) {
-          runningBalance += tx.txn_amount;
-        } else if (
-          tx.txn_type == "credit" &&
-          (tempAdvanceDebitInvoice_idx == -1 ||
-            (tempAdvanceDebitInvoice_idx > -1 &&
-              tempAdvanceDebitInvoice_idx + 1 != index))
-        ) {
-          runningBalance += tx.txn_amount;
-        } else if (tx.txn_type == "debit" && tx.is_advance) {
-          runningBalance -= tx.txn_amount;
-          ((tempAdvanceDebitInvoice_idx = index), (hasAdvanceDebit = true));
-        } else if (tx.txn_type == "debit") {
-          runningBalance -= tx.txn_amount;
-        }
+      if(tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index){
+        tempAdvanceDebitInvoice_idx = -1;
+      }
+      if (tx.txn_type == '' && tx.is_approved != 2) {
+        runningBalance += tx.txn_amount;
+      } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
+        runningBalance += tx.txn_amount;
+      } else if (tx.txn_type == "debit" && tx.is_advance) {
+        runningBalance -= tx.txn_amount;
+        tempAdvanceDebitInvoice_idx = index,
+        hasAdvanceDebit = true;
+      } else if(tx.txn_type == "debit"){
+        runningBalance -= tx.txn_amount;
+      }
 
-        return {
-          ...tx,
-          txn_date: formatDateTime(tx.txn_date, 8),
-          sl_no: index + 1,
-          balance: displayAmount(runningBalance),
-        };
-      })
-      .reverse();
-
+      return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
+    }).reverse();
+    
+    
     console.log("----------passbook----------", passbook);
 
     let result = {
@@ -440,42 +391,26 @@ exports.txnLedger = async (req, res) => {
     console.error("Error:", err);
     res.status(errorCodes.default).send(formatErrorResponse(err));
   }
-};
+}
 
 /**
  * Retrive purchase txn ledger pdf
  */
 exports.downloadTxnLedger = async (req, res) => {
-  let {
-    page,
-    limit,
-    supplier_id,
-    search,
-    is_assigned,
-    is_approval,
-    status,
-    date_from,
-    date_to,
-  } = req.query;
+  let { page, limit, supplier_id, search, is_assigned, is_approval, status, date_from, date_to } = req.query;
   is_assigned = is_assigned === undefined ? false : true;
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let conditions = {
-    user_id: userID,
-    is_assigned: is_assigned,
-  }; /* , is_approval: is_approval */
+  let conditions = { user_id: userID, is_assigned: is_assigned }; /* , is_approval: is_approval */
   if (status !== undefined && status != "") {
     conditions.is_approved = status;
   }
   let user = await UserModel.findByPk(userID);
-
+  
   if (!isEmpty(supplier_id)) {
     conditions.supplier_id = supplier_id;
   }
-  if (
-    !isEmpty(search) &&
-    !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")
-  ) {
+  if (!isEmpty(search) && !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")) {
     conditions[Op.or] = [
       { invoice_number: { [Op.like]: `%${search}%` } },
       { notes: { [Op.like]: `%${search}%` } },
@@ -493,25 +428,20 @@ exports.downloadTxnLedger = async (req, res) => {
     // Fetch all purchases with their related payments
     const allPurchases = await PurchaseModel.findAll({
       include: [
-        {
+      {
           model: PaymentModel,
           as: "payments",
           required: false,
-          where:
-            !isEmpty(search) &&
-            !(
-              search.toLowerCase() == "purchase" ||
-              search.toLowerCase() == "payment"
-            )
-              ? {
-                  [Op.or]: [
-                    /* { invoice_number: { [Op.like]: `%${search}%` } }, */
-                    { amount: { [Op.like]: `%${search}%` } },
-                    { payment_mode: { [Op.like]: `%${search}%` } },
-                    { notes: { [Op.like]: `%${search}%` } },
-                  ],
-                }
-              : undefined,
+          where: !isEmpty(search) && !(search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")
+            ? {
+                [Op.or]: [
+                  /* { invoice_number: { [Op.like]: `%${search}%` } }, */
+                  { amount: { [Op.like]: `%${search}%` } },
+                  { payment_mode: { [Op.like]: `%${search}%` } },
+                  { notes: { [Op.like]: `%${search}%` } },
+                ],
+              }
+            : undefined,
         },
       ],
       where: conditions,
@@ -523,23 +453,23 @@ exports.downloadTxnLedger = async (req, res) => {
     // Flatten purchases and payments into a single table structure
     let tableData = [];
     allPurchases.forEach((purchase, index) => {
-      let approve_status = "Pending";
-      if (purchase.is_approved == 1) {
-        approve_status = "Accepted";
-      } else if (purchase.is_approved == 2) {
-        approve_status = "Declined";
-      } else if (purchase.is_approved == 3) {
-        approve_status = "On Approval";
-      } else if (purchase.is_approved == 4) {
-        approve_status = "Transfer To Purchase";
+      let approve_status = 'Pending';
+      if(purchase.is_approved == 1){
+          approve_status = "Accepted";
+      }else if(purchase.is_approved == 2){
+          approve_status = "Declined";
+      }else if(purchase.is_approved == 3){
+          approve_status = "On Approval";
+      }else if(purchase.is_approved == 4){
+          approve_status = "Transfer To Purchase";
       }
 
-      if (purchase.status == "returned") {
-        approve_status = "Returned";
-      } else if (purchase.status == "return_pending") {
-        approve_status = "Return Pending";
+      if(purchase.status == "returned"){
+          approve_status = "Returned";
+      }else if(purchase.status == "return_pending"){
+          approve_status = "Return Pending";
       }
-
+      
       // Add Purchase row
       tableData.push({
         id: purchase.id,
@@ -549,14 +479,14 @@ exports.downloadTxnLedger = async (req, res) => {
         remarks: purchase.notes || "-",
         purpose: "",
         bill_amount: displayAmount(purchase.bill_amount),
-        txn_amount: parseFloat(purchase.bill_amount),
+        txn_amount : parseFloat(purchase.bill_amount),
         payment_amount: null,
         payment_mode: purchase.payment_mode || "-",
         type: "Purchase",
         txn_type: "",
         is_approved: purchase.is_approved,
         approve_status: approve_status,
-        is_advance: 0,
+        is_advance: 0
       });
 
       // Add related payment rows
@@ -570,7 +500,7 @@ exports.downloadTxnLedger = async (req, res) => {
           purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
-          txn_amount: parseFloat(pay.amount),
+          txn_amount : parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
           type: "Payment",
           txn_type: pay.type,
@@ -584,51 +514,37 @@ exports.downloadTxnLedger = async (req, res) => {
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      console.log(
-        "----------a.invoice_number,b.invoice_number----------",
-        a.invoice_number.split("").pop(),
-        b.invoice_number.split("").pop(),
-      );
-      return (
-        b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop()
-      );
+      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
     });
 
-    if (
-      !isEmpty(search) &&
-      (search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")
-    ) {
-      tableData = tableData.filter(
-        (table) => table.type.toLowerCase() == search.toLowerCase(),
-      );
+    if(!isEmpty(search) && (search.toLowerCase() == "purchase" || search.toLowerCase() == "payment")){
+      tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
     }
 
     console.log("tableData: ", tableData);
 
-    let temp_invoice_no = "";
+    let temp_invoice_no = '';
     let temp_invoice_index = -1;
     let temp_balance = 0;
-    for (let i = 0; i < tableData.length; i++) {
+    for(let i = 0; i < tableData.length; i++){
       let tx = tableData[i];
 
-      if (temp_invoice_no == "") {
+      if(temp_invoice_no == ""){
         temp_invoice_no = tx.invoice_number;
         temp_invoice_index = i;
-      } else if (
-        temp_invoice_no != "" &&
-        temp_invoice_no != tx.invoice_number
-      ) {
+      } else if(temp_invoice_no != "" && temp_invoice_no != tx.invoice_number){
         tableData[temp_invoice_index].txn_amount = temp_balance;
         //tableData[temp_invoice_index].payment_amount = displayAmount(temp_balance);
         temp_invoice_no = tx.invoice_number;
         temp_invoice_index = i;
       }
 
-      if (tx.type.toLowerCase() == "payment" && tx.txn_type == "credit") {
+      if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
         //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
         temp_balance -= tx.txn_amount;
-        temp_balance = temp_balance > 0 ? temp_balance : 0;
-      } else if (tx.type.toLowerCase() == "purchase" && tx.is_approved != 2) {
+        temp_balance = temp_balance > 0?temp_balance:0;
+      } else if(tx.type.toLowerCase() == "purchase" && tx.is_approved != 2) {
         temp_balance = tx.txn_amount;
       }
       //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
@@ -640,54 +556,33 @@ exports.downloadTxnLedger = async (req, res) => {
     let runningBalance = 0;
     let tempAdvanceDebitInvoice_idx = -1;
     let hasAdvanceDebit = false;
-    let passbook = tableData
-      .reverse()
-      .map((tx, index) => {
-        /* if (tx.type === 'Purchase') {
+    let passbook = tableData.reverse().map((tx, index) => {
+      /* if (tx.type === 'Purchase') {
         runningBalance += tx.txn_amount;
       } else if (tx.type === 'Payment') {
         runningBalance -= tx.txn_amount;
       } */
 
-        if (
-          tempAdvanceDebitInvoice_idx > -1 &&
-          tempAdvanceDebitInvoice_idx + 1 != index
-        ) {
-          tempAdvanceDebitInvoice_idx = -1;
-        }
-        if (tx.txn_type == "" && tx.is_approved != 2) {
-          runningBalance += tx.txn_amount;
-        } else if (
-          tx.txn_type == "credit" &&
-          (tempAdvanceDebitInvoice_idx == -1 ||
-            (tempAdvanceDebitInvoice_idx > -1 &&
-              tempAdvanceDebitInvoice_idx + 1 != index))
-        ) {
-          runningBalance += tx.txn_amount;
-        } else if (tx.txn_type == "debit" && tx.is_advance) {
-          runningBalance -= tx.txn_amount;
-          ((tempAdvanceDebitInvoice_idx = index), (hasAdvanceDebit = true));
-        } else if (tx.txn_type == "debit") {
-          runningBalance -= tx.txn_amount;
-        }
-        return {
-          ...tx,
-          txn_date: formatDateTime(tx.txn_date, 8),
-          sl_no: index + 1,
-          balance: displayAmount(runningBalance),
-        };
-      })
-      .reverse();
+      if(tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index){
+        tempAdvanceDebitInvoice_idx = -1;
+      }
+      if (tx.txn_type == '' && tx.is_approved != 2) {
+        runningBalance += tx.txn_amount;
+      } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
+        runningBalance += tx.txn_amount;
+      } else if (tx.txn_type == "debit" && tx.is_advance) {
+        runningBalance -= tx.txn_amount;
+        tempAdvanceDebitInvoice_idx = index,
+        hasAdvanceDebit = true;
+      } else if(tx.txn_type == "debit"){
+        runningBalance -= tx.txn_amount;
+      }
+      return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
+    }).reverse();
 
     passbook = passbook.sort((a, b) => {
-      console.log(
-        "----------a.invoice_number,b.invoice_number----------",
-        a.invoice_number.split("").pop(),
-        b.invoice_number.split("").pop(),
-      );
-      return (
-        b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop()
-      );
+      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
     });
     console.log("----------passbook----------", passbook);
 
@@ -954,7 +849,7 @@ exports.downloadTxnLedger = async (req, res) => {
                                             <!-- <tr style="background-color: #fff;">
                                             <td style="">
                                                 <span style="font-weight: 600;"> GST
-                                                    IN ${user.gst != null ? user.gst : ""} </span>
+                                                    IN ${user.gst != null?user.gst:""} </span>
                                             </td>
                                             <td style="">
                                                 Ad:
@@ -994,7 +889,7 @@ exports.downloadTxnLedger = async (req, res) => {
                                                                     style="font-weight:
                                                                     600; font-size:
                                                                     12px; margin:
-                                                                    0;">${user.gst != null ? user.gst : ""}</span></li>
+                                                                    0;">${user.gst != null?user.gst:""}</span></li>
                                                             <li><span
                                                                     style="font-weight:
                                                                     400; font-size:
@@ -1032,7 +927,7 @@ exports.downloadTxnLedger = async (req, res) => {
                                                                     style="font-weight:
                                                                     500; font-size:
                                                                     12px; margin:
-                                                                    0;">${user.address != null ? user.address : ""}</span></li>
+                                                                    0;">${user.address != null?user.address:""}</span></li>
                                                           
                                                             <li><span
                                                                     style="font-weight:
@@ -1055,7 +950,7 @@ exports.downloadTxnLedger = async (req, res) => {
                                                                     style="font-weight:
                                                                     500; font-size:
                                                                     12px; margin:
-                                                                    0;">${user.city != null ? user.city : ""}</span></li>
+                                                                    0;">${user.city != null?user.city:""}</span></li>
                                                             <li><span
                                                                     style="font-weight:
                                                                     400; font-size:
@@ -1066,7 +961,7 @@ exports.downloadTxnLedger = async (req, res) => {
                                                                     style="font-weight:
                                                                     500; font-size:
                                                                     12px; margin:
-                                                                    0;">${user.pincode != null ? user.pincode : ""}</span></li>
+                                                                    0;">${user.pincode != null?user.pincode:""}</span></li>
                                                                     </ul>
                                                     </div>
                                                 </td>
@@ -1127,7 +1022,9 @@ exports.downloadTxnLedger = async (req, res) => {
                                       <td style="text-align: left;
                                           font-size: 11px;
                                           font-weight: 400;font-size: 10px;">
-                                          ${passbook[i].txn_date}
+                                          ${
+                                            passbook[i].txn_date
+                                          }
                                       </td>
                                       <td style="text-align: left;
                                           font-size: 11px;
@@ -1137,57 +1034,77 @@ exports.downloadTxnLedger = async (req, res) => {
                                       <td style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
-                                          ${passbook[i].remarks}
+                                          ${
+                                            passbook[i]
+                                              .remarks
+                                          }
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
-                                          ${passbook[i].purpose}
-                                      </td>
-                                      <td  style="text-align:
-                                          left; font-size: 11px;
-                                          font-weight: 400;">
                                           ${
-                                            passbook[i].bill_amount != null
-                                              ? passbook[i].bill_amount
-                                              : ""
+                                            passbook[i]
+                                              .purpose
                                           }
                                       </td>
                                       <td  style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
                                           ${
-                                            passbook[i].payment_amount != null
-                                              ? passbook[i].payment_amount
-                                              : ""
+                                            passbook[i]
+                                              .bill_amount != null?passbook[i]
+                                              .bill_amount:""
                                           }
                                       </td>
                                       <td  style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
-                                          ${passbook[i].payment_mode}
+                                          ${
+                                            passbook[i]
+                                              .payment_amount != null?passbook[i]
+                                              .payment_amount:""
+                                          }
+                                      </td>
+                                      <td  style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
+                                          ${
+                                            passbook[i]
+                                              .payment_mode
+                                          }
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
-                                          ${passbook[i].type}
+                                          ${
+                                            passbook[i]
+                                              .type
+                                          }
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
-                                          ${passbook[i].approve_status}
+                                          ${
+                                            passbook[i]
+                                              .approve_status
+                                          }
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
-                                          ${passbook[i].balance}
+                                          ${
+                                            passbook[i]
+                                              .balance
+                                          }
                                       </td>
-                                  </tr>`;
+                                  </tr>`
+                                  
       }
       html += `
                                       </tbody>
                                   </table>`;
-    }
+    } 
+    
 
     html += `
                                             <!-- Footer -->
@@ -1203,12 +1120,9 @@ exports.downloadTxnLedger = async (req, res) => {
                 </html>`;
 
     try {
-      let filename =
-        user.name.replace(" ", "_") +
-        "_" +
-        new Date().getTime() +
-        "_ledger.pdf";
-      let file_path = "public/purchases/" + filename;
+      let filename = user.name.replace(" ", "_") + "_" + (new Date().getTime()) + "_ledger.pdf";
+      let file_path =
+        "public/purchases/" + filename ;
       const options = { format: "A4" };
 
       (async () => {
@@ -1229,8 +1143,8 @@ exports.downloadTxnLedger = async (req, res) => {
               items: passbook,
               total: passbook.length,
             },
-            "Ledger pdf",
-          ),
+            "Ledger pdf"
+          )
         );
       })();
     } catch (error) {
@@ -1242,54 +1156,57 @@ exports.downloadTxnLedger = async (req, res) => {
     console.error("Error:", err);
     res.status(errorCodes.default).send(formatErrorResponse(err));
   }
-};
+}
 
 /**
  * Store pre purchase data
- *
- * @param {*} req
- * @param {*} res
+ * 
+ * @param {*} req 
+ * @param {*} res 
  */
 exports.pre_store = async (req, res) => {
   let data = req.body;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  try {
+  try { 
     console.log("pre purchase store payload : ", data);
     //return false;
-    let image_path = await base64FileUpload(data.current_image, "products");
+    let image_path = await base64FileUpload(
+      data.current_image,
+      "products",
+    );
 
     data.current_image = image_path.path;
 
-    console.log(
-      "pre purchase store payload after image upload : ",
-      data.current_image,
-    );
+    console.log("pre purchase store payload after image upload : ", data.current_image);
 
     let req_data = data; //JSON.stringify(data);
     //req_data = new Buffer.from(req_data).toString("base64");
-    req_data = encodeForStorage(req_data);
+    
+    let image_path = await base64FileUpload(
+      data.current_image,
+      "products",
+    );
+
+    data.current_image = image_path.path;
+
+    console.log("pre purchase store payload after image upload : ", data.current_image);
+    
+    req_data = encodeForStorage(req_data);  
     let prePurchaseObj = {
       user_id: userID,
-      req_data: req_data,
+      req_data: req_data
     };
 
     /* create and return create id */
-    let prePurchase = await PrePurchaseModel.create(prePurchaseObj);
+    let prePurchase = await PrePurchaseModel.create(prePurchaseObj);   
     //prePurchase.record_id = prePurchase.id;
 
-    res.send(
-      formatResponse(prePurchase, "Pre Purchase data stored successfully!"),
-    );
+    res.send(formatResponse(prePurchase, "Pre Purchase data stored successfully!"));
   } catch (error) {
-    addLog("err: " + error.toString());
-    return res
-      .status(errorCodes.default)
-      .send(
-        formatErrorResponse(
-          "Pre Purchase data does not success due to some error",
-        ),
-      );
+    addLog('err: ' + error.toString());
+    return res.status(errorCodes.default).send(formatErrorResponse('Pre Purchase data does not success due to some error'));
   }
+
 };
 
 /**
@@ -1300,12 +1217,12 @@ exports.pre_purchase_list = async (req, res) => {
     let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
     let prePurchases = await PrePurchaseModel.findAll({
       where: { user_id: userID },
-      order: [["createdAt", "DESC"]],
+      order: [['createdAt', 'DESC']]
     });
-
+    
     /* decode req_data and send */
     let items = [];
-    prePurchases = prePurchases.map((item) => {
+    prePurchases = prePurchases.map(item => {
       let decodedData = decodeFromStorage(item.req_data);
       decodedData.id = item.id;
       items.push(decodedData);
@@ -1318,14 +1235,8 @@ exports.pre_purchase_list = async (req, res) => {
 
     res.send(formatResponse(result, "Pre Purchase data fetched successfully!"));
   } catch (error) {
-    addLog("err: " + error.toString());
-    return res
-      .status(errorCodes.default)
-      .send(
-        formatErrorResponse(
-          "Pre Purchase data does not fetch due to some error",
-        ),
-      );
+    addLog('err: ' + error.toString());
+    return res.status(errorCodes.default).send(formatErrorResponse('Pre Purchase data does not fetch due to some error'));
   }
 };
 
@@ -1336,28 +1247,23 @@ exports.pre_purchase_delete = async (req, res) => {
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   try {
     let id = req.params.id;
-    console.log("----pre purchase delete id", id, " ", userID);
-    if (id == "all") {
+    console.log("----pre purchase delete id",id, " ", userID);
+    if(id == 'all'){
       await PrePurchaseModel.destroy({
-        where: { user_id: userID },
+        where: { user_id: userID }
       });
-    } else {
+    }else{
       await PrePurchaseModel.destroy({
-        where: { id: id, user_id: userID },
+        where: { id: id, user_id: userID }
       });
     }
     res.send(formatResponse([], "Pre Purchase item deleted successfully!"));
   } catch (error) {
-    addLog("err: " + error.toString());
-    return res
-      .status(errorCodes.default)
-      .send(
-        formatErrorResponse(
-          "Pre Purchase item does not delete due to some error",
-        ),
-      );
+    addLog('err: ' + error.toString());
+    return res.status(errorCodes.default).send(formatErrorResponse('Pre Purchase item does not delete due to some error'));
   }
 };
+
 
 /**
  * Store purchase
@@ -1391,11 +1297,11 @@ exports.store = async (req, res) => {
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   let addedBy = userID;
   /* check for manager/worker and other roles */
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 11].includes(req.role)) {
+  if(![1, 2, 3, 4, 5, 6, 7, 8, 11].includes(req.role)){
     addedBy = req.userId;
     /* check parent and assign as user id */
     let user = await UserModel.findByPk(addedBy);
-    if (user) {
+    if(user){
       userID = user.parent_id;
     }
   }
@@ -1416,7 +1322,7 @@ exports.store = async (req, res) => {
    */
   let is_certificate_exist = false;
   for (let i = 0; i < data.products.length; i++) {
-    let thisItem = data.products[i];
+      let thisItem = data.products[i];
     /* cretified product must have unique certificate number */
     if (!isEmpty(thisItem.certificate_no)) {
       let stock = await StockModel.findOne({
@@ -1434,20 +1340,14 @@ exports.store = async (req, res) => {
         //   },
         // ],
       });
-      is_certificate_exist = purchaseProduct
-        ? thisItem.certificate_no
-        : is_certificate_exist;
+      is_certificate_exist = purchaseProduct ? thisItem.certificate_no : is_certificate_exist;
     }
   }
-  console.log("is_certificate_exist : ", is_certificate_exist);
-  if (is_certificate_exist) {
+console.log("is_certificate_exist : ", is_certificate_exist);
+  if(is_certificate_exist){
     return res
-      .status(errorCodes.default)
-      .send(
-        formatErrorResponse(
-          `One of the product has certificate no. ${is_certificate_exist} which does exists in stocks or on approval state.`,
-        ),
-      );
+        .status(errorCodes.default)
+        .send(formatErrorResponse(`One of the product has certificate no. ${is_certificate_exist} which does exists in stocks or on approval state.`));
   }
 
   try {
@@ -1474,7 +1374,7 @@ exports.store = async (req, res) => {
     if (data.pay_from_advance) {
       if (parseFloat(data.total_payable) >= parseFloat(data.advance_amount)) {
         paid_amount = priceFormat(
-          paid_amount + parseFloat(data.advance_amount),
+          paid_amount + parseFloat(data.advance_amount)
         );
       } else {
         paid_amount = parseFloat(data.total_payable);
@@ -1521,7 +1421,7 @@ exports.store = async (req, res) => {
       // console.log("--data.product[0].current_image",data.products[i].current_image)
       let image_path = await base64FileUpload(
         data.products[i].current_image,
-        "products",
+        "products"
       );
       // console.log(
       //   "image_path________________________________________________________",
@@ -1553,7 +1453,7 @@ exports.store = async (req, res) => {
 
       console.log(
         "thisObj_________________________________________________________________________________",
-        thisObj,
+        thisObj
       );
 
       let purchaseProduct = await PurchaseProductModel.create(thisObj);
@@ -1628,7 +1528,7 @@ exports.store = async (req, res) => {
               {
                 batch_id: batch_id,
               },
-              { where: { id: stockH.id } },
+              { where: { id: stockH.id } }
             );
           }
 
@@ -1641,7 +1541,7 @@ exports.store = async (req, res) => {
               unit_id: thisItem.materials[x].unit_id,
               quantity: thisItem.materials[x].quantity,
             },
-            "debit",
+            "debit"
           );
         }
 
@@ -1703,7 +1603,7 @@ exports.store = async (req, res) => {
         invoice_number: invoice_number,
         req_data: req_data,
       },
-      { where: { id: purchase.id } },
+      { where: { id: purchase.id } }
     );
 
     //insert into payment table
@@ -1711,7 +1611,7 @@ exports.store = async (req, res) => {
       let amount = priceFormat(data.paid_amount);
       if (!isEmpty(data.on_approval_id) && parseInt(data.on_approval_id) > 0) {
         let approvalPurchase = await PurchaseModel.findByPk(
-          data.on_approval_id,
+          data.on_approval_id
         );
         if (approvalPurchase && !isEmpty(approvalPurchase.paid_amount)) {
           amount =
@@ -1770,7 +1670,7 @@ exports.store = async (req, res) => {
           is_approved: 4,
           accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
         },
-        { where: { id: data.on_approval_id } },
+        { where: { id: data.on_approval_id } }
       );
     }
 
@@ -1783,16 +1683,15 @@ exports.store = async (req, res) => {
               parseFloat(data.advance_amount) - parseFloat(data.total_payable)
             ); */
 
-      let theDebitAmount =
-        parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
+      let theDebitAmount = parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
           ? parseFloat(data.advance_amount)
           : parseFloat(data.total_payable);
 
       let thisCreditAmnt =
         parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
-          ? 0.0
+          ? 0.00
           : priceFormat(
-              parseFloat(data.advance_amount) - parseFloat(data.total_payable),
+              parseFloat(data.advance_amount) - parseFloat(data.total_payable)
             );
 
       /* debit advance amount */
@@ -1837,7 +1736,7 @@ exports.store = async (req, res) => {
         is_advance: false,
       });
 
-      await updateWalletRemainingBalance(data.supplier_id, payment.id);
+      await updateWalletRemainingBalance(data.supplier_id, payment.id);    
 
       /* let payment = await paymentModel.create({
         payment_mode: "advance",
@@ -1859,12 +1758,7 @@ exports.store = async (req, res) => {
 
       /* await updateWalletRemainingBalance(data.supplier_id, payment.id); */
 
-      await updateAdvanceAmount(
-        userID,
-        data.supplier_id,
-        thisCreditAmnt,
-        false,
-      );
+      await updateAdvanceAmount(userID, data.supplier_id, thisCreditAmnt, false);
     }
 
     res.send(formatResponse([], "Purchase successfully!"));
@@ -2010,7 +1904,7 @@ exports.onapprove_view = async (req, res) => {
       .send(formatErrorResponse("Purchase not found"));
   }
   res.send(
-    formatResponse(PurchaseViewCollection(purchase), "Purchase details"),
+    formatResponse(PurchaseViewCollection(purchase), "Purchase details")
   );
 };
 
@@ -2143,10 +2037,7 @@ exports.statuschange = async (req, res) => {
               stock_type = "material";
             }
             let stock = null;
-            if (
-              product_type == "material" ||
-              (product_type != "material" && isEmpty(thisItem.certificate_no))
-            ) {
+            if (product_type == "material" || (product_type != "material" && isEmpty(thisItem.certificate_no))) {
               let quantity = 0;
               for (let x = 0; x < thisItem.materials.length; x++) {
                 quantity += thisItem.materials[x].quantity
@@ -2154,8 +2045,8 @@ exports.statuschange = async (req, res) => {
                   : 0;
               }
 
-              let Current_image =
-                await purchase.purchaseProducts[i].current_image;
+              let Current_image = await purchase.purchaseProducts[i]
+                .current_image;
               let _wC = { user_id: stock_con, type: stock_type },
                 _iu_data = {
                   quantity: quantity,
@@ -2169,15 +2060,9 @@ exports.statuschange = async (req, res) => {
                 };
               if (purchase.type == "material") {
                 _wC.material_id = thisItem.material_id;
-                _wC.purity_id =
-                  thisItem.material_id == "1" || thisItem.material_id == "2"
-                    ? gold24kPurityId
-                    : thisItem.materials[0].purity_id; //24K gold //thisItem.materials[0].purity_id;
+                _wC.purity_id = thisItem.material_id == "1" || thisItem.material_id == "2"?gold24kPurityId:thisItem.materials[0].purity_id; //24K gold //thisItem.materials[0].purity_id;
                 _iu_data.material_id = thisItem.material_id;
-                _iu_data.purity_id =
-                  thisItem.material_id == "1" || thisItem.material_id == "2"
-                    ? gold24kPurityId
-                    : thisItem.materials[0].purity_id; //thisItem.materials[0].purity_id;
+                _iu_data.purity_id = thisItem.material_id == "1" || thisItem.material_id == "2"?gold24kPurityId:thisItem.materials[0].purity_id; //thisItem.materials[0].purity_id;
               } else {
                 _wC.product_id = thisItem.product_id;
                 _iu_data.product_id = thisItem.product_id;
@@ -2200,8 +2085,8 @@ exports.statuschange = async (req, res) => {
 
               console.log(query);
               let resData = await StockModel.findAll(query);
-              let Current_image =
-                await purchase.purchaseProducts[i].current_image;
+              let Current_image = await purchase.purchaseProducts[i]
+                .current_image;
               stock = await StockModel.create(
                 {
                   purchase_id: purchase.id,
@@ -2216,7 +2101,7 @@ exports.statuschange = async (req, res) => {
                   user_id: userID, //isSuperAdmin(req) ? null : req.userId,
                   type: stock_type,
                 },
-                { transaction: t },
+                { transaction: t }
               );
             }
 
@@ -2229,9 +2114,7 @@ exports.statuschange = async (req, res) => {
                     to_user_id: userID,
                     material_id: thisItem.materials[x].material_id,
                     weight: weightFormat(thisItem.materials[x].weight),
-                    pakka_weight: weightFormat(
-                      thisItem.materials[x].pakka_weight,
-                    ),
+                    pakka_weight: weightFormat(thisItem.materials[x].pakka_weight),
                     unit_id: thisItem.materials[x].unit_id,
                     purity_id: thisItem.materials[x].purity_id,
                     quantity: thisItem.materials[x].quantity || 1,
@@ -2240,7 +2123,7 @@ exports.statuschange = async (req, res) => {
                     batch_id: batch_id,
                     purchase_id: purchase.id,
                   },
-                  { transaction: t },
+                  { transaction: t }
                 );
                 if (batch_id == null) {
                   batch_id = stockH.id;
@@ -2248,7 +2131,7 @@ exports.statuschange = async (req, res) => {
                     {
                       batch_id: batch_id,
                     },
-                    { where: { id: stockH.id }, transaction: t },
+                    { where: { id: stockH.id }, transaction: t }
                   );
                 }
               }
@@ -2257,32 +2140,17 @@ exports.statuschange = async (req, res) => {
                * add to stock materials
                */
               // console.log("----stock is ",stockMaterial)
-              if (
-                product_type == "material" ||
-                (product_type != "material" && isEmpty(thisItem.certificate_no))
-              ) {
+              if (product_type == "material" || (product_type != "material" && isEmpty(thisItem.certificate_no))) {
                 let stockMaterial = await StockMaterialModel.findOne({
                   where: {
                     stock_id: stock.id,
                     material_id: thisItem.materials[x].material_id,
-                    purity_id:
-                      thisItem.materials[x].material_id == "1" ||
-                      thisItem.materials[x].material_id == "2"
-                        ? gold24kPurityId
-                        : thisItem.materials[x].purity_id,
+                    purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id
                   },
                 });
-                let unit = await UnitModel.findByPk(
-                  thisItem.materials[x].unit_id,
-                );
-                let actualWeight =
-                  thisItem.materials[x].material_id == "1" ||
-                  thisItem.materials[x].material_id == "2"
-                    ? thisItem.materials[x].pakka_weight
-                    : thisItem.materials[x].weight;
-                let pakka_weight_in_gram = isEmpty(thisItem.certificate_no)
-                  ? convertUnitToGram(unit.name, actualWeight)
-                  : convertUnitToGram(unit.name, actualWeight);
+                let unit = await UnitModel.findByPk(thisItem.materials[x].unit_id);
+                let actualWeight = thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?thisItem.materials[x].pakka_weight:thisItem.materials[x].weight;
+                let pakka_weight_in_gram = isEmpty(thisItem.certificate_no)?convertUnitToGram(unit.name, actualWeight):convertUnitToGram(unit.name, actualWeight);
                 if (stockMaterial) {
                   let thisquantity = thisItem.materials[x].quantity
                     ? parseInt(stockMaterial.quantity) +
@@ -2292,22 +2160,18 @@ exports.statuschange = async (req, res) => {
                     {
                       weight: weightFormat(
                         parseFloat(stockMaterial.weight) +
-                          weightFormat(actualWeight),
+                          weightFormat(actualWeight)
                       ),
                       weight_in_gram: weightFormat(
                         parseFloat(stockMaterial.weight_in_gram) +
-                          weightFormat(pakka_weight_in_gram),
+                          weightFormat(pakka_weight_in_gram)
                       ),
                       quantity: thisquantity,
-                      purity_id:
-                        thisItem.materials[x].material_id == "1" ||
-                        thisItem.materials[x].material_id == "2"
-                          ? gold24kPurityId
-                          : thisItem.materials[x].purity_id,
+                      purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id, 
                       unit_id: thisItem.materials[x].unit_id,
                       category_id: category_id,
                     },
-                    { where: { id: stockMaterial.id }, transaction: t },
+                    { where: { id: stockMaterial.id }, transaction: t }
                   );
                 } else {
                   await StockMaterialModel.create(
@@ -2315,17 +2179,15 @@ exports.statuschange = async (req, res) => {
                       stock_id: stock.id,
                       material_id: thisItem.materials[x].material_id,
                       weight: weightFormat(actualWeight),
-                      weight_in_gram: weightFormat(pakka_weight_in_gram),
+                      weight_in_gram: weightFormat(
+                        pakka_weight_in_gram
+                      ),
                       quantity: thisItem.materials[x].quantity || 0,
-                      purity_id:
-                        thisItem.materials[x].material_id == "1" ||
-                        thisItem.materials[x].material_id == "2"
-                          ? gold24kPurityId
-                          : thisItem.materials[x].purity_id,
+                      purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id,
                       unit_id: thisItem.materials[x].unit_id,
                       category_id: category_id,
                     },
-                    { transaction: t },
+                    { transaction: t }
                   );
                 }
               } else {
@@ -2335,14 +2197,14 @@ exports.statuschange = async (req, res) => {
                     material_id: thisItem.materials[x].material_id,
                     weight: weightFormat(thisItem.materials[x].weight),
                     weight_in_gram: weightFormat(
-                      thisItem.materials[x].weight_in_gram,
+                      thisItem.materials[x].weight_in_gram
                     ),
                     quantity: thisItem.materials[x].quantity || 0,
                     purity_id: thisItem.materials[x].purity_id,
                     unit_id: thisItem.materials[x].unit_id,
                     category_id: category_id,
                   },
-                  { transaction: t },
+                  { transaction: t }
                 );
               }
             }
@@ -2394,9 +2256,9 @@ exports.statuschange = async (req, res) => {
               } else {
                 await PaymentModel.update(
                   {
-                    is_advance: "1",
+                    is_advance: "1"
                   },
-                  { where: { table_type: "purchase", table_id: purchase.id } },
+                  { where: { table_type: "purchase", table_id: purchase.id } }
                 );
               }
             }
@@ -2404,7 +2266,7 @@ exports.statuschange = async (req, res) => {
               purchase.user_id,
               purchase.supplier_id,
               paidAmnt,
-              true,
+              true
             );
           } else if (data.decline_type == "return") {
             let paidAmnt = parseFloat(purchase.paid_amount);
@@ -2454,13 +2316,13 @@ exports.statuschange = async (req, res) => {
                   : "purchase declined",
               });
               let remaining_balance = await getWalletBalance(
-                payment2.payment_belongs,
+                payment2.payment_belongs
               );
               await paymentModel.update(
                 {
                   remaining_balance: remaining_balance,
                 },
-                { where: { id: payment2.id } },
+                { where: { id: payment2.id } }
               );
 
               //if(!isEmpty(purchase.sale_id)){
@@ -2488,17 +2350,17 @@ exports.statuschange = async (req, res) => {
                     ? "purchase approval declined"
                     : "purchase declined"
                   : purchase.is_approval
-                    ? "sale approval declined"
-                    : "sale declined",
+                  ? "sale approval declined"
+                  : "sale declined",
               });
               let remaining_balance2 = await getWalletBalance(
-                payment3.payment_belongs,
+                payment3.payment_belongs
               );
               await paymentModel.update(
                 {
                   remaining_balance: remaining_balance2,
                 },
-                { where: { id: payment3.id } },
+                { where: { id: payment3.id } }
               );
               // }
             }
@@ -2532,11 +2394,7 @@ exports.statuschange = async (req, res) => {
 
                 let product = await ProductModel.findByPk(thisItem.product_id);
                 let stock = null;
-                if (
-                  product.type == "material" ||
-                  (product.type != "material" &&
-                    isEmpty(thisItem.certificate_no))
-                ) {
+                if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
                   let quantity = 0;
                   for (let x = 0; x < thisItem.materials.length; x++) {
                     quantity += thisItem.materials[x].quantity
@@ -2548,11 +2406,7 @@ exports.statuschange = async (req, res) => {
                     {
                       product_id: thisItem.product_id,
                       user_id: parentUserID,
-                      purity_id:
-                        thisItem.materials[x].material_id == "1" ||
-                        thisItem.materials[x].material_id == "2"
-                          ? gold24kPurityId
-                          : thisItem.materials[x].purity_id,
+                      purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id
                     },
                     {
                       purchase_id: purchase.id,
@@ -2561,21 +2415,17 @@ exports.statuschange = async (req, res) => {
                       quantity: quantity,
                       total_weight: thisItem.total_weight,
                       user_id: parentUserID,
-                      purity_id:
-                        thisItem.materials[x].material_id == "1" ||
-                        thisItem.materials[x].material_id == "2"
-                          ? gold24kPurityId
-                          : thisItem.materials[x].purity_id,
+                      purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id
                     },
                     t,
-                    ["quantity", "total_weight"],
+                    ["quantity", "total_weight"]
                   );
                   stock = result.item;
                 } else {
                   // console.log("----else Stock 888",req_data.products[0].current_image)
                   let current_image_path = await base64FileUpload(
                     req_data.products[i].current_image,
-                    "products",
+                    "products"
                   );
 
                   stock = await StockModel.create(
@@ -2591,7 +2441,7 @@ exports.statuschange = async (req, res) => {
                       total_weight: thisItem.total_weight,
                       user_id: parentUserID,
                     },
-                    { transaction: t },
+                    { transaction: t }
                   );
                 }
 
@@ -2621,34 +2471,17 @@ exports.statuschange = async (req, res) => {
                   /**
                    * add to stock materials
                    */
-                  if (
-                    product.type == "material" ||
-                    (product.type != "material" &&
-                      isEmpty(thisItem.certificate_no))
-                  ) {
+                  if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
                     let stockMaterial = await StockMaterialModel.findOne({
                       where: {
                         stock_id: stock.id,
                         material_id: thisItem.materials[x].material_id,
-                        purity_id:
-                          thisItem.materials[x].material_id == "1" ||
-                          thisItem.materials[x].material_id == "2"
-                            ? gold24kPurityId
-                            : thisItem.materials[x].purity_id,
+                        purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id
                       },
                     });
-                    let unit = await UnitModel.findByPk(
-                      thisItem.materials[x].unit_id,
-                    );
-                    let actualWeight =
-                      thisItem.materials[x].material_id == "1" ||
-                      thisItem.materials[x].material_id == "2"
-                        ? thisItem.materials[x].pakka_weight
-                        : thisItem.materials[x].weight;
-                    let pakka_weight_in_gram = convertUnitToGram(
-                      unit.name,
-                      actualWeight,
-                    );
+                    let unit = await UnitModel.findByPk(thisItem.materials[x].unit_id);
+                    let actualWeight = thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?thisItem.materials[x].pakka_weight:thisItem.materials[x].weight;
+                    let pakka_weight_in_gram = convertUnitToGram(unit.name, actualWeight);
                     if (stockMaterial) {
                       let thisquantity = thisItem.materials[x].quantity
                         ? parseInt(stockMaterial.quantity) +
@@ -2658,22 +2491,18 @@ exports.statuschange = async (req, res) => {
                         {
                           weight: weightFormat(
                             parseFloat(stockMaterial.weight) +
-                              weightFormat(actualWeight),
+                              weightFormat(actualWeight)
                           ),
                           weight_in_gram: weightFormat(
                             parseFloat(stockMaterial.weight_in_gram) +
-                              weightFormat(pakka_weight_in_gram),
+                              weightFormat(pakka_weight_in_gram)
                           ),
                           quantity: thisquantity,
-                          purity_id:
-                            thisItem.materials[x].material_id == "1" ||
-                            thisItem.materials[x].material_id == "2"
-                              ? gold24kPurityId
-                              : thisItem.materials[x].purity_id,
+                          purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id,
                           unit_id: thisItem.materials[x].unit_id,
                           category_id: product.category_id,
                         },
-                        { where: { id: stockMaterial.id }, transaction: t },
+                        { where: { id: stockMaterial.id }, transaction: t }
                       );
                     } else {
                       await StockMaterialModel.create(
@@ -2681,17 +2510,15 @@ exports.statuschange = async (req, res) => {
                           stock_id: stock.id,
                           material_id: thisItem.materials[x].material_id,
                           weight: weightFormat(actualWeight),
-                          weight_in_gram: weightFormat(pakka_weight_in_gram),
+                          weight_in_gram: weightFormat(
+                            pakka_weight_in_gram
+                          ),
                           quantity: thisItem.materials[x].quantity || 0,
-                          purity_id:
-                            thisItem.materials[x].material_id == "1" ||
-                            thisItem.materials[x].material_id == "2"
-                              ? gold24kPurityId
-                              : thisItem.materials[x].purity_id,
+                          purity_id: thisItem.materials[x].material_id == "1" || thisItem.materials[x].material_id == "2"?gold24kPurityId:thisItem.materials[x].purity_id,
                           unit_id: thisItem.materials[x].unit_id,
                           category_id: product.category_id,
                         },
-                        { transaction: t },
+                        { transaction: t }
                       );
                     }
                   } else {
@@ -2701,14 +2528,14 @@ exports.statuschange = async (req, res) => {
                         material_id: thisItem.materials[x].material_id,
                         weight: weightFormat(thisItem.materials[x].weight),
                         weight_in_gram: weightFormat(
-                          thisItem.materials[x].weight_in_gram,
+                          thisItem.materials[x].weight_in_gram
                         ),
                         quantity: thisItem.materials[x].quantity || 0,
                         purity_id: thisItem.materials[x].purity_id,
                         unit_id: thisItem.materials[x].unit_id,
                         category_id: product.category_id,
                       },
-                      { transaction: t },
+                      { transaction: t }
                     );
                   }
                 }
@@ -2727,7 +2554,7 @@ exports.statuschange = async (req, res) => {
             is_approved: data.approve_status,
             accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
           },
-          { where: { id: purchase.sale_id }, transaction: t },
+          { where: { id: purchase.sale_id }, transaction: t }
         );
       }
     });
@@ -2749,7 +2576,7 @@ exports.statuschange = async (req, res) => {
           {
             status: "completed",
           },
-          { where: { id: purchase.return_id } },
+          { where: { id: purchase.return_id } }
         );
         await StockModel.destroy({ where: { return_id: purchase.return_id } });
         let return_amount_from_wallet = saleReturn.return_amount_from_wallet
@@ -2803,11 +2630,7 @@ exports.statuschange = async (req, res) => {
           });
 
           //update sale product is return and return weight & qty into sale product material table
-          if (
-            return_data.products[i].product_type == "material" ||
-            (return_data.products[i].product_type != "material" &&
-              isEmpty(return_data.products[i].certificate_no))
-          ) {
+          if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
             let total_return_weight =
               parseFloat(saleProduct.saleMaterials[0].return_weight) +
               parseFloat(return_data.products[i].materials[0].return_weight);
@@ -2824,19 +2647,19 @@ exports.statuschange = async (req, res) => {
 
             await SaleProductModel.update(
               { is_return: is_return },
-              { where: { id: saleProduct.id } },
+              { where: { id: saleProduct.id } }
             );
             await SaleProductMaterialModel.update(
               {
                 return_qty: total_return_qty,
                 return_weight: total_return_weight,
               },
-              { where: { id: saleProduct.saleMaterials[0].id } },
+              { where: { id: saleProduct.saleMaterials[0].id } }
             );
           } else {
             await SaleProductModel.update(
               { is_return: true },
-              { where: { id: saleProduct.id } },
+              { where: { id: saleProduct.id } }
             );
           }
         }
@@ -2853,7 +2676,7 @@ exports.statuschange = async (req, res) => {
         }
 
         let total_return_amt = priceFormat(
-          priceFormat(sale.return_amount) + return_amount,
+          priceFormat(sale.return_amount) + return_amount
         );
         await SaleModel.update(
           {
@@ -2863,7 +2686,7 @@ exports.statuschange = async (req, res) => {
             paid_amount: paid_amount,
             status: due_amount > 0 ? "due" : "paid",
           },
-          { where: { id: sale.id } },
+          { where: { id: sale.id } }
         );
 
         if (due_amount <= 0) {
@@ -2876,7 +2699,7 @@ exports.statuschange = async (req, res) => {
                 type_id: sale.id,
                 [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }],
               },
-            },
+            }
           );
         }
       }
@@ -2895,7 +2718,7 @@ exports.statuschange = async (req, res) => {
             {
               status: "returned",
             },
-            { where: { id: sale_id } },
+            { where: { id: sale_id } }
           );
         }
       }
@@ -2920,10 +2743,7 @@ exports.statuschange = async (req, res) => {
 exports.view = async (req, res) => {
   try {
     let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-    console.log(
-      "purchase view --------------> req.params.id : ",
-      req.params.id,
-    );
+    console.log("purchase view --------------> req.params.id : ",req.params.id);
     let purchase = await PurchaseModel.findOne({
       where: { id: req.params.id /*, user_id: userID*/ },
       /* include: [
@@ -3051,7 +2871,7 @@ exports.view = async (req, res) => {
     req_data = JSON.parse(req_data); */
 
     res.send(
-      formatResponse(PurchaseViewCollection(purchase), "Purchase details"),
+      formatResponse(PurchaseViewCollection(purchase), "Purchase details")
     );
   } catch (error) {
     return res.status(errorCodes.default).send(formatErrorResponse(error));
@@ -3130,8 +2950,8 @@ exports.edit = async (req, res) => {
   res.send(
     formatResponse(
       await PurchaseEditCollection(purchase, req),
-      "Purchase edit details",
-    ),
+      "Purchase edit details"
+    )
   );
 };
 
@@ -3215,7 +3035,7 @@ exports.update = async (req, res) => {
             unit_id: stockstockHistorys[i].unit_id,
             quantity: stockstockHistorys[i].quantity,
           },
-          "debit",
+          "debit"
         );
       }
       await stockHistoryModel.destroy({
@@ -3327,7 +3147,7 @@ exports.update = async (req, res) => {
         {
           req_data: req_data,
         },
-        { where: { id: purchase.id }, transaction: t },
+        { where: { id: purchase.id }, transaction: t }
       );
       res.send(formatResponse([], "Purchase updated successfully!"));
     });
@@ -3464,11 +3284,7 @@ exports.returnProducts = async (req, res) => {
       });
 
       let stock = null;
-      if (
-        return_data.products[i].product_type == "material" ||
-        (return_data.products[i].product_type != "material" &&
-          isEmpty(return_data.products[i].certificate_no))
-      ) {
+      if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
         if (!isEmpty(return_data.products[i].product_id)) {
           stock = await StockModel.findOne({
             where: {
@@ -3579,7 +3395,7 @@ exports.returnProducts = async (req, res) => {
             : moment().format("YYYY-MM-DD"),
           req_data: req_data,
         },
-        { transaction: t },
+        { transaction: t }
       );
 
       let saleReturnObj = null,
@@ -3620,7 +3436,7 @@ exports.returnProducts = async (req, res) => {
                 : moment().format("YYYY-MM-DD"),
               req_data: req_data,
             },
-            { transaction: t },
+            { transaction: t }
           );
         }
       }
@@ -3649,7 +3465,7 @@ exports.returnProducts = async (req, res) => {
             table_type: "purchase_products",
             sub_total: return_data.products[i].return_amount,
           },
-          { transaction: t },
+          { transaction: t }
         );
 
         let returnSaleProduct = null;
@@ -3661,22 +3477,18 @@ exports.returnProducts = async (req, res) => {
               table_type: "sale_products",
               sub_total: return_data.products[i].return_amount,
             },
-            { transaction: t },
+            { transaction: t }
           );
         }
 
         //insert into return product materials table
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           let thisQty =
-            return_data.products[i].product_type == "material" ||
-            (return_data.products[i].product_type != "material" &&
-              isEmpty(return_data.products[i].certificate_no))
+            return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material" ||
-            (return_data.products[i].product_type != "material" &&
-              isEmpty(return_data.products[i].certificate_no))
+            return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           await ReturnProductMaterialModel.create(
@@ -3689,7 +3501,7 @@ exports.returnProducts = async (req, res) => {
               purity_id: return_data.products[i].materials[x].purity_id,
               unit_id: return_data.products[i].materials[x].unit_id,
             },
-            { transaction: t },
+            { transaction: t }
           );
 
           if (returnSaleProduct) {
@@ -3703,17 +3515,13 @@ exports.returnProducts = async (req, res) => {
                 purity_id: return_data.products[i].materials[x].purity_id,
                 unit_id: return_data.products[i].materials[x].unit_id,
               },
-              { transaction: t },
+              { transaction: t }
             );
           }
         }
 
         //update purchase product is return and return weight & qty into purchase product material table
-        if (
-          return_data.products[i].product_type == "material" ||
-          (return_data.products[i].product_type != "material" &&
-            isEmpty(return_data.products[i].certificate_no))
-        ) {
+        if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
           let total_return_weight =
             parseFloat(purchaseProduct.purchaseMaterials[0].return_weight) +
             parseFloat(return_data.products[i].materials[0].return_weight);
@@ -3730,7 +3538,7 @@ exports.returnProducts = async (req, res) => {
 
           await PurchaseProductModel.update(
             { is_return: is_return },
-            { where: { id: purchaseProduct.id }, transaction: t },
+            { where: { id: purchaseProduct.id }, transaction: t }
           );
           await PurchaseProductMaterialModel.update(
             {
@@ -3740,12 +3548,12 @@ exports.returnProducts = async (req, res) => {
             {
               where: { id: purchaseProduct.purchaseMaterials[0].id },
               transaction: t,
-            },
+            }
           );
         } else {
           await PurchaseProductModel.update(
             { is_return: true },
-            { where: { id: purchaseProduct.id }, transaction: t },
+            { where: { id: purchaseProduct.id }, transaction: t }
           );
         }
 
@@ -3754,11 +3562,7 @@ exports.returnProducts = async (req, res) => {
          */
         if (purchase.is_approved == 1) {
           let stock = null;
-          if (
-            return_data.products[i].product_type == "material" ||
-            (return_data.products[i].product_type != "material" &&
-              isEmpty(return_data.products[i].certificate_no))
-          ) {
+          if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
             if (!isEmpty(return_data.products[i].product_id)) {
               stock = await StockModel.findOne({
                 where: {
@@ -3786,12 +3590,12 @@ exports.returnProducts = async (req, res) => {
                   {
                     weight: weightFormat(
                       parseFloat(stockM.weight) -
-                        parseFloat(mItem.return_weight),
+                        parseFloat(mItem.return_weight)
                     ),
                     quantity:
                       parseFloat(stockM.quantity) - parseInt(mItem.return_qty),
                   },
-                  { where: { id: stockM.id } },
+                  { where: { id: stockM.id } }
                 );
                 weight += mItem.return_weight
                   ? parseInt(mItem.return_weight)
@@ -3806,7 +3610,7 @@ exports.returnProducts = async (req, res) => {
             } else {
               let return_weight_in_gram = convertUnitToGram(
                 unit_name,
-                return_data.products[i].materials[0].return_weight,
+                return_data.products[i].materials[0].return_weight
               );
               await StockModel.update(
                 {
@@ -3815,7 +3619,7 @@ exports.returnProducts = async (req, res) => {
                     parseFloat(stock.total_weight) -
                     parseFloat(return_weight_in_gram),
                 },
-                { where: { id: stock.id } },
+                { where: { id: stock.id } }
               );
             }
           } else {
@@ -3823,9 +3627,7 @@ exports.returnProducts = async (req, res) => {
               where: {
                 product_id: return_data.products[i].product_id,
                 user_id: stock_con,
-                certificate_no: cleanInput(
-                  return_data.products[i].certificate_no,
-                ),
+                certificate_no: cleanInput(return_data.products[i].certificate_no),
                 size_id: return_data.products[i].size_id,
               },
               include: [
@@ -3893,7 +3695,7 @@ exports.returnProducts = async (req, res) => {
           paid_amount = total_payable;
         }
         let total_return_amt = priceFormat(
-          priceFormat(purchase.return_amount) + return_amount,
+          priceFormat(purchase.return_amount) + return_amount
         );
         // if (!purchase.is_assigned && advance_amount > 0 && isEmpty(purchase.sale_id)) {
         //   let supplier = await UserModel.findByPk(purchase.supplier_id);
@@ -3909,7 +3711,7 @@ exports.returnProducts = async (req, res) => {
             total_payable: total_payable,
             due_amount: due_amount,
           },
-          { where: { id: req.params.id }, transaction: t },
+          { where: { id: req.params.id }, transaction: t }
         );
       }
 
@@ -3968,7 +3770,7 @@ exports.returnProducts = async (req, res) => {
             userID,
             purchase.supplier_id,
             data.return_amount_from_wallet,
-            true,
+            true
           );
         }
       }
@@ -4156,10 +3958,10 @@ exports.downloadInvoiceInfo = async (req, res) => {
   });
   payments = await PaymentCollection(payments);
   /* 18k gold purity value */
-  let purity18K = await PurityModel.findOne({
+  let purity18K = await PurityModel.findOne({  
     where: {
       id: 1, //18K
-    },
+    },  
   });
 
   purity18K = await PurityCollection(purity18K);
@@ -4373,7 +4175,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">PURCHASE${purchaseData.is_approved == "3" ? " ON APPROVAL" : ""} TAX INVOICE</h1>
+                                      300;">PURCHASE${purchaseData.is_approved == "3"?" ON APPROVAL":""} TAX INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -4624,8 +4426,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         ${
                                           purchaseData.products[i].product_name
                                         } - ${
-                                          purchaseData.products[i].product_code
-                                        }
+        purchaseData.products[i].product_code
+      }
                                     </td>
                                     <td style="text-align: left;
                                         font-size: 11px;
@@ -4710,13 +4512,10 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                           purchaseData.products[
                                                             i
                                                           ].materials[x]
-                                                            .discount_percent,
+                                                            .discount_percent
                                                         )}% ${
-                                                          purchaseData.products[
-                                                            i
-                                                          ].materials[x]
-                                                            .discount_amount_display
-                                                        }</span> 
+            purchaseData.products[i].materials[x].discount_amount_display
+          }</span> 
                                                                     <!--<span
                                                         style="text-align:
                                                         left; font-size:
@@ -4752,18 +4551,14 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                   purchaseData.products[i]
                                                     .making_charge
                                                 }@${
-                                                  purchaseData.products[i]
-                                                    .making_charge_discount
-                                                    ? purchaseData.products[i]
-                                                        .making_charge_discount
-                                                    : ""
-                                                }% = ${
-                                                  purchaseData.products[i]
-                                                    .total_making_charge_discount
-                                                    ? purchaseData.products[i]
-                                                        .total_making_charge_discount
-                                                    : ""
-                                                }
+        purchaseData.products[i].making_charge_discount
+          ? purchaseData.products[i].making_charge_discount
+          : ""
+      }% = ${
+        purchaseData.products[i].total_making_charge_discount
+          ? purchaseData.products[i].total_making_charge_discount
+          : ""
+      }
                                             </td>
 
                                             <td style="text-align:
@@ -4935,13 +4730,14 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                           </tr>
                                       </thead>
                                       <tbody>`;
-    let fine_metals = 0;
+    let fine_metals = 0;                      
     for (let i = 0; i < purchaseData.subCatItems.length; i++) {
-      purchaseData.subCatItems[i].material.map((itm) => {
-        if (itm.id == 1) {
-          fine_metals += parseFloat(itm.weight);
-        }
-      });
+      purchaseData.subCatItems[i].material
+        .map((itm) => {
+          if(itm.id == 1){
+            fine_metals += parseFloat(itm.weight);
+          } 
+        });
 
       let materialNames = purchaseData.subCatItems[i].material
         .map((itm) => itm.name)
@@ -5031,34 +4827,25 @@ exports.downloadInvoiceInfo = async (req, res) => {
     let receive_metal = 0;
     let metalExists = true;
     payments.map((itm) => {
-      if (itm.payment_mode.toLowerCase() == "metal" && itm.weight != null) {
+      if(itm.payment_mode.toLowerCase() == "metal" && itm.weight != null){
         metalExists = true;
         receive_metal += parseFloat(itm.weight);
       }
     });
     console.log("fine_metals before : ", fine_metals);
-    console.log(
-      "fine_metals 24k value : ",
-      (parseFloat(fine_metals) * parseFloat(purity18K.value)) / 100,
-    );
+    console.log("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
     /* convert gold to 24k from 18k */
-    if (purity18K && purity18K.value != null) {
-      fine_metals =
-        (parseFloat(fine_metals) * parseFloat(purity18K.value)) / 100;
+    if(purity18K && purity18K.value != null){
+      fine_metals = (parseFloat(fine_metals)*parseFloat(purity18K.value))/100;
     }
     let rest_metal = fine_metals - receive_metal;
-
+    
     let totalReportCharge = 0;
     let taxOnReportCharge = 0;
     let afterTaxTotalReportCharge = 0;
-    if (purchaseData.sale) {
-      totalReportCharge =
-        parseInt(purchaseData.sale.report_qty) *
-        parseFloat(purchaseData.sale.report_charge);
-      taxOnReportCharge =
-        (totalReportCharge *
-          parseFloat(purchaseData.sale.report_tax_percentage)) /
-        100;
+    if(purchaseData.sale){ 
+      totalReportCharge = parseInt(purchaseData.sale.report_qty)*parseFloat(purchaseData.sale.report_charge);
+      taxOnReportCharge = (totalReportCharge*parseFloat(purchaseData.sale.report_tax_percentage))/100;
       afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
     }
 
@@ -5070,8 +4857,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
                                       </td>
                                   </tr>`;
-    if (purchaseData.sale && purchaseData.sale.report_qty > 0) {
-      html += `<tr style="
+                                  if(purchaseData.sale && purchaseData.sale.report_qty > 0){
+                                    html += `<tr style="
                                         vertical-align: top;
                                         background-color: #0A8AB8;
                                         font-size: 12px; 
@@ -5086,7 +4873,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         <td colspan="2">Total</td>
                                         
                                     </tr>`;
-      html += `<tr style="
+                                    html += `<tr style="
                                         vertical-align: top;
                                         font-size: 14px; 
                                         font-weight:400;
@@ -5099,8 +4886,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         <td colspan="2" style="background-color: #C1BDBD;">${afterTaxTotalReportCharge.toFixed(2)}</td>
                                         
                                     </tr>`;
-    }
-    html += `<tr style="
+                                  }
+                                  html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="6"
                                           style="
@@ -5108,32 +4895,33 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
                                       </td>
                                   </tr>`;
-    if (metalExists) {
-      html += `<tr style="
+                          if(metalExists){
+                            html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Fine Metals : </td>
                                       <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${fine_metals.toFixed(2)} GM</td>
                                       <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
-    }
-    if (metalExists) {
-      html += `<tr style="
+                          }
+                          if(metalExists){
+                            html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Receive Fine Metal : </td>
                                       <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${receive_metal.toFixed(2)} GM</td>
                                       <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
-    }
-    if (metalExists) {
-      html += `<tr style="
+                          }
+                          if(metalExists){
+                            html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Rest : </td>
                                       <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${rest_metal.toFixed(2)} GM</td>
                                       <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
-    }
-
-    html += `   </tbody>
+                          }
+ 
+                                                  
+                          html += `   </tbody>
                                           </table>`;
   }
   html += `
@@ -5149,16 +4937,16 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 payments.length == 0
                                                   ? 240
                                                   : payments.length == 1
-                                                    ? 200
-                                                    : payments.length == 2
-                                                      ? 200
-                                                      : payments.length == 3
-                                                        ? 200
-                                                        : payments.length == 4
-                                                          ? 200
-                                                          : payments.length == 5
-                                                            ? 200
-                                                            : 200
+                                                  ? 200
+                                                  : payments.length == 2
+                                                  ? 200
+                                                  : payments.length == 3
+                                                  ? 200
+                                                  : payments.length == 4
+                                                  ? 200
+                                                  : payments.length == 5
+                                                  ? 200
+                                                  : 200
                                               }px">
                                               <div style="display:
                                                   table-cell; width:
@@ -5173,20 +4961,16 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                         payments.length == 0
                                                           ? 100
                                                           : payments.length == 1
-                                                            ? 130
-                                                            : payments.length ==
-                                                                2
-                                                              ? 120
-                                                              : payments.length ==
-                                                                  3
-                                                                ? 110
-                                                                : payments.length ==
-                                                                    4
-                                                                  ? 95
-                                                                  : payments.length ==
-                                                                      5
-                                                                    ? 80
-                                                                    : 180
+                                                          ? 130
+                                                          : payments.length == 2
+                                                          ? 120
+                                                          : payments.length == 3
+                                                          ? 110
+                                                          : payments.length == 4
+                                                          ? 95
+                                                          : payments.length == 5
+                                                          ? 80
+                                                          : 180
                                                       }px;
                                                   ">
                                                       <!--<div>
@@ -5263,19 +5047,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                               <td
                                                                   style="border-right:
                                                                   none; font-size: 12px;">${
-                                                                    payments[
-                                                                      i
-                                                                    ].payment_mode.toLowerCase() ==
-                                                                      "metal" &&
-                                                                    payments[i]
-                                                                      .weight !=
-                                                                      null
-                                                                      ? payments[
-                                                                          i
-                                                                        ].weight
-                                                                      : payments[
-                                                                          i
-                                                                        ].amount
+                                                                    payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight:payments[i].amount
                                                                   }</td>
                                                              
                                                           </tr>`;
@@ -5857,8 +5629,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
             purchaseData,
             payments,
           },
-          "Invoice pdf",
-        ),
+          "Invoice pdf"
+        )
       );
     })();
   } catch (error) {
@@ -6118,7 +5890,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">PURCHASE${purchaseData.is_approved == "3" ? " ON APPROVAL" : ""} ITEM LIST INVOICE</h1>
+                                      300;">PURCHASE${purchaseData.is_approved == "3"?" ON APPROVAL":""} ITEM LIST INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -6370,7 +6142,8 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                           </tr>
                                       </thead>
                                       <tbody>`;
-
+  
+  
   let totalGrossWeight = 0;
   let totalStoneWeight = 0;
   let totalGoldAmt = 0;
@@ -6386,22 +6159,21 @@ exports.downloadInvoiceItemList = async (req, res) => {
     let productAmt = 0;
     for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
       //grossWeight += parseFloat(purchaseData.products[i].total_weight);
-
-      if (
-        purchaseData.products[i].materials[x].unit_name.toUpperCase() != "GM"
-      ) {
-        stoneWeight += parseFloat(purchaseData.products[i].materials[x].weight);
-        stoneAmt += purchaseData.products[i].materials[x].material_cost
-          ? parseFloat(purchaseData.products[i].materials[x].material_cost)
-          : 0;
+      
+      if(purchaseData.products[i].materials[x].unit_name.toUpperCase() != "GM"){
+          stoneWeight += parseFloat(purchaseData.products[i].materials[x].weight);
+          stoneAmt += purchaseData.products[i].materials[x].material_cost
+              ? parseFloat(purchaseData.products[i].materials[x].material_cost)
+              : 0;
       } else {
         goldAmt += purchaseData.products[i].materials[x].material_cost
-          ? parseFloat(purchaseData.products[i].materials[x].material_cost)
-          : 0;
+              ? 
+                  parseFloat(purchaseData.products[i].materials[x].material_cost)
+              : 
+                  0;
       }
     }
-    productAmt =
-      goldAmt + stoneAmt + parseFloat(purchaseData.products[i].making_charge);
+    productAmt = goldAmt + stoneAmt + parseFloat(purchaseData.products[i].making_charge);
     totalGrossWeight += grossWeight;
     totalStoneWeight += stoneWeight;
     totalGoldAmt += goldAmt;
@@ -6486,7 +6258,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalGrossWeight,
+                                                            totalGrossWeight
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -6501,7 +6273,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalStoneWeight,
+                                                            totalStoneWeight
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -6516,7 +6288,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalGoldAmt,
+                                                            totalGoldAmt
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -6532,7 +6304,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalStoneAmt,
+                                                            totalStoneAmt
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -6547,7 +6319,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalMaterialAmt,
+                                                            totalMaterialAmt
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -6562,7 +6334,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalAmt,
+                                                            totalAmt
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -6597,8 +6369,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
               </html>`;
 
   try {
-    let file_path =
-      "public/invoices/" + purchaseData.invoice_number + "_item_list.pdf";
+    let file_path = "public/invoices/" + purchaseData.invoice_number + "_item_list.pdf";
     const options = { format: "A4" };
 
     (async () => {
@@ -6611,17 +6382,17 @@ exports.downloadInvoiceItemList = async (req, res) => {
       fs.writeFileSync(file_path, pdfBuffer);
       console.log("PDF generated successfully!");
 
-      res.send(
-        formatResponse(
-          {
-            file_name: purchaseData.invoice_number + "_item_list.pdf",
-            url: getFileAbsulatePathPDF(file_path),
-            html: html,
-            purchaseData,
-          },
-          "Invoice pdf",
-        ),
-      );
+        res.send(
+          formatResponse(
+            {
+              file_name: purchaseData.invoice_number + "_item_list.pdf",
+              url: getFileAbsulatePathPDF(file_path),
+              html : html,
+              purchaseData
+            },
+            "Invoice pdf"
+          )
+        );
     })();
   } catch (error) {
     return res
@@ -6980,7 +6751,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">PURCHASE${purchaseData.is_approved == "3" ? " ON APPROVAL" : ""} ITEM DETAILS INVOICE</h1>
+                                      300;">PURCHASE${purchaseData.is_approved == "3"?" ON APPROVAL":""} ITEM DETAILS INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -7256,12 +7027,10 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                     purchaseData.products[i]
                                                       .product_name
                                                   } - ${
-                                                    purchaseData.products[i]
-                                                      .product_code
-                                                      ? purchaseData.products[i]
-                                                          .product_code
-                                                      : ""
-                                                  }
+      purchaseData.products[i].product_code
+        ? purchaseData.products[i].product_code
+        : ""
+    }
                                               </td>
                                               <td style="text-align: left;
                                                   font-size: 11px;
@@ -7309,36 +7078,18 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                               .materials[x]
                                                               .material_name
                                                           } ${
-                                                            purchaseData
-                                                              .products[i]
-                                                              .materials[x]
-                                                              .pakka_weight
-                                                              ? removeCurrencyAndDecimalFromPrice(
-                                                                  purchaseData
-                                                                    .products[i]
-                                                                    .materials[
-                                                                    x
-                                                                  ]
-                                                                    .pakka_weight,
-                                                                )
-                                                              : removeCurrencyAndDecimalFromPrice(
-                                                                  purchaseData
-                                                                    .products[i]
-                                                                    .materials[
-                                                                    x
-                                                                  ].weight,
-                                                                )
-                                                          } ${
-                                                            purchaseData
-                                                              .products[i]
-                                                              .materials[x]
-                                                              .unit_name
-                                                          } x ${removeCurrencyAndDecimalFromPrice(
-                                                            purchaseData
-                                                              .products[i]
-                                                              .materials[x]
-                                                              .rate,
-                                                          )}
+            purchaseData.products[i].materials[x].pakka_weight
+              ? removeCurrencyAndDecimalFromPrice(
+                  purchaseData.products[i].materials[x].pakka_weight
+                )
+              : removeCurrencyAndDecimalFromPrice(
+                  purchaseData.products[i].materials[x].weight
+                )
+          } ${
+            purchaseData.products[i].materials[x].unit_name
+          } x ${removeCurrencyAndDecimalFromPrice(
+            purchaseData.products[i].materials[x].rate
+          )}
                                                       </span>
                                                       <!-- span
                                                           style="
@@ -7391,7 +7142,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                                 purchaseData
                                                                   .products[i]
                                                                   .materials[x]
-                                                                  .amount,
+                                                                  .amount
                                                               )}</span>
                                                       </div>
                                                   </div>`);
@@ -7411,13 +7162,11 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                     removeCurrencyAndDecimalFromPrice(
                                                       purchaseData.products[i]
                                                         .materials[x]
-                                                        .discount_percent,
-                                                    ),
+                                                        .discount_percent
+                                                    )
                                                   )}% ${removeCurrencyAndDecimalFromPrice(
-                                                    purchaseData.products[i]
-                                                      .materials[x]
-                                                      .discount_amount_display,
-                                                  )}
+          purchaseData.products[i].materials[x].discount_amount_display
+        )}
                                                 </span> 
                                                 <!--<span style="text-align:left; font-size:10px; font-weight:400;">${
                                                   purchaseData.products[i]
@@ -7439,7 +7188,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                       line-height:1;">${removeCurrencyAndDecimalFromPrice(
                                                         purchaseData.products[i]
                                                           .materials[x]
-                                                          .material_cost,
+                                                          .material_cost
                                                       )}</div>`);
     }
     html += `
@@ -7453,18 +7202,16 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
                                                     purchaseData.products[i]
-                                                      .making_charge,
+                                                      .making_charge
                                                   )}@${removeBlankZero(
-                                                    removeCurrencyAndDecimalFromPrice(
-                                                      purchaseData.products[i]
-                                                        .making_charge_discount,
-                                                    ),
-                                                  )}%=${removeBlankZero(
-                                                    removeCurrencyAndDecimalFromPrice(
-                                                      purchaseData.products[i]
-                                                        .total_making_charge_discount,
-                                                    ),
-                                                  )}
+      removeCurrencyAndDecimalFromPrice(
+        purchaseData.products[i].making_charge_discount
+      )
+    )}%=${removeBlankZero(
+      removeCurrencyAndDecimalFromPrice(
+        purchaseData.products[i].total_making_charge_discount
+      )
+    )}
                                               </td>
 
                                               <td style="text-align:left;
@@ -7476,7 +7223,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
                                                     purchaseData.products[i]
-                                                      .sub_price,
+                                                      .sub_price
                                                   )}
                                               </td>
                                               <td style="text-align:left;
@@ -7488,7 +7235,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
                                                     purchaseData.products[i]
-                                                      .total_discount_display,
+                                                      .total_discount_display
                                                   )}
                                               </td>
                                               <td style="text-align:left;
@@ -7500,7 +7247,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
                                                     purchaseData.products[i]
-                                                      .sub_total,
+                                                      .sub_total
                                                   )}
                                               </td>
                                               <td style="text-align:left;
@@ -7511,8 +7258,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   border-bottom: 1px solid
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
-                                                    purchaseData.products[i]
-                                                      .tax,
+                                                    purchaseData.products[i].tax
                                                   )}
                                               </td>
                                               <td style="text-align:left;
@@ -7524,7 +7270,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
                                                     purchaseData.products[i]
-                                                      .total_display,
+                                                      .total_display
                                                   )}
                                               </td>
 
@@ -7548,7 +7294,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalTagPriceDisplay,
+                                                            totalTagPriceDisplay
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -7564,7 +7310,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalSaveDisplay,
+                                                            totalSaveDisplay
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -7588,7 +7334,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                           <div><input
                                                               type="text"
                                                               value="${removeCurrencyAndDecimalFromPrice(
-                                                                purchaseData?.taxable_amount,
+                                                                purchaseData?.taxable_amount
                                                               )}"
                                                               style="width:
                                                               80px;"></div></h4>
@@ -7623,7 +7369,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              purchaseData?.cgst_tax,
+                                                              purchaseData?.cgst_tax
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -7656,7 +7402,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              purchaseData?.sgst_tax,
+                                                              purchaseData?.sgst_tax
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -7690,7 +7436,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              purchaseData?.igst_tax,
+                                                              purchaseData?.igst_tax
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -7725,7 +7471,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              purchaseData?.total_amount,
+                                                              purchaseData?.total_amount
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -7758,7 +7504,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              purchaseData?.discount,
+                                                              purchaseData?.discount
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -7791,7 +7537,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              purchaseData?.total_payable,
+                                                              purchaseData?.total_payable
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -7881,7 +7627,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              purchaseData?.paid_amount_display,
+                                                              purchaseData?.paid_amount_display
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -7936,7 +7682,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              purchaseData?.due_amount_display,
+                                                              purchaseData?.due_amount_display
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -8273,8 +8019,8 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
             purchaseData,
             payments,
           },
-          "Invoice pdf",
-        ),
+          "Invoice pdf"
+        )
       );
     })();
 
