@@ -20,9 +20,9 @@ const {
   arrayColumn,
   removeBlankZero,
   formatDateTime,
-  encodeForStorage, 
+  encodeForStorage,
   decodeFromStorage,
-  cleanInput
+  cleanInput,
 } = require("@helpers/helper");
 const {
   updateOrCreate,
@@ -42,8 +42,8 @@ const {
   isAdmin,
   getWalletBalance,
   getOwnUserSaleProducts,
-  getUserColumnValue, 
-  avlStockUserIdsNew
+  getUserColumnValue,
+  avlStockUserIdsNew,
 } = require("@library/common");
 const { getPaginationOptions } = require("@helpers/paginator");
 const { SaleCollection } = require("@resources/superadmin/SaleCollection");
@@ -142,11 +142,14 @@ exports.index = async (req, res) => {
       conditions.sale_by = userID;
     }
   }
-  
+
   /* check get the selected user legs ids */
   const userIds = await avlStockUserIdsNew(req);
-  console.log("sale_by userIds for sale list ::::::==================", userIds);
-  if(userIds.length > 0 && is_approval){
+  console.log(
+    "sale_by userIds for sale list ::::::==================",
+    userIds,
+  );
+  if (userIds.length > 0 && is_approval) {
     conditions.sale_by = { [Op.in]: userIds };
   }
 
@@ -163,9 +166,19 @@ exports.index = async (req, res) => {
     ownUserIds.push(userID);
     conditions.sale_by = { [Op.in]: ownUserIds };
   }
+
+  const superAdminId = await getSuperAdminId();
+  if (
+    isSuperAdmin(req) ||
+    (!isEmpty(user_id) && Number(user_id) === Number(superAdminId))
+  ) {
+    conditions.sale_by = superAdminId;
+    delete conditions.user_id;
+  }
+
   console.log(
     "this the sales data in the cales controller111 =====",
-    conditions
+    conditions,
   );
   conditions = {
     ...conditions,
@@ -174,7 +187,7 @@ exports.index = async (req, res) => {
 
   console.log(
     "this the sales data in the cales controller222 =====",
-    conditions
+    conditions,
   );
 
   const paginatorOptions = getPaginationOptions(page, limit);
@@ -199,7 +212,7 @@ exports.index = async (req, res) => {
     .then(async (data) => {
       console.log(
         "this the transfer 0 data in the cales controller =====",
-        data.count
+        data.count,
       );
 
       let result = {
@@ -217,11 +230,23 @@ exports.index = async (req, res) => {
  * Retrive purchase txn ledger
  */
 exports.txnLedger = async (req, res) => {
-  let { page, limit, user_id, search, date_from, date_to, status, is_assigned, is_approval } = req.query;
+  let {
+    page,
+    limit,
+    user_id,
+    search,
+    date_from,
+    date_to,
+    status,
+    is_assigned,
+    is_approval,
+  } = req.query;
   is_assigned = is_assigned === undefined ? false : true;
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let conditions = { is_assigned: is_assigned }; /* , is_approval: is_approval */
+  let conditions = {
+    is_assigned: is_assigned,
+  }; /* , is_approval: is_approval */
   if (status !== undefined && status != "") {
     conditions.is_approved = status;
   }
@@ -229,7 +254,10 @@ exports.txnLedger = async (req, res) => {
   if (!isEmpty(user_id)) {
     conditions.user_id = user_id;
   }
-  if (!isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")) {
+  if (
+    !isEmpty(search) &&
+    !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")
+  ) {
     conditions[Op.or] = [
       { invoice_number: { [Op.like]: `%${search}%` } },
       { notes: { [Op.like]: `%${search}%` } },
@@ -251,41 +279,46 @@ exports.txnLedger = async (req, res) => {
           model: PaymentModel,
           as: "payments",
           required: false,
-          where: !isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")
-            ? {
-                [Op.or]: [
-                  { amount: { [Op.like]: `%${search}%` } },
-                  { payment_mode: { [Op.like]: `%${search}%` } },
-                  { notes: { [Op.like]: `%${search}%` } },
-                ],
-              }
-            : undefined,
+          where:
+            !isEmpty(search) &&
+            !(
+              search.toLowerCase() == "sale" ||
+              search.toLowerCase() == "payment"
+            )
+              ? {
+                  [Op.or]: [
+                    { amount: { [Op.like]: `%${search}%` } },
+                    { payment_mode: { [Op.like]: `%${search}%` } },
+                    { notes: { [Op.like]: `%${search}%` } },
+                  ],
+                }
+              : undefined,
         },
       ],
       where: conditions,
       order: [["invoice_date", "DESC"]],
       offset: paginatorOptions.offset,
-      limit: paginatorOptions.limit
+      limit: paginatorOptions.limit,
     });
 
     // Flatten sales and payments into a single table structure
     let tableData = [];
     allSales.forEach((sale, index) => {
-      let approve_status = 'Pending';
-      if(sale.is_approved == 1){
-          approve_status = "Accepted";
-      }else if(sale.is_approved == 2){
-          approve_status = "Declined";
-      }else if(sale.is_approved == 3){
-          approve_status = "On Approval";
-      }else if(sale.is_approved == 4){
-          approve_status = "Transfer To Sale";
+      let approve_status = "Pending";
+      if (sale.is_approved == 1) {
+        approve_status = "Accepted";
+      } else if (sale.is_approved == 2) {
+        approve_status = "Declined";
+      } else if (sale.is_approved == 3) {
+        approve_status = "On Approval";
+      } else if (sale.is_approved == 4) {
+        approve_status = "Transfer To Sale";
       }
 
-      if(sale.status == "returned"){
-          approve_status = "Returned";
-      }else if(sale.status == "return_pending"){
-          approve_status = "Return Pending";
+      if (sale.status == "returned") {
+        approve_status = "Returned";
+      } else if (sale.status == "return_pending") {
+        approve_status = "Return Pending";
       }
 
       // Add Purchase row
@@ -297,14 +330,14 @@ exports.txnLedger = async (req, res) => {
         remarks: sale.notes || "-",
         purpose: "",
         bill_amount: displayAmount(sale.bill_amount),
-        txn_amount : parseFloat(sale.bill_amount),
+        txn_amount: parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
         type: "Sale",
         txn_type: "",
         is_approved: sale.is_approved,
         approve_status: approve_status,
-        is_advance: 0
+        is_advance: 0,
       });
 
       // Add related payment rows
@@ -318,7 +351,7 @@ exports.txnLedger = async (req, res) => {
           purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
-          txn_amount : parseFloat(pay.amount),
+          txn_amount: parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
           type: "Payment",
           txn_type: pay.type,
@@ -332,37 +365,51 @@ exports.txnLedger = async (req, res) => {
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
-      return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
+      console.log(
+        "----------a.invoice_number,b.invoice_number----------",
+        a.invoice_number.split("").pop(),
+        b.invoice_number.split("").pop(),
+      );
+      return (
+        b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop()
+      );
     });
 
-    if(!isEmpty(search) && (search.toLowerCase() == "sale" || search.toLowerCase() == "payment")){
-      tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
+    if (
+      !isEmpty(search) &&
+      (search.toLowerCase() == "sale" || search.toLowerCase() == "payment")
+    ) {
+      tableData = tableData.filter(
+        (table) => table.type.toLowerCase() == search.toLowerCase(),
+      );
     }
 
     console.log("tableData: ", tableData);
 
-    let temp_invoice_no = '';
+    let temp_invoice_no = "";
     let temp_invoice_index = -1;
     let temp_balance = 0;
-    for(let i = 0; i < tableData.length; i++){
+    for (let i = 0; i < tableData.length; i++) {
       let tx = tableData[i];
 
-      if(temp_invoice_no == ""){
+      if (temp_invoice_no == "") {
         temp_invoice_no = tx.invoice_number;
         temp_invoice_index = i;
-      } else if(temp_invoice_no != "" && temp_invoice_no != tx.invoice_number){
+      } else if (
+        temp_invoice_no != "" &&
+        temp_invoice_no != tx.invoice_number
+      ) {
         tableData[temp_invoice_index].txn_amount = temp_balance;
         //tableData[temp_invoice_index].payment_amount = displayAmount(temp_balance);
         temp_invoice_no = tx.invoice_number;
         temp_invoice_index = i;
       }
 
-      if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
+      if (tx.type.toLowerCase() == "payment" && tx.txn_type == "credit") {
         //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
         temp_balance -= tx.txn_amount;
-        temp_balance = temp_balance > 0?temp_balance:0;
-      } else if(tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
+        temp_balance = temp_balance > 0 ? temp_balance : 0;
+      } else if (tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
         temp_balance = tx.txn_amount;
       }
       //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
@@ -374,24 +421,39 @@ exports.txnLedger = async (req, res) => {
     let runningBalance = 0;
     let tempAdvanceDebitInvoice_idx = -1;
     let hasAdvanceDebit = false;
-    const passbook = tableData.reverse().map((tx, index) => {
-      if(tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index){
-        tempAdvanceDebitInvoice_idx = -1;
-      }
-      if (tx.txn_type == '' && tx.is_approved != 2) {
-        runningBalance += tx.txn_amount;
-      } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
-        runningBalance += tx.txn_amount;
-      } else if (tx.txn_type == "debit" && tx.is_advance) {
-        runningBalance -= tx.txn_amount;
-        tempAdvanceDebitInvoice_idx = index,
-        hasAdvanceDebit = true;
-      } else if(tx.txn_type == "debit"){
-        runningBalance -= tx.txn_amount;
-      }
-      
-      return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
-    }).reverse();
+    const passbook = tableData
+      .reverse()
+      .map((tx, index) => {
+        if (
+          tempAdvanceDebitInvoice_idx > -1 &&
+          tempAdvanceDebitInvoice_idx + 1 != index
+        ) {
+          tempAdvanceDebitInvoice_idx = -1;
+        }
+        if (tx.txn_type == "" && tx.is_approved != 2) {
+          runningBalance += tx.txn_amount;
+        } else if (
+          tx.txn_type == "credit" &&
+          (tempAdvanceDebitInvoice_idx == -1 ||
+            (tempAdvanceDebitInvoice_idx > -1 &&
+              tempAdvanceDebitInvoice_idx + 1 != index))
+        ) {
+          runningBalance += tx.txn_amount;
+        } else if (tx.txn_type == "debit" && tx.is_advance) {
+          runningBalance -= tx.txn_amount;
+          ((tempAdvanceDebitInvoice_idx = index), (hasAdvanceDebit = true));
+        } else if (tx.txn_type == "debit") {
+          runningBalance -= tx.txn_amount;
+        }
+
+        return {
+          ...tx,
+          txn_date: formatDateTime(tx.txn_date, 8),
+          sl_no: index + 1,
+          balance: displayAmount(runningBalance),
+        };
+      })
+      .reverse();
 
     console.log("----------passbook----------", passbook);
 
@@ -404,27 +466,42 @@ exports.txnLedger = async (req, res) => {
     console.error("Error:", err);
     res.status(errorCodes.default).send(formatErrorResponse(err));
   }
-}
+};
 
 /**
  * Retrive purchase txn ledger pdf
  */
 exports.downloadTxnLedger = async (req, res) => {
-  let { page, limit, user_id, search, date_from, date_to, status, is_assigned, is_approval } = req.query;
+  let {
+    page,
+    limit,
+    user_id,
+    search,
+    date_from,
+    date_to,
+    status,
+    is_assigned,
+    is_approval,
+  } = req.query;
   is_assigned = is_assigned === undefined ? false : true;
   is_approval = is_approval === undefined ? false : true;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   let user = await UserModel.findByPk(userID);
-  let conditions = { is_assigned: is_assigned }; /* , is_approval: is_approval */
+  let conditions = {
+    is_assigned: is_assigned,
+  }; /* , is_approval: is_approval */
   if (status !== undefined && status != "") {
     conditions.is_approved = status;
   }
   conditions.sale_by = userID;
-  
+
   if (!isEmpty(user_id)) {
     conditions.user_id = user_id;
   }
-  if (!isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")) {
+  if (
+    !isEmpty(search) &&
+    !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")
+  ) {
     conditions[Op.or] = [
       { invoice_number: { [Op.like]: `%${search}%` } },
       { notes: { [Op.like]: `%${search}%` } },
@@ -446,15 +523,20 @@ exports.downloadTxnLedger = async (req, res) => {
           model: PaymentModel,
           as: "payments",
           required: false,
-          where: !isEmpty(search) && !(search.toLowerCase() == "sale" || search.toLowerCase() == "payment")
-            ? {
-                [Op.or]: [
-                  { amount: { [Op.like]: `%${search}%` } },
-                  { payment_mode: { [Op.like]: `%${search}%` } },
-                  { notes: { [Op.like]: `%${search}%` } },
-                ],
-              }
-            : undefined,
+          where:
+            !isEmpty(search) &&
+            !(
+              search.toLowerCase() == "sale" ||
+              search.toLowerCase() == "payment"
+            )
+              ? {
+                  [Op.or]: [
+                    { amount: { [Op.like]: `%${search}%` } },
+                    { payment_mode: { [Op.like]: `%${search}%` } },
+                    { notes: { [Op.like]: `%${search}%` } },
+                  ],
+                }
+              : undefined,
         },
       ],
       where: conditions,
@@ -466,21 +548,21 @@ exports.downloadTxnLedger = async (req, res) => {
     // Flatten sales and payments into a single table structure
     let tableData = [];
     allSales.forEach((sale, index) => {
-      let approve_status = 'Pending';
-      if(sale.is_approved == 1){
-          approve_status = "Accepted";
-      }else if(sale.is_approved == 2){
-          approve_status = "Declined";
-      }else if(sale.is_approved == 3){
-          approve_status = "On Approval";
-      }else if(sale.is_approved == 4){
-          approve_status = "Transfer To Sale";
+      let approve_status = "Pending";
+      if (sale.is_approved == 1) {
+        approve_status = "Accepted";
+      } else if (sale.is_approved == 2) {
+        approve_status = "Declined";
+      } else if (sale.is_approved == 3) {
+        approve_status = "On Approval";
+      } else if (sale.is_approved == 4) {
+        approve_status = "Transfer To Sale";
       }
 
-      if(sale.status == "returned"){
-          approve_status = "Returned";
-      }else if(sale.status == "return_pending"){
-          approve_status = "Return Pending";
+      if (sale.status == "returned") {
+        approve_status = "Returned";
+      } else if (sale.status == "return_pending") {
+        approve_status = "Return Pending";
       }
 
       // Add Purchase row
@@ -492,14 +574,14 @@ exports.downloadTxnLedger = async (req, res) => {
         remarks: sale.notes || "-",
         purpose: "",
         bill_amount: displayAmount(sale.bill_amount),
-        txn_amount : parseFloat(sale.bill_amount),
+        txn_amount: parseFloat(sale.bill_amount),
         payment_amount: null,
         payment_mode: sale.payment_mode || "-",
         type: "Sale",
         txn_type: "",
         is_approved: sale.is_approved,
         approve_status: approve_status,
-        is_advance: 0
+        is_advance: 0,
       });
 
       // Add related payment rows
@@ -513,7 +595,7 @@ exports.downloadTxnLedger = async (req, res) => {
           purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
-          txn_amount : parseFloat(pay.amount),
+          txn_amount: parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
           type: "Payment",
           txn_type: pay.type,
@@ -527,37 +609,51 @@ exports.downloadTxnLedger = async (req, res) => {
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
-      return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
+      console.log(
+        "----------a.invoice_number,b.invoice_number----------",
+        a.invoice_number.split("").pop(),
+        b.invoice_number.split("").pop(),
+      );
+      return (
+        b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop()
+      );
     });
 
-    if(!isEmpty(search) && (search.toLowerCase() == "sale" || search.toLowerCase() == "payment")){
-      tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
+    if (
+      !isEmpty(search) &&
+      (search.toLowerCase() == "sale" || search.toLowerCase() == "payment")
+    ) {
+      tableData = tableData.filter(
+        (table) => table.type.toLowerCase() == search.toLowerCase(),
+      );
     }
 
     console.log("tableData: ", tableData);
 
-    let temp_invoice_no = '';
+    let temp_invoice_no = "";
     let temp_invoice_index = -1;
     let temp_balance = 0;
-    for(let i = 0; i < tableData.length; i++){
+    for (let i = 0; i < tableData.length; i++) {
       let tx = tableData[i];
 
-      if(temp_invoice_no == ""){
+      if (temp_invoice_no == "") {
         temp_invoice_no = tx.invoice_number;
         temp_invoice_index = i;
-      } else if(temp_invoice_no != "" && temp_invoice_no != tx.invoice_number){
+      } else if (
+        temp_invoice_no != "" &&
+        temp_invoice_no != tx.invoice_number
+      ) {
         tableData[temp_invoice_index].txn_amount = temp_balance;
         //tableData[temp_invoice_index].payment_amount = displayAmount(temp_balance);
         temp_invoice_no = tx.invoice_number;
         temp_invoice_index = i;
       }
 
-      if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
+      if (tx.type.toLowerCase() == "payment" && tx.txn_type == "credit") {
         //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
         temp_balance -= tx.txn_amount;
-        temp_balance = temp_balance > 0?temp_balance:0;
-      } else if(tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
+        temp_balance = temp_balance > 0 ? temp_balance : 0;
+      } else if (tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
         temp_balance = tx.txn_amount;
       }
       //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
@@ -569,24 +665,39 @@ exports.downloadTxnLedger = async (req, res) => {
     let runningBalance = 0;
     let tempAdvanceDebitInvoice_idx = -1;
     let hasAdvanceDebit = false;
-    const passbook = tableData.reverse().map((tx, index) => {
-      if(tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index){
-        tempAdvanceDebitInvoice_idx = -1;
-      }
-      if (tx.txn_type == '' && tx.is_approved != 2) {
-        runningBalance += tx.txn_amount;
-      } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
-        runningBalance += tx.txn_amount;
-      } else if (tx.txn_type == "debit" && tx.is_advance) {
-        runningBalance -= tx.txn_amount;
-        tempAdvanceDebitInvoice_idx = index,
-        hasAdvanceDebit = true;
-      } else if(tx.txn_type == "debit"){
-        runningBalance -= tx.txn_amount;
-      }
-      
-      return { ...tx, txn_date: formatDateTime(tx.txn_date, 8), sl_no: index + 1, balance: displayAmount(runningBalance) };
-    }).reverse();
+    const passbook = tableData
+      .reverse()
+      .map((tx, index) => {
+        if (
+          tempAdvanceDebitInvoice_idx > -1 &&
+          tempAdvanceDebitInvoice_idx + 1 != index
+        ) {
+          tempAdvanceDebitInvoice_idx = -1;
+        }
+        if (tx.txn_type == "" && tx.is_approved != 2) {
+          runningBalance += tx.txn_amount;
+        } else if (
+          tx.txn_type == "credit" &&
+          (tempAdvanceDebitInvoice_idx == -1 ||
+            (tempAdvanceDebitInvoice_idx > -1 &&
+              tempAdvanceDebitInvoice_idx + 1 != index))
+        ) {
+          runningBalance += tx.txn_amount;
+        } else if (tx.txn_type == "debit" && tx.is_advance) {
+          runningBalance -= tx.txn_amount;
+          ((tempAdvanceDebitInvoice_idx = index), (hasAdvanceDebit = true));
+        } else if (tx.txn_type == "debit") {
+          runningBalance -= tx.txn_amount;
+        }
+
+        return {
+          ...tx,
+          txn_date: formatDateTime(tx.txn_date, 8),
+          sl_no: index + 1,
+          balance: displayAmount(runningBalance),
+        };
+      })
+      .reverse();
 
     console.log("----------passbook----------", passbook);
 
@@ -853,7 +964,7 @@ exports.downloadTxnLedger = async (req, res) => {
                                             <!-- <tr style="background-color: #fff;">
                                             <td style="">
                                                 <span style="font-weight: 600;"> GST
-                                                    IN ${user.gst != null?user.gst:""} </span>
+                                                    IN ${user.gst != null ? user.gst : ""} </span>
                                             </td>
                                             <td style="">
                                                 Ad:
@@ -893,7 +1004,7 @@ exports.downloadTxnLedger = async (req, res) => {
                                                                     style="font-weight:
                                                                     600; font-size:
                                                                     12px; margin:
-                                                                    0;">${user.gst != null?user.gst:""}</span></li>
+                                                                    0;">${user.gst != null ? user.gst : ""}</span></li>
                                                             <li><span
                                                                     style="font-weight:
                                                                     400; font-size:
@@ -931,7 +1042,7 @@ exports.downloadTxnLedger = async (req, res) => {
                                                                     style="font-weight:
                                                                     500; font-size:
                                                                     12px; margin:
-                                                                    0;">${user.address != null?user.address:""}</span></li>
+                                                                    0;">${user.address != null ? user.address : ""}</span></li>
                                                           
                                                             <li><span
                                                                     style="font-weight:
@@ -954,7 +1065,7 @@ exports.downloadTxnLedger = async (req, res) => {
                                                                     style="font-weight:
                                                                     500; font-size:
                                                                     12px; margin:
-                                                                    0;">${user.city != null?user.city:""}</span></li>
+                                                                    0;">${user.city != null ? user.city : ""}</span></li>
                                                             <li><span
                                                                     style="font-weight:
                                                                     400; font-size:
@@ -965,7 +1076,7 @@ exports.downloadTxnLedger = async (req, res) => {
                                                                     style="font-weight:
                                                                     500; font-size:
                                                                     12px; margin:
-                                                                    0;">${user.pincode != null?user.pincode:""}</span></li>
+                                                                    0;">${user.pincode != null ? user.pincode : ""}</span></li>
                                                                     </ul>
                                                     </div>
                                                 </td>
@@ -1026,9 +1137,7 @@ exports.downloadTxnLedger = async (req, res) => {
                                       <td style="text-align: left;
                                           font-size: 11px;
                                           font-weight: 400;font-size: 10px;">
-                                          ${
-                                            passbook[i].txn_date
-                                          }
+                                          ${passbook[i].txn_date}
                                       </td>
                                       <td style="text-align: left;
                                           font-size: 11px;
@@ -1038,77 +1147,59 @@ exports.downloadTxnLedger = async (req, res) => {
                                       <td style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
-                                          ${
-                                            passbook[i]
-                                              .remarks
-                                          }
+                                          ${passbook[i].remarks}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
+                                          ${passbook[i].purpose}
+                                      </td>
+                                      <td  style="text-align:
+                                          left; font-size: 11px;
+                                          font-weight: 400;">
                                           ${
-                                            passbook[i]
-                                              .purpose
+                                            passbook[i].bill_amount != null
+                                              ? passbook[i].bill_amount
+                                              : ""
                                           }
                                       </td>
                                       <td  style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
                                           ${
-                                            passbook[i]
-                                              .bill_amount != null?passbook[i]
-                                              .bill_amount:""
+                                            passbook[i].payment_amount != null
+                                              ? passbook[i].payment_amount
+                                              : ""
                                           }
                                       </td>
                                       <td  style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
-                                          ${
-                                            passbook[i]
-                                              .payment_amount != null?passbook[i]
-                                              .payment_amount:""
-                                          }
-                                      </td>
-                                      <td  style="text-align:
-                                          left; font-size: 11px;
-                                          font-weight: 400;">
-                                          ${
-                                            passbook[i]
-                                              .payment_mode
-                                          }
+                                          ${passbook[i].payment_mode}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
                                           ${
-                                            passbook[i]
-                                              .type
-                                          }${passbook[i].is_advance?"(Advance)":""}
+                                            passbook[i].type
+                                          }${passbook[i].is_advance ? "(Advance)" : ""}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
-                                          ${
-                                            passbook[i]
-                                              .approve_status
-                                          }
+                                          ${passbook[i].approve_status}
                                       </td>
                                       <td style="text-align:
                                           left; font-size: 11px;
                                           font-weight: 400;">
-                                          ${
-                                            passbook[i]
-                                              .balance
-                                          }
+                                          ${passbook[i].balance}
                                       </td>
-                                  </tr>`
-                                  
+                                  </tr>`;
       }
       html += `
                                       </tbody>
                                   </table>`;
-    } 
-    
+    }
 
     html += `
                                             <!-- Footer -->
@@ -1124,9 +1215,12 @@ exports.downloadTxnLedger = async (req, res) => {
                 </html>`;
 
     try {
-      let filename = user.name.replace(" ", "_") + "_" + (new Date().getTime()) + "_ledger.pdf";
-      let file_path =
-        "public/sales/" + filename ;
+      let filename =
+        user.name.replace(" ", "_") +
+        "_" +
+        new Date().getTime() +
+        "_ledger.pdf";
+      let file_path = "public/sales/" + filename;
       const options = { format: "A4" };
 
       (async () => {
@@ -1147,8 +1241,8 @@ exports.downloadTxnLedger = async (req, res) => {
               items: passbook,
               total: passbook.length,
             },
-            "Ledger pdf"
-          )
+            "Ledger pdf",
+          ),
         );
       })();
     } catch (error) {
@@ -1160,7 +1254,7 @@ exports.downloadTxnLedger = async (req, res) => {
     console.error("Error:", err);
     res.status(errorCodes.default).send(formatErrorResponse(err));
   }
-}
+};
 
 /**
  * Store sale
@@ -1170,11 +1264,11 @@ exports.downloadTxnLedger = async (req, res) => {
  */
 exports.store = async (req, res) => {
   let data = req.body;
-  console.log("sale store payload : ", data); 
-  let reportCharge = await ReportChargeModel.findAll({ 
-    order:[['amount', 'ASC']],
-    where: {}
-  })
+  console.log("sale store payload : ", data);
+  let reportCharge = await ReportChargeModel.findAll({
+    order: [["amount", "ASC"]],
+    where: {},
+  });
   reportCharge = await ReportChargeCollection(reportCharge);
 
   if (!isEmpty(data.invoice_number)) {
@@ -1205,7 +1299,7 @@ exports.store = async (req, res) => {
       return res
         .status(errorCodes.default)
         .send(
-          formatErrorResponse("Settlement date should be maximum 30 days.")
+          formatErrorResponse("Settlement date should be maximum 30 days."),
         );
     }
   }
@@ -1222,7 +1316,7 @@ exports.store = async (req, res) => {
     //const trans = await sequelize.transaction(async (t) => {
     //upload banner
     let image = null;
-    if(data.image_file && data.image_file != ""){
+    if (data.image_file && data.image_file != "") {
       let uploadResult = await base64FileUpload(data.image_file, "sales");
       if (uploadResult) {
         image = uploadResult.path;
@@ -1259,16 +1353,16 @@ exports.store = async (req, res) => {
       is_approved = 1; // customer
     }
 
-    if(data.already_paid_amount && data.already_paid_amount > 0){
+    if (data.already_paid_amount && data.already_paid_amount > 0) {
       paid_amount = priceFormat(
-          paid_amount + parseFloat(data.already_paid_amount)
-        );
+        paid_amount + parseFloat(data.already_paid_amount),
+      );
     }
 
     if (data.pay_from_advance) {
       if (parseFloat(data.total_payable) >= parseFloat(data.advance_amount)) {
         paid_amount = priceFormat(
-          paid_amount + parseFloat(data.advance_amount)
+          paid_amount + parseFloat(data.advance_amount),
         );
       } else {
         paid_amount = parseFloat(data.total_payable);
@@ -1326,7 +1420,7 @@ exports.store = async (req, res) => {
         user_id: data.user_id,
         invoice_number: invoice_number,
         invoice_date: moment(data.invoice_date, "MM/DD/YYYY").format(
-          "YYYY-MM-DD"
+          "YYYY-MM-DD",
         ),
         notes: data.notes,
         payment_mode: data.payment_mode,
@@ -1375,10 +1469,10 @@ exports.store = async (req, res) => {
         total_discount: priceFormat(thisItem.total_discount),
         rate: priceFormat(thisItem.rate),
         making_charge_discount: priceFormat(
-          thisItem.making_charge_discount_percent
+          thisItem.making_charge_discount_percent,
         ),
         making_charge_discount_amount: priceFormat(
-          thisItem.making_charge_discount_amount
+          thisItem.making_charge_discount_amount,
         ),
         tax_info: thisItem.tax_info ? JSON.stringify(thisItem.tax_info) : null,
         making_charge_discount_percent: thisItem.making_charge_discount_percent,
@@ -1393,7 +1487,7 @@ exports.store = async (req, res) => {
       console.log("sale product create : ", thisObj);
       let saleProduct = await SaleProductModel.create(thisObj);
       let product = await ProductModel.findByPk(thisItem.product_id);
-      
+
       let sale_product_id = null;
       if ("sale_product_id" in thisItem && !isEmpty(thisItem.sale_product_id)) {
         sale_product_id = thisItem.sale_product_id;
@@ -1408,7 +1502,7 @@ exports.store = async (req, res) => {
             rate: priceFormat(thisItem.total),
             making_charge: priceFormat(thisItem.making_charge),
             making_charge_discount_amount: priceFormat(
-              thisItem.making_charge_discount_amount
+              thisItem.making_charge_discount_amount,
             ),
             making_charge_discount_percent:
               thisItem.making_charge_discount_percent,
@@ -1416,13 +1510,13 @@ exports.store = async (req, res) => {
             sub_price: priceFormat(thisItem.sub_price),
             total: priceFormat(thisItem.total),
             price_without_tax: priceFormat(
-              priceFormat(thisObj.total) - priceFormat(thisObj.total_tax)
+              priceFormat(thisObj.total) - priceFormat(thisObj.total_tax),
             ),
             igst: priceFormat(thisItem.igst_tax),
             cgst: priceFormat(thisItem.cgst_tax),
             sgst: priceFormat(thisItem.sgst_tax),
           },
-          { where: { id: thisObj.order_product_id } }
+          { where: { id: thisObj.order_product_id } },
         );
       }
 
@@ -1465,9 +1559,16 @@ exports.store = async (req, res) => {
       //}
       console.log("remove stock : ", thisItem.stock_id);
       console.log("thisItem.certificate_no : ", thisItem.certificate_no);
-      console.log("!isEmpty(thisItem.certificate_no) : ", !isEmpty(thisItem.certificate_no));
+      console.log(
+        "!isEmpty(thisItem.certificate_no) : ",
+        !isEmpty(thisItem.certificate_no),
+      );
       //remove stock
-      if (isEmpty(sale_product_id) && product.type != "material" && !isEmpty(thisItem.certificate_no)) {
+      if (
+        isEmpty(sale_product_id) &&
+        product.type != "material" &&
+        !isEmpty(thisItem.certificate_no)
+      ) {
         console.log("removed !");
         await StockModel.destroy({ where: { id: thisItem.stock_id } });
       }
@@ -1517,7 +1618,10 @@ exports.store = async (req, res) => {
          * remove from stock materials
          */
         if (isEmpty(sale_product_id)) {
-          if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
+          if (
+            product.type == "material" ||
+            (product.type != "material" && isEmpty(thisItem.certificate_no))
+          ) {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 material_id: thisItem.materials[x].material_id,
@@ -1530,15 +1634,20 @@ exports.store = async (req, res) => {
                 {
                   weight: weightFormat(
                     parseFloat(stockMaterial.weight) -
-                      weightFormat(thisItem.materials[x].weight)
+                      weightFormat(thisItem.materials[x].weight),
                   ),
                   quantity:
                     parseFloat(stockMaterial.quantity) -
                     parseFloat(thisItem.materials[x].quantity),
                 },
-                { where: { id: stockMaterial.id } }
+                { where: { id: stockMaterial.id } },
               );
-              console.log("stockMaterial.weight : ", parseFloat(stockMaterial.weight), " - thisItem.materials[x].weight = ",thisItem.materials[x].weight);
+              console.log(
+                "stockMaterial.weight : ",
+                parseFloat(stockMaterial.weight),
+                " - thisItem.materials[x].weight = ",
+                thisItem.materials[x].weight,
+              );
               if (
                 parseFloat(stockMaterial.weight) -
                   parseFloat(thisItem.materials[x].weight) <=
@@ -1560,7 +1669,7 @@ exports.store = async (req, res) => {
                         parseFloat(stock.total_weight) -
                         weightFormat(thisItem.total_weight),
                     },
-                    { where: { id: thisItem.stock_id } }
+                    { where: { id: thisItem.stock_id } },
                   );
                 }
               }
@@ -1647,7 +1756,7 @@ exports.store = async (req, res) => {
         {
           invoice_number: invoice_number,
         },
-        { where: { id: sale.id } }
+        { where: { id: sale.id } },
       );
     }
 
@@ -1662,11 +1771,9 @@ exports.store = async (req, res) => {
           invoice_number: purchase_invoice_number,
           req_data: req_data_for_purchase,
         },
-        { where: { id: purchase.id } }
+        { where: { id: purchase.id } },
       );
     }
-
-    
 
     //insert into payment table
     if (!data.is_assigned && priceFormat(data.paid_amount) > 0) {
@@ -1726,15 +1833,16 @@ exports.store = async (req, res) => {
 
     //if paid from advance amount
     if (parseFloat(data.advance_amount) > 0 && data.pay_from_advance) {
-      let theDebitAmount = parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
+      let theDebitAmount =
+        parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
           ? parseFloat(data.advance_amount)
           : parseFloat(data.total_payable);
 
       let thisCreditAmnt =
         parseFloat(data.total_payable) >= parseFloat(data.advance_amount)
-          ? 0.00
+          ? 0.0
           : priceFormat(
-              parseFloat(data.advance_amount) - parseFloat(data.total_payable)
+              parseFloat(data.advance_amount) - parseFloat(data.total_payable),
             );
 
       /* debit advance amount */
@@ -1790,7 +1898,7 @@ exports.store = async (req, res) => {
         {
           status: "delivered",
         },
-        { where: { id: data.order_id } }
+        { where: { id: data.order_id } },
       );
     }
 
@@ -1801,7 +1909,7 @@ exports.store = async (req, res) => {
           sub_total: sale.total_amount,
           total_amount: sale.total_payable,
         },
-        { where: { id: data.order_id } }
+        { where: { id: data.order_id } },
       );
     }
 
@@ -1864,30 +1972,30 @@ exports.store = async (req, res) => {
             is_approved: 4,
             accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
           },
-          { where: { id: saleApproval.id } }
+          { where: { id: saleApproval.id } },
         );
-        
+
         /* check if purchase on approval record exists */
         let purchaseOnApproval = await PurchaseModel.findOne({
-          where: { sale_id: saleApproval.id }
+          where: { sale_id: saleApproval.id },
         });
         /* update status only for purchase on approval if sale on approval change to sale */
-        if(!isEmpty(purchaseOnApproval)){
+        if (!isEmpty(purchaseOnApproval)) {
           await PurchaseModel.update(
             {
               is_approved: 4,
               accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
             },
-            { where: { id: purchaseOnApproval.id } }
+            { where: { id: purchaseOnApproval.id } },
           );
         }
-        
+
         console.log("saleOnApproval & purchaseOnApproval updated : ", {
-            is_approved: 4,
-            accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
-          });
+          is_approved: 4,
+          accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
+        });
         let parentUserID = userID; //isSuperAdmin(req) ? null : req.userId;
-        console.log("parentUserId : ",parentUserID);
+        console.log("parentUserId : ", parentUserID);
         console.log("saleProductIds : ", saleProductIds);
         for (let i = 0; i < saleApproval.saleProducts.length; i++) {
           let thisItem = saleApproval.saleProducts[i];
@@ -1897,7 +2005,10 @@ exports.store = async (req, res) => {
 
           let product = await ProductModel.findByPk(thisItem.product_id);
           let stock = null;
-          if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
+          if (
+            product.type == "material" ||
+            (product.type != "material" && isEmpty(thisItem.certificate_no))
+          ) {
             let quantity = 0;
             for (let x = 0; x < thisItem.saleMaterials.length; x++) {
               quantity += thisItem.saleMaterials[x].quantity
@@ -1919,7 +2030,7 @@ exports.store = async (req, res) => {
                 purity_id: thisItem.saleMaterials[0].purity_id,
               },
               null,
-              ["quantity", "total_weight"]
+              ["quantity", "total_weight"],
             );
             stock = result.item;
           } else {
@@ -1934,7 +2045,7 @@ exports.store = async (req, res) => {
               user_id: parentUserID,
             });
           }
-          console.log("stock created : ",stock.id);
+          console.log("stock created : ", stock.id);
           for (let x = 0; x < thisItem.saleMaterials.length; x++) {
             let saleMaterial = thisItem.saleMaterials[x];
             /**
@@ -1942,9 +2053,12 @@ exports.store = async (req, res) => {
              */
             let weight_in_gram = convertUnitToGram(
               saleMaterial.unit.name,
-              saleMaterial.weight
+              saleMaterial.weight,
             );
-            if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
+            if (
+              product.type == "material" ||
+              (product.type != "material" && isEmpty(thisItem.certificate_no))
+            ) {
               let stockMaterial = await StockMaterialModel.findOne({
                 where: {
                   stock_id: stock.id,
@@ -1961,18 +2075,18 @@ exports.store = async (req, res) => {
                   {
                     weight: weightFormat(
                       parseFloat(stockMaterial.weight) +
-                        weightFormat(saleMaterial.weight)
+                        weightFormat(saleMaterial.weight),
                     ),
                     weight_in_gram: weightFormat(
                       parseFloat(stockMaterial.weight_in_gram) +
-                        weightFormat(weight_in_gram)
+                        weightFormat(weight_in_gram),
                     ),
                     quantity: thisquantity,
                     purity_id: saleMaterial.purity_id,
                     unit_id: saleMaterial.unit_id,
                     category_id: product.category_id,
                   },
-                  { where: { id: stockMaterial.id } }
+                  { where: { id: stockMaterial.id } },
                 );
                 console.log("stock material updated : ", stockMaterial.id);
               } else {
@@ -2026,7 +2140,10 @@ exports.store = async (req, res) => {
 
     //send notification
     if (purchase && purchase.is_approval == 1) {
-      sendNotification("purchase_on_approval", req, { sale: sale, purchase: purchase });
+      sendNotification("purchase_on_approval", req, {
+        sale: sale,
+        purchase: purchase,
+      });
     } else {
       sendNotification("sale", req, { sale: sale, purchase: purchase });
     }
@@ -2103,29 +2220,33 @@ exports.statuschange = async (req, res) => {
         }
       }
     }
-    
+
     if (data.approve_status != 4) {
       await SaleModel.update(
         {
           is_approved: data.approve_status,
           accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
         },
-        { where: { id: sale.id } }
+        { where: { id: sale.id } },
       );
       /* if sale is declined */
-      if(data.approve_status == 2){
+      if (data.approve_status == 2) {
         /* check if purchase on approval record exists */
         let purchaseExists = await PurchaseModel.findOne({
-          where: { sale_id: sale.id }
+          where: { sale_id: sale.id },
         });
         /* update status only for purchase on approval if sale is declined */
-        if(!isEmpty(purchaseExists) && purchaseExists.is_approved == 3 && purchaseExists.is_approval == 1){
+        if (
+          !isEmpty(purchaseExists) &&
+          purchaseExists.is_approved == 3 &&
+          purchaseExists.is_approval == 1
+        ) {
           await PurchaseModel.update(
             {
               is_approved: data.approve_status,
               accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
             },
-            { where: { id: purchaseExists.id } }
+            { where: { id: purchaseExists.id } },
           );
         }
       }
@@ -2192,12 +2313,12 @@ exports.statuschange = async (req, res) => {
         } else {
           await paymentModel.update(
             {
-              is_advance: "1"
+              is_advance: "1",
             },
-            { where: { table_type: "sale", table_id: sale.id } }
+            { where: { table_type: "sale", table_id: sale.id } },
           );
         }
-        
+
         await updateAdvanceAmount(sale.user_id, sale.sale_by, paidAmnt, true);
       }
 
@@ -2208,7 +2329,10 @@ exports.statuschange = async (req, res) => {
 
         let product = await ProductModel.findByPk(thisItem.product_id);
         let stock = null;
-        if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
+        if (
+          product.type == "material" ||
+          (product.type != "material" && isEmpty(thisItem.certificate_no))
+        ) {
           let quantity = 0;
           for (let x = 0; x < thisItem.saleMaterials.length; x++) {
             quantity += thisItem.saleMaterials[x].quantity
@@ -2230,22 +2354,22 @@ exports.statuschange = async (req, res) => {
               purity_id: thisItem.saleMaterials[0].purity_id,
             },
             null,
-            ["quantity", "total_weight"]
+            ["quantity", "total_weight"],
           );
           stock = result.item;
         } else {
           // Try to get current_image from multiple sources
           let current_image = null;
-          
+
           if (thisItem.certificate_no) {
             // First, check Stock records (most recent/updated - has the latest image)
             let stockQuery = {
               where: {
                 certificate_no: {
-                  [Op.like]: thisItem.certificate_no
-                }
+                  [Op.like]: thisItem.certificate_no,
+                },
               },
-              order: [['id', 'DESC']] // Get the most recent one
+              order: [["id", "DESC"]], // Get the most recent one
             };
             let existingStock = await StockModel.findOne(stockQuery);
             if (existingStock && existingStock.current_image) {
@@ -2255,18 +2379,19 @@ exports.statuschange = async (req, res) => {
               let purchaseQuery = {
                 where: {
                   certificate_no: {
-                    [Op.like]: thisItem.certificate_no
-                  }
+                    [Op.like]: thisItem.certificate_no,
+                  },
                 },
-                order: [['id', 'DESC']] // Get the most recent one
+                order: [["id", "DESC"]], // Get the most recent one
               };
-              let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery);
+              let purchaseProduct =
+                await PurchaseProductModel.findOne(purchaseQuery);
               if (purchaseProduct && purchaseProduct.current_image) {
                 current_image = purchaseProduct.current_image;
               } else if (thisItem.stock_id) {
                 // Third, check by stock_id if available
                 let stockById = await StockModel.findOne({
-                  where: { id: thisItem.stock_id }
+                  where: { id: thisItem.stock_id },
                 });
                 if (stockById && stockById.current_image) {
                   current_image = stockById.current_image;
@@ -2274,7 +2399,7 @@ exports.statuschange = async (req, res) => {
               }
             }
           }
-          
+
           stock = await StockModel.create({
             product_id: thisItem.product_id,
             size_id: thisItem.size_id || null,
@@ -2294,14 +2419,17 @@ exports.statuschange = async (req, res) => {
            */
           let weight_in_gram = convertUnitToGram(
             saleMaterial.unit.name,
-            saleMaterial.weight
+            saleMaterial.weight,
           );
-          if (product.type == "material" || (product.type != "material" && isEmpty(thisItem.certificate_no))) {
+          if (
+            product.type == "material" ||
+            (product.type != "material" && isEmpty(thisItem.certificate_no))
+          ) {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 stock_id: stock.id,
                 material_id: saleMaterial.material_id,
-                purity_id: saleMaterial.purity_id
+                purity_id: saleMaterial.purity_id,
               },
             });
             if (stockMaterial) {
@@ -2313,18 +2441,18 @@ exports.statuschange = async (req, res) => {
                 {
                   weight: weightFormat(
                     parseFloat(stockMaterial.weight) +
-                      weightFormat(saleMaterial.weight)
+                      weightFormat(saleMaterial.weight),
                   ),
                   weight_in_gram: weightFormat(
                     parseFloat(stockMaterial.weight_in_gram) +
-                      weightFormat(weight_in_gram)
+                      weightFormat(weight_in_gram),
                   ),
                   quantity: thisquantity,
                   purity_id: saleMaterial.purity_id,
                   unit_id: saleMaterial.unit_id,
                   category_id: product.category_id,
                 },
-                { where: { id: stockMaterial.id } }
+                { where: { id: stockMaterial.id } },
               );
             } else {
               await StockMaterialModel.create({
@@ -2366,7 +2494,10 @@ exports.statuschange = async (req, res) => {
       for (let item of sale.saleProducts) {
         let quantity = 1;
         let product = await ProductModel.findByPk(item.product_id);
-        if (product && product.type == "material" || (product.type != "material" && isEmpty(item.certificate_no))) {
+        if (
+          (product && product.type == "material") ||
+          (product.type != "material" && isEmpty(item.certificate_no))
+        ) {
           quantity = item.saleMaterials[0].quantity;
         }
         let cart = await cartModel.create({
@@ -2613,7 +2744,10 @@ exports.edit = async (req, res) => {
   }
 
   res.send(
-    formatResponse(await SaleEditCollection(sale, req), "Purchase edit details")
+    formatResponse(
+      await SaleEditCollection(sale, req),
+      "Purchase edit details",
+    ),
   );
 };
 
@@ -2681,7 +2815,7 @@ exports.returnSale = async (req, res) => {
   ) {
     let walletBalance = await getWalletBalance(
       userID,
-      data.return_payment_mode
+      data.return_payment_mode,
     );
     if (
       return_amount_from_wallet > 0 &&
@@ -2722,7 +2856,7 @@ exports.returnSale = async (req, res) => {
           from_retailer_customer: from_retailer_customer,
           return_amount_from_wallet: return_amount_from_wallet,
         },
-        { transaction: t }
+        { transaction: t },
       );
 
       /**
@@ -2756,20 +2890,25 @@ exports.returnSale = async (req, res) => {
           weight_in_gram = 0;
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           quantity +=
-            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material" ||
+            isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material" ||
+            isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           weight_in_gram += convertUnitToGram(
             return_data.products[i].materials[x].unit_name,
-            thisWeight
+            thisWeight,
           );
         }
         let stock = null;
-        if (return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)) {
+        if (
+          return_data.products[i].product_type == "material" ||
+          isEmpty(return_data.products[i].certificate_no)
+        ) {
           if (return_status == "completed") {
             let result = await updateOrCreate(
               StockModel,
@@ -2788,7 +2927,7 @@ exports.returnSale = async (req, res) => {
                 purity_id: return_data.products[i].materials[0].purity_id,
               },
               t,
-              ["quantity", "total_weight"]
+              ["quantity", "total_weight"],
             );
             stock = result.item;
           } else {
@@ -2803,17 +2942,20 @@ exports.returnSale = async (req, res) => {
                 return_id: saleReturnObj.id,
                 purity_id: return_data.products[i].materials[0].purity_id,
               },
-              { transaction: t }
+              { transaction: t },
             );
           }
         } else {
           // console.log("req =============== 2", return_data);
-         
+
           // Try to get current_image from multiple sources (prioritize most recent/updated image)
           let current_image = null;
-          
+
           // First, check if current_image is in return_data (if provided)
-          if (return_data.products[i] && return_data.products[i].current_image) {
+          if (
+            return_data.products[i] &&
+            return_data.products[i].current_image
+          ) {
             current_image = return_data.products[i].current_image;
           } else if (return_data.products[i].certificate_no) {
             // Second, check Stock records first (most recent/updated - has the latest image)
@@ -2823,9 +2965,11 @@ exports.returnSale = async (req, res) => {
                   [Op.like]: `${return_data.products[i].certificate_no}`,
                 },
               },
-              order: [['id', 'DESC']], // Get the most recent one
+              order: [["id", "DESC"]], // Get the most recent one
             };
-            let existingStock = await StockModel.findOne(stockQuery, { transaction: t });
+            let existingStock = await StockModel.findOne(stockQuery, {
+              transaction: t,
+            });
             if (existingStock && existingStock.current_image) {
               current_image = existingStock.current_image;
             } else {
@@ -2836,28 +2980,36 @@ exports.returnSale = async (req, res) => {
                     [Op.like]: `${return_data.products[i].certificate_no}`,
                   },
                 },
-                order: [['id', 'DESC']], // Get the most recent one
+                order: [["id", "DESC"]], // Get the most recent one
               };
-              let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery, { transaction: t });
+              let purchaseProduct = await PurchaseProductModel.findOne(
+                purchaseQuery,
+                { transaction: t },
+              );
               if (purchaseProduct && purchaseProduct.current_image) {
                 current_image = purchaseProduct.current_image;
               }
             }
           }
-          
+
           stock = await StockModel.create(
             {
               product_id: return_data.products[i].product_id,
               size_id: return_data.products[i].size_id || null,
-              certificate_no: cleanInput(return_data.products[i].certificate_no),
-              quantity: return_data.products[i].certificate_no != ""?1:return_data.products[i].materials[0]?.quantity,
+              certificate_no: cleanInput(
+                return_data.products[i].certificate_no,
+              ),
+              quantity:
+                return_data.products[i].certificate_no != ""
+                  ? 1
+                  : return_data.products[i].materials[0]?.quantity,
               current_image: current_image,
               total_weight: weight_in_gram,
               user_id: req.userId,
               type: stock_type,
               return_id: saleReturnObj.id,
             },
-            { transaction: t }
+            { transaction: t },
           );
         }
 
@@ -2869,17 +3021,19 @@ exports.returnSale = async (req, res) => {
             table_type: "sale_products",
             sub_total: return_data.products[i].return_amount,
           },
-          { transaction: t }
+          { transaction: t },
         );
 
         //insert into return product materials table
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           let thisQty =
-            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material" ||
+            isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material" || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material" ||
+            isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           await ReturnProductMaterialModel.create(
@@ -2892,7 +3046,7 @@ exports.returnSale = async (req, res) => {
               purity_id: return_data.products[i].materials[x].purity_id,
               unit_id: return_data.products[i].materials[x].unit_id,
             },
-            { transaction: t }
+            { transaction: t },
           );
 
           /**
@@ -2900,14 +3054,18 @@ exports.returnSale = async (req, res) => {
            */
           let weight_in_gram = convertUnitToGram(
             return_data.products[i].materials[x].unit_name,
-            thisWeight
+            thisWeight,
           );
-          if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
+          if (
+            return_data.products[i].product_type == "material" ||
+            (return_data.products[i].product_type != "material" &&
+              isEmpty(return_data.products[i].certificate_no))
+          ) {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 stock_id: stock.id,
                 material_id: return_data.products[i].materials[x].material_id,
-                purity_id: return_data.products[i].materials[x].purity_id
+                purity_id: return_data.products[i].materials[x].purity_id,
               },
             });
             if (stockMaterial) {
@@ -2917,18 +3075,18 @@ exports.returnSale = async (req, res) => {
               await StockMaterialModel.update(
                 {
                   weight: weightFormat(
-                    parseFloat(stockMaterial.weight) + weightFormat(thisWeight)
+                    parseFloat(stockMaterial.weight) + weightFormat(thisWeight),
                   ),
                   weight_in_gram: weightFormat(
                     parseFloat(stockMaterial.weight_in_gram) +
-                      weightFormat(weight_in_gram)
+                      weightFormat(weight_in_gram),
                   ),
                   quantity: thisquantity,
                   purity_id: return_data.products[i].materials[x].purity_id,
                   unit_id: return_data.products[i].materials[x].unit_id,
                   category_id: return_data.products[i].category_id,
                 },
-                { where: { id: stockMaterial.id }, transaction: t }
+                { where: { id: stockMaterial.id }, transaction: t },
               );
             } else {
               await StockMaterialModel.create(
@@ -2942,7 +3100,7 @@ exports.returnSale = async (req, res) => {
                   unit_id: return_data.products[i].materials[x].unit_id,
                   category_id: return_data.products[i].category_id,
                 },
-                { transaction: t }
+                { transaction: t },
               );
             }
           } else {
@@ -2957,7 +3115,7 @@ exports.returnSale = async (req, res) => {
                 unit_id: return_data.products[i].materials[x].unit_id,
                 category_id: return_data.products[i].category_id,
               },
-              { transaction: t }
+              { transaction: t },
             );
           }
         }
@@ -2967,7 +3125,11 @@ exports.returnSale = async (req, res) => {
           (from_retailer_customer && return_status == "completed")
         ) {
           //update sale product is return and return weight & qty into sale product material table
-          if (return_data.products[i].product_type == "material" || (return_data.products[i].product_type != "material" && isEmpty(return_data.products[i].certificate_no))) {
+          if (
+            return_data.products[i].product_type == "material" ||
+            (return_data.products[i].product_type != "material" &&
+              isEmpty(return_data.products[i].certificate_no))
+          ) {
             let total_return_weight =
               parseFloat(saleProduct.saleMaterials[0].return_weight) +
               parseFloat(return_data.products[i].materials[0].return_weight);
@@ -2984,19 +3146,22 @@ exports.returnSale = async (req, res) => {
 
             await SaleProductModel.update(
               { is_return: is_return },
-              { where: { id: saleProduct.id }, transaction: t }
+              { where: { id: saleProduct.id }, transaction: t },
             );
             await SaleProductMaterialModel.update(
               {
                 return_qty: total_return_qty,
                 return_weight: total_return_weight,
               },
-              { where: { id: saleProduct.saleMaterials[0].id }, transaction: t }
+              {
+                where: { id: saleProduct.saleMaterials[0].id },
+                transaction: t,
+              },
             );
           } else {
             await SaleProductModel.update(
               { is_return: true },
-              { where: { id: saleProduct.id }, transaction: t }
+              { where: { id: saleProduct.id }, transaction: t },
             );
           }
         }
@@ -3018,7 +3183,7 @@ exports.returnSale = async (req, res) => {
         }
 
         let return_amount_from_wallet = parseFloat(
-          data.return_amount_from_wallet
+          data.return_amount_from_wallet,
         );
         if (return_amount_from_wallet > 0) {
           if (data.payment_type == "return") {
@@ -3078,13 +3243,13 @@ exports.returnSale = async (req, res) => {
               sale.user_id,
               userID,
               return_amount_from_wallet,
-              true
+              true,
             );
           }
         }
 
         let total_return_amt = priceFormat(
-          priceFormat(sale.return_amount) + return_amount
+          priceFormat(sale.return_amount) + return_amount,
         );
         await SaleModel.update(
           {
@@ -3093,7 +3258,7 @@ exports.returnSale = async (req, res) => {
             due_amount: due_amount,
             paid_amount: paid_amount,
           },
-          { where: { id: req.params.id }, transaction: t }
+          { where: { id: req.params.id }, transaction: t },
         );
 
         if (due_amount <= 0) {
@@ -3107,7 +3272,7 @@ exports.returnSale = async (req, res) => {
                 [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }],
               },
               transaction: t,
-            }
+            },
           );
         }
       } else {
@@ -3115,7 +3280,7 @@ exports.returnSale = async (req, res) => {
           {
             status: "return_pending",
           },
-          { where: { id: req.params.id }, transaction: t }
+          { where: { id: req.params.id }, transaction: t },
         );
       }
     });
@@ -3129,7 +3294,7 @@ exports.returnSale = async (req, res) => {
         {
           status: "returned",
         },
-        { where: { id: req.params.id } }
+        { where: { id: req.params.id } },
       );
     }
 
@@ -3240,8 +3405,8 @@ exports.returnSaleNew = async (req, res) => {
             .status(errorCodes.default)
             .send(
               formatErrorResponse(
-                `Material with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`
-              )
+                `Material with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`,
+              ),
             );
         } else {
           /* for each return materials */
@@ -3250,7 +3415,7 @@ exports.returnSaleNew = async (req, res) => {
               where: {
                 stock_id: stockPurchse.id,
                 material_id: mItem.material_id,
-                purity_id: mItem.purity_id
+                purity_id: mItem.purity_id,
               },
             });
 
@@ -3259,8 +3424,8 @@ exports.returnSaleNew = async (req, res) => {
                 .status(errorCodes.default)
                 .send(
                   formatErrorResponse(
-                    `Material ${mItem.material_name} with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`
-                  )
+                    `Material ${mItem.material_name} with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`,
+                  ),
                 );
             }
           }
@@ -3287,13 +3452,13 @@ exports.returnSaleNew = async (req, res) => {
         if (stockPurchse) {
           let numMatched = 0;
           let stockMaterials = formatStockMaterials(
-            stockPurchse.stockMaterials
+            stockPurchse.stockMaterials,
           );
           for (let x = 0; x < return_data.products[i].materials.length; x++) {
             let item = return_data.products[i].materials[x];
             let thisM = _.filter(stockMaterials, {
               material_id: item.material_id,
-              purity_id: item.purity_id
+              purity_id: item.purity_id,
             });
             if (
               thisM.length &&
@@ -3305,7 +3470,7 @@ exports.returnSaleNew = async (req, res) => {
             }
           }
           console.log(
-            "---------------------- num of materials Matched in stock for existing checking ----------------------"
+            "---------------------- num of materials Matched in stock for existing checking ----------------------",
           );
           console.log(numMatched);
           console.log(return_data.products[i].materials.length);
@@ -3314,8 +3479,8 @@ exports.returnSaleNew = async (req, res) => {
               .status(errorCodes.default)
               .send(
                 formatErrorResponse(
-                  `Product with certificate no. ${return_data.products[i].certificate_no} does not have all the materials mentioned in return with this user.`
-                )
+                  `Product with certificate no. ${return_data.products[i].certificate_no} does not have all the materials mentioned in return with this user.`,
+                ),
               );
           }
         } else {
@@ -3323,8 +3488,8 @@ exports.returnSaleNew = async (req, res) => {
             .status(errorCodes.default)
             .send(
               formatErrorResponse(
-                `Product with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`
-              )
+                `Product with certificate no. ${return_data.products[i].certificate_no} is not available with this user.`,
+              ),
             );
         }
       }
@@ -3365,7 +3530,10 @@ exports.returnSaleNew = async (req, res) => {
   } else {
     return_status = "pending";
   }
-  console.log("---------------------- return_status ----------------------", return_status);
+  console.log(
+    "---------------------- return_status ----------------------",
+    return_status,
+  );
 
   //check has amount in wallet
   let return_amount_from_wallet = data.return_amount_from_wallet;
@@ -3373,11 +3541,11 @@ exports.returnSaleNew = async (req, res) => {
     data.payment_type == "return" &&
     (!from_retailer_customer ||
       (from_retailer_customer && return_status == "completed"))
-  ) { 
+  ) {
     /* not retailer customer or retailer customer and charges not applied */
     let walletBalance = await getWalletBalance(
       userID,
-      data.return_payment_mode
+      data.return_payment_mode,
     );
     if (
       return_amount_from_wallet > 0 &&
@@ -3393,7 +3561,6 @@ exports.returnSaleNew = async (req, res) => {
   try {
     /* start transaction */
     const trans = await sequelize.transaction(async (t) => {
-
       let sale_products = sale.saleProducts;
 
       /* convert all return data into Base64 */
@@ -3423,9 +3590,11 @@ exports.returnSaleNew = async (req, res) => {
           from_retailer_customer: from_retailer_customer,
           return_amount_from_wallet: return_amount_from_wallet,
         },
-        { transaction: t }
+        { transaction: t },
       );
-      console.log("---------------------- ReturnModel create ----------------------");
+      console.log(
+        "---------------------- ReturnModel create ----------------------",
+      );
       /**
        * Return Products
        */
@@ -3446,7 +3615,8 @@ exports.returnSaleNew = async (req, res) => {
           ],
         });
         console.log(
-          "---------------------- saleProduct fetch ----------------------", saleProduct.id
+          "---------------------- saleProduct fetch ----------------------",
+          saleProduct.id,
         );
         let purchaseProduct = await PurchaseProductModel.findOne({
           where: {
@@ -3463,32 +3633,40 @@ exports.returnSaleNew = async (req, res) => {
           ],
         });
         console.log(
-          "---------------------- purchaseProduct fetch ----------------------", purchaseProduct.id
+          "---------------------- purchaseProduct fetch ----------------------",
+          purchaseProduct.id,
         );
         /**
          * moved to stock
          */
-        console.log("---------------------- preparing stock entry ----------------------");
+        console.log(
+          "---------------------- preparing stock entry ----------------------",
+        );
         let stock_type = "product";
         if (return_data.products[i].return_charge_percent > 0) {
           stock_type = "return";
         }
-        console.log("---------------------- stock_type ----------------------", stock_type);
+        console.log(
+          "---------------------- stock_type ----------------------",
+          stock_type,
+        );
 
         let quantity = 0,
           weight_in_gram = 0;
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           quantity +=
-            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material" ||
+            isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material" ||
+            isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           weight_in_gram += convertUnitToGram(
             return_data.products[i].materials[x].unit_name,
-            thisWeight
+            thisWeight,
           );
         }
         let stock = null;
@@ -3511,7 +3689,7 @@ exports.returnSaleNew = async (req, res) => {
                 purity_id: return_data.products[i].materials[0].purity_id,
               },
               t,
-              ["quantity", "total_weight"]
+              ["quantity", "total_weight"],
             );
             stock = result.item;
           } else {
@@ -3526,7 +3704,7 @@ exports.returnSaleNew = async (req, res) => {
                 return_id: saleReturnObj.id,
                 purity_id: return_data.products[i].materials[0].purity_id,
               },
-              { transaction: t }
+              { transaction: t },
             );
           }
         } else {
@@ -3534,9 +3712,12 @@ exports.returnSaleNew = async (req, res) => {
 
           // Try to get current_image from multiple sources (prioritize most recent/updated image)
           let current_image = null;
-          
+
           // First, check if current_image is in return_data (if provided)
-          if (return_data.products[i] && return_data.products[i].current_image) {
+          if (
+            return_data.products[i] &&
+            return_data.products[i].current_image
+          ) {
             current_image = return_data.products[i].current_image;
           } else if (return_data.products[i].certificate_no) {
             // Second, check Stock records first (most recent/updated - has the latest image)
@@ -3546,9 +3727,11 @@ exports.returnSaleNew = async (req, res) => {
                   [Op.like]: `${return_data.products[i].certificate_no}`,
                 },
               },
-              order: [['id', 'DESC']], // Get the most recent one
+              order: [["id", "DESC"]], // Get the most recent one
             };
-            let existingStock = await StockModel.findOne(stockQuery, { transaction: t });
+            let existingStock = await StockModel.findOne(stockQuery, {
+              transaction: t,
+            });
             if (existingStock && existingStock.current_image) {
               current_image = existingStock.current_image;
             } else {
@@ -3559,32 +3742,41 @@ exports.returnSaleNew = async (req, res) => {
                     [Op.like]: `${return_data.products[i].certificate_no}`,
                   },
                 },
-                order: [['id', 'DESC']], // Get the most recent one
+                order: [["id", "DESC"]], // Get the most recent one
               };
-              let purchaseProduct = await PurchaseProductModel.findOne(purchaseQuery, { transaction: t });
+              let purchaseProduct = await PurchaseProductModel.findOne(
+                purchaseQuery,
+                { transaction: t },
+              );
               if (purchaseProduct && purchaseProduct.current_image) {
                 current_image = purchaseProduct.current_image;
               }
             }
           }
-          
+
           stock = await StockModel.create(
             {
               product_id: return_data.products[i].product_id,
               size_id: return_data.products[i].size_id || null,
               purity_id: return_data.products[i].materials[0].purity_id,
-              certificate_no: cleanInput(return_data.products[i].certificate_no),
-              quantity: !isEmpty(return_data.products[i].certificate_no)?1:parseInt(return_data.products[i].materials[0].return_qty),
+              certificate_no: cleanInput(
+                return_data.products[i].certificate_no,
+              ),
+              quantity: !isEmpty(return_data.products[i].certificate_no)
+                ? 1
+                : parseInt(return_data.products[i].materials[0].return_qty),
               current_image: current_image,
               total_weight: weight_in_gram,
               user_id: req.userId,
               type: stock_type,
               return_id: saleReturnObj.id,
             },
-            { transaction: t }
+            { transaction: t },
           );
         }
-        console.log("---------------------- StockModel create as return ----------------------");
+        console.log(
+          "---------------------- StockModel create as return ----------------------",
+        );
         //insert into return product table
         let returnSaleProduct = await ReturnProductModel.create(
           {
@@ -3593,19 +3785,21 @@ exports.returnSaleNew = async (req, res) => {
             table_type: "sale_products",
             sub_total: return_data.products[i].return_amount,
           },
-          { transaction: t }
+          { transaction: t },
         );
         console.log(
-          "---------------------- ReturnProductModel create ----------------------"
+          "---------------------- ReturnProductModel create ----------------------",
         );
         //insert into return product materials table
         for (let x = 0; x < return_data.products[i].materials.length; x++) {
           let thisQty =
-            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material" ||
+            isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_qty)
               : return_data.products[i].materials[x].quantity;
           let thisWeight =
-            return_data.products[i].product_type == "material"  || isEmpty(return_data.products[i].certificate_no)
+            return_data.products[i].product_type == "material" ||
+            isEmpty(return_data.products[i].certificate_no)
               ? parseFloat(return_data.products[i].materials[x].return_weight)
               : return_data.products[i].materials[x].weight;
           await ReturnProductMaterialModel.create(
@@ -3618,24 +3812,24 @@ exports.returnSaleNew = async (req, res) => {
               purity_id: return_data.products[i].materials[x].purity_id,
               unit_id: return_data.products[i].materials[x].unit_id,
             },
-            { transaction: t }
+            { transaction: t },
           );
           console.log(
-            "---------------------- ReturnProductMaterialModel create ----------------------"
+            "---------------------- ReturnProductMaterialModel create ----------------------",
           );
           /**
            * add to stock materials
            */
           let weight_in_gram = convertUnitToGram(
             return_data.products[i].materials[x].unit_name,
-            thisWeight
+            thisWeight,
           );
           if (return_data.products[i].product_type == "material") {
             let stockMaterial = await StockMaterialModel.findOne({
               where: {
                 stock_id: stock.id,
                 material_id: return_data.products[i].materials[x].material_id,
-                purity_id: return_data.products[i].materials[x].purity_id
+                purity_id: return_data.products[i].materials[x].purity_id,
               },
             });
             if (stockMaterial) {
@@ -3645,18 +3839,18 @@ exports.returnSaleNew = async (req, res) => {
               await StockMaterialModel.update(
                 {
                   weight: weightFormat(
-                    parseFloat(stockMaterial.weight) + weightFormat(thisWeight)
+                    parseFloat(stockMaterial.weight) + weightFormat(thisWeight),
                   ),
                   weight_in_gram: weightFormat(
                     parseFloat(stockMaterial.weight_in_gram) +
-                      weightFormat(weight_in_gram)
+                      weightFormat(weight_in_gram),
                   ),
                   quantity: thisquantity,
                   purity_id: return_data.products[i].materials[x].purity_id,
                   unit_id: return_data.products[i].materials[x].unit_id,
                   category_id: return_data.products[i].category_id,
                 },
-                { where: { id: stockMaterial.id }, transaction: t }
+                { where: { id: stockMaterial.id }, transaction: t },
               );
             } else {
               await StockMaterialModel.create(
@@ -3670,7 +3864,7 @@ exports.returnSaleNew = async (req, res) => {
                   unit_id: return_data.products[i].materials[x].unit_id,
                   category_id: return_data.products[i].category_id,
                 },
-                { transaction: t }
+                { transaction: t },
               );
             }
           } else {
@@ -3685,88 +3879,90 @@ exports.returnSaleNew = async (req, res) => {
                 unit_id: return_data.products[i].materials[x].unit_id,
                 category_id: return_data.products[i].category_id,
               },
-              { transaction: t }
+              { transaction: t },
             );
           }
         }
         console.log(
-          "---------------------- StockMaterialModel create ----------------------"
+          "---------------------- StockMaterialModel create ----------------------",
         );
         /* if (
           !from_retailer_customer ||
           (from_retailer_customer && return_status == "completed")
         ) { */
-          //update sale product is return and return weight & qty into sale product material table 
-          if (return_data.products[i].product_type == "material") {
-            console.log("update sale product is return and return weight & qty into sale & purchase product material table");
-            let total_return_weight =
-              parseFloat(saleProduct.saleMaterials[0].return_weight) +
-              parseFloat(return_data.products[i].materials[0].return_weight);
-            let total_return_qty =
-              parseInt(saleProduct.saleMaterials[0].return_qty) +
-              parseInt(return_data.products[i].materials[0].return_qty);
-            let is_return =
-              total_return_qty >=
-                parseInt(saleProduct.saleMaterials[0].quantity) ||
-              total_return_weight >=
-                parseFloat(saleProduct.saleMaterials[0].weight)
-                ? true
-                : false;
-
-            await SaleProductModel.update(
-              { is_return: is_return },
-              { where: { id: saleProduct.id }, transaction: t }
-            );
-            await SaleProductMaterialModel.update(
-              {
-                return_qty: total_return_qty,
-                return_weight: total_return_weight,
-              },
-              { where: { id: saleProduct.saleMaterials[0].id }, transaction: t }
-            );
-
-            await PurchaseProductModel.update(
-              { is_return: is_return },
-              { where: { id: purchaseProduct.id }, transaction: t }
-            );
-
-            await PurchaseProductMaterialModel.update(
-              {
-                return_qty: total_return_qty,
-                return_weight: total_return_weight,
-              },
-              {
-                where: { id: purchaseProduct.purchaseMaterials[0].id },
-                transaction: t,
-              }
-            );
-            console.log(
-              "---------------------- Weight updated into Product Material for purchae and sale Model ----------------------"
-            );
-          } else {
-            await SaleProductModel.update(
-              { is_return: true },
-              { where: { id: saleProduct.id }, transaction: t }
-            );
-
-            await PurchaseProductModel.update(
-              { is_return: true },
-              { where: { id: purchaseProduct.id }, transaction: t }
-            );
-          }
+        //update sale product is return and return weight & qty into sale product material table
+        if (return_data.products[i].product_type == "material") {
           console.log(
-            "---------------------- Weight updated into Product for purchae and sale Model ----------------------"
+            "update sale product is return and return weight & qty into sale & purchase product material table",
           );
-        //} 
+          let total_return_weight =
+            parseFloat(saleProduct.saleMaterials[0].return_weight) +
+            parseFloat(return_data.products[i].materials[0].return_weight);
+          let total_return_qty =
+            parseInt(saleProduct.saleMaterials[0].return_qty) +
+            parseInt(return_data.products[i].materials[0].return_qty);
+          let is_return =
+            total_return_qty >=
+              parseInt(saleProduct.saleMaterials[0].quantity) ||
+            total_return_weight >=
+              parseFloat(saleProduct.saleMaterials[0].weight)
+              ? true
+              : false;
 
-        
+          await SaleProductModel.update(
+            { is_return: is_return },
+            { where: { id: saleProduct.id }, transaction: t },
+          );
+          await SaleProductMaterialModel.update(
+            {
+              return_qty: total_return_qty,
+              return_weight: total_return_weight,
+            },
+            { where: { id: saleProduct.saleMaterials[0].id }, transaction: t },
+          );
+
+          await PurchaseProductModel.update(
+            { is_return: is_return },
+            { where: { id: purchaseProduct.id }, transaction: t },
+          );
+
+          await PurchaseProductMaterialModel.update(
+            {
+              return_qty: total_return_qty,
+              return_weight: total_return_weight,
+            },
+            {
+              where: { id: purchaseProduct.purchaseMaterials[0].id },
+              transaction: t,
+            },
+          );
+          console.log(
+            "---------------------- Weight updated into Product Material for purchae and sale Model ----------------------",
+          );
+        } else {
+          await SaleProductModel.update(
+            { is_return: true },
+            { where: { id: saleProduct.id }, transaction: t },
+          );
+
+          await PurchaseProductModel.update(
+            { is_return: true },
+            { where: { id: purchaseProduct.id }, transaction: t },
+          );
+        }
+        console.log(
+          "---------------------- Weight updated into Product for purchae and sale Model ----------------------",
+        );
+        //}
 
         //if(from_retailer_customer && return_status == "pending") {
         /**
          * START - Remove from stock table
          */
         //if (purchase.is_approved == 1) {
-        console.log("---------------------- Removing from stock ----------------------");
+        console.log(
+          "---------------------- Removing from stock ----------------------",
+        );
         stock = null;
         stockPurchse = null;
         if (return_data.products[i].product_type == "material") {
@@ -3774,22 +3970,20 @@ exports.returnSaleNew = async (req, res) => {
           if (!isEmpty(return_data.products[i].product_id)) {
             console.log("+++++++++++++++ product stock +++++++++++++++");
             console.log({
-                product_id: return_data.products[i].product_id,
-                user_id: req.userId,
-
-              });
+              product_id: return_data.products[i].product_id,
+              user_id: req.userId,
+            });
             stock = await StockModel.findOne({
               where: {
                 product_id: return_data.products[i].product_id,
                 user_id: req.userId,
-
               },
             });
             console.log("+++++++++++++++ purchase stock +++++++++++++++");
             console.log({
-                product_id: return_data.products[i].product_id,
-                user_id: sale.userId,
-              });
+              product_id: return_data.products[i].product_id,
+              user_id: sale.userId,
+            });
             stockPurchse = await StockModel.findOne({
               where: {
                 product_id: return_data.products[i].product_id,
@@ -3895,7 +4089,11 @@ exports.returnSaleNew = async (req, res) => {
 
             if (stock != null) {
               stockM = await StockMaterialModel.findOne({
-                where: { stock_id: stock?.id, material_id: mItem.material_id, purity_id: mItem.purity_id },
+                where: {
+                  stock_id: stock?.id,
+                  material_id: mItem.material_id,
+                  purity_id: mItem.purity_id,
+                },
                 transaction: t,
               });
             }
@@ -3904,14 +4102,16 @@ exports.returnSaleNew = async (req, res) => {
                 where: {
                   stock_id: stockPurchse?.id,
                   material_id: mItem.material_id,
-                  purity_id: mItem.purity_id
+                  purity_id: mItem.purity_id,
                 },
                 transaction: t,
               });
             }
             console.log("---------------------- stockM ----------------------");
             console.log(stockM);
-            console.log("---------------------- stockMPurchase ----------------------");
+            console.log(
+              "---------------------- stockMPurchase ----------------------",
+            );
             console.log(stockMPurchase);
             weight += mItem.return_weight ? parseInt(mItem.return_weight) : 0;
             if (stockM) {
@@ -3940,34 +4140,37 @@ exports.returnSaleNew = async (req, res) => {
                 { transaction: t }
               ); */
             }
-            console.log("---------------------- After stockM update ----------------------");
+            console.log(
+              "---------------------- After stockM update ----------------------",
+            );
             if (stockMPurchase) {
               await StockMaterialModel.update(
                 {
                   weight: weightFormat(
                     parseFloat(stockMPurchase.weight) -
-                      parseFloat(mItem.return_weight)
+                      parseFloat(mItem.return_weight),
                   ),
                   quantity:
                     parseFloat(stockMPurchase.quantity) -
                     parseInt(mItem.return_qty),
                 },
-                { where: { id: stockMPurchase?.id }, transaction: t }
+                { where: { id: stockMPurchase?.id }, transaction: t },
               );
-              
             }
-            console.log("---------------------- After stockMPurchase update ----------------------");
+            console.log(
+              "---------------------- After stockMPurchase update ----------------------",
+            );
             unit_name = mItem.unit_name;
             weight = convertUnitToGram(unit_name, weight);
             quantity += parseInt(mItem.return_qty);
           }
-          
+
           if (stock && parseFloat(stock.total_weight) <= weight) {
             //await StockModel.destroy({ where: { id: stock.id }, transaction: t });
           } else {
             let return_weight_in_gram = convertUnitToGram(
               unit_name,
-              return_data.products[i].materials[0].return_weight
+              return_data.products[i].materials[0].return_weight,
             );
             /* await StockModel.update(
               {
@@ -3979,8 +4182,10 @@ exports.returnSaleNew = async (req, res) => {
               { where: { id: stock?.id }, transaction: t }
             ); */
           }
-          console.log("---------------------- stockPurchse update ----------------------");
-          if(stockPurchse){
+          console.log(
+            "---------------------- stockPurchse update ----------------------",
+          );
+          if (stockPurchse) {
             if (parseFloat(stockPurchse.total_weight) <= weight) {
               await StockModel.destroy({
                 where: { id: stockPurchse?.id },
@@ -3989,7 +4194,7 @@ exports.returnSaleNew = async (req, res) => {
             } else {
               let return_weight_in_gram = convertUnitToGram(
                 unit_name,
-                return_data.products[i].materials[0].return_weight
+                return_data.products[i].materials[0].return_weight,
               );
               await StockModel.update(
                 {
@@ -3999,20 +4204,24 @@ exports.returnSaleNew = async (req, res) => {
                     parseFloat(stockPurchse.total_weight) -
                     parseFloat(return_weight_in_gram),
                 },
-                { where: { id: stockPurchse?.id }, transaction: t }
+                { where: { id: stockPurchse?.id }, transaction: t },
               );
             }
           }
-          console.log("---------------------- End of stockPurchse update ----------------------");
+          console.log(
+            "---------------------- End of stockPurchse update ----------------------",
+          );
         } else {
           console.log("+++++++++++++++ product stock +++++++++++++++");
           stock = await StockModel.findOne({
             where: {
               product_id: return_data.products[i].product_id,
               user_id: req.userId,
-              certificate_no: cleanInput(return_data.products[i].certificate_no),
+              certificate_no: cleanInput(
+                return_data.products[i].certificate_no,
+              ),
               size_id: return_data.products[i].size_id,
-              purity_id : return_data.products[i].materials[0].purity_id
+              purity_id: return_data.products[i].materials[0].purity_id,
             },
             include: [
               {
@@ -4024,7 +4233,7 @@ exports.returnSaleNew = async (req, res) => {
             ],
           });
           console.log(
-            "---------------------- Stock to check for create ----------------------"
+            "---------------------- Stock to check for create ----------------------",
           );
           console.log(stock);
           /* if (!stock) {
@@ -4131,7 +4340,9 @@ exports.returnSaleNew = async (req, res) => {
             where: {
               product_id: return_data.products[i].product_id,
               user_id: sale.user_id,
-              certificate_no: cleanInput(return_data.products[i].certificate_no),
+              certificate_no: cleanInput(
+                return_data.products[i].certificate_no,
+              ),
               size_id: return_data.products[i].size_id,
             },
             include: [
@@ -4144,7 +4355,7 @@ exports.returnSaleNew = async (req, res) => {
             ],
           });
           console.log(
-            "---------------------- Stock to check for delete ----------------------"
+            "---------------------- Stock to check for delete ----------------------",
           );
           console.log(stock);
           console.log(stockPurchse);
@@ -4196,13 +4407,13 @@ exports.returnSaleNew = async (req, res) => {
           if (stockPurchse) {
             let numMatched = 0;
             let stockMaterials = formatStockMaterials(
-              stockPurchse.stockMaterials
+              stockPurchse.stockMaterials,
             );
             for (let x = 0; x < return_data.products[i].materials.length; x++) {
               let item = return_data.products[i].materials[x];
               let thisM = _.filter(stockMaterials, {
                 material_id: item.material_id,
-                purity_id: item.purity_id
+                purity_id: item.purity_id,
               });
               if (
                 thisM.length &&
@@ -4214,7 +4425,7 @@ exports.returnSaleNew = async (req, res) => {
               }
             }
             console.log(
-              "---------------------- num of materials Matched in stock ----------------------"
+              "---------------------- num of materials Matched in stock ----------------------",
             );
             console.log(numMatched);
             console.log(return_data.products[i].materials.length);
@@ -4254,7 +4465,7 @@ exports.returnSaleNew = async (req, res) => {
          */
       }
       console.log(
-        "---------------------- Delete StockModel, StockMaterialModel and cartModel,cartMaterialsModel  ----------------------"
+        "---------------------- Delete StockModel, StockMaterialModel and cartModel,cartMaterialsModel  ----------------------",
       );
 
       if (
@@ -4268,10 +4479,9 @@ exports.returnSaleNew = async (req, res) => {
         let paid_amount = parseFloat(sale.paid_amount);
         let due_amount = priceFormat(total_payable - paid_amount, true);
         due_amount = due_amount < 0 ? 0 : due_amount;
-        
 
         let return_amount_from_wallet = parseFloat(
-          data.return_amount_from_wallet
+          data.return_amount_from_wallet,
         );
 
         //paid_amount += return_amount_from_wallet;
@@ -4303,10 +4513,14 @@ exports.returnSaleNew = async (req, res) => {
               can_accept: false,
               is_advance: false,
             });
-            console.log("---------------------- PaymentModel create for sale refund ----------------------");
+            console.log(
+              "---------------------- PaymentModel create for sale refund ----------------------",
+            );
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             await updateWalletRemainingBalance(userID, payment2.id);
-            console.log("---------------------- updateWalletRemainingBalance for sale refund ----------------------");
+            console.log(
+              "---------------------- updateWalletRemainingBalance for sale refund ----------------------",
+            );
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             let payment3 = await PaymentModel.create({
               user_id: sale.user_id,
@@ -4326,10 +4540,14 @@ exports.returnSaleNew = async (req, res) => {
               can_accept: false,
               is_advance: false,
             });
-            console.log("---------------------- PaymentModel create for return purchase ----------------------");
+            console.log(
+              "---------------------- PaymentModel create for return purchase ----------------------",
+            );
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             await updateWalletRemainingBalance(sale.user_id, payment3.id);
-            console.log(`---------------------- updateWalletRemainingBalance for return purchase ----------------------`);
+            console.log(
+              `---------------------- updateWalletRemainingBalance for return purchase ----------------------`,
+            );
             await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
           } else {
             // await PaymentModel.update(
@@ -4338,7 +4556,7 @@ exports.returnSaleNew = async (req, res) => {
             //   },
             //   { where: { table_type: "sale", table_id: sale.id } }
             // );
-            
+
             let payment = await PaymentModel.create({
               user_id: sale.user_id,
               payment_by: userID,
@@ -4360,7 +4578,9 @@ exports.returnSaleNew = async (req, res) => {
               can_accept: false,
               is_advance: true,
             });
-            console.log("---------------------- PaymentModel create for return purchase ----------------------");
+            console.log(
+              "---------------------- PaymentModel create for return purchase ----------------------",
+            );
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             await updateWalletRemainingBalance(sale.user_id, payment.id);
 
@@ -4368,16 +4588,16 @@ exports.returnSaleNew = async (req, res) => {
               sale.user_id,
               userID,
               return_amount_from_wallet,
-              true
+              true,
             );
             await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
           }
         }
         console.log(
-          "---------------------- update wallet balance ----------------------"
+          "---------------------- update wallet balance ----------------------",
         );
         let total_return_amt = priceFormat(
-          priceFormat(sale.return_amount) + return_amount
+          priceFormat(sale.return_amount) + return_amount,
         );
         await SaleModel.update(
           {
@@ -4386,11 +4606,11 @@ exports.returnSaleNew = async (req, res) => {
             due_amount: due_amount,
             paid_amount: paid_amount,
           },
-          { where: { id: req.params.id }, transaction: t }
+          { where: { id: req.params.id }, transaction: t },
         );
         console.log(
-          "---------------------- SaleModel update ----------------------"
-        );  
+          "---------------------- SaleModel update ----------------------",
+        );
         await new Promise((resolve) => setTimeout(resolve, 500));
         await PurchaseModel.update(
           {
@@ -4398,10 +4618,10 @@ exports.returnSaleNew = async (req, res) => {
             total_payable: total_payable,
             due_amount: due_amount,
           },
-          { where: { sale_id: sale.id }, transaction: t }
+          { where: { sale_id: sale.id }, transaction: t },
         );
         console.log(
-          "---------------------- PurchaseModel update ----------------------"  
+          "---------------------- PurchaseModel update ----------------------",
         );
         await new Promise((resolve) => setTimeout(resolve, 500));
         if (due_amount <= 0) {
@@ -4415,22 +4635,22 @@ exports.returnSaleNew = async (req, res) => {
                 [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }],
               },
               transaction: t,
-            }
+            },
           );
         }
         console.log(
-          "---------------------- NoticationModel update ----------------------"
-        );  
+          "---------------------- NoticationModel update ----------------------",
+        );
         await new Promise((resolve) => setTimeout(resolve, 500));
         /* make return as complete */
         await ReturnModel.update(
           {
             status: "completed",
           },
-          { where: { id: saleReturnObj.id }, transaction: t }
+          { where: { id: saleReturnObj.id }, transaction: t },
         );
         console.log(
-          "---------------------- ReturnModel update ----------------------"  
+          "---------------------- ReturnModel update ----------------------",
         );
         stock = await StockModel.findOne({
           where: {
@@ -4439,8 +4659,8 @@ exports.returnSaleNew = async (req, res) => {
           transaction: t,
         });
         console.log(
-          "---------------------- StockModel find for return_id ----------------------"
-        );  
+          "---------------------- StockModel find for return_id ----------------------",
+        );
         await new Promise((resolve) => setTimeout(resolve, 500));
         /* if(stock){
           await StockMaterialModel.destroy({
@@ -4449,7 +4669,7 @@ exports.returnSaleNew = async (req, res) => {
           });
         } */
         console.log(
-          "---------------------- StockMaterialModel destroy for return_id ----------------------"
+          "---------------------- StockMaterialModel destroy for return_id ----------------------",
         );
         await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
         /* await StockModel.destroy({
@@ -4457,13 +4677,13 @@ exports.returnSaleNew = async (req, res) => {
           transaction: t,
         }); */
         console.log(
-          "---------------------- make return as complete ----------------------"
+          "---------------------- make return as complete ----------------------",
         );
       }
     });
 
     console.log(
-      "---------------------- update status in sale and purchase ----------------------"
+      "---------------------- update status in sale and purchase ----------------------",
     );
 
     let allReturnSale = await SaleProductModel.count({
@@ -4475,12 +4695,14 @@ exports.returnSaleNew = async (req, res) => {
     if (allReturnSale == sale.saleProducts.length) {
       await SaleModel.update(
         {
-          status: return_status == "completed"?"returned":"return_pending",
+          status: return_status == "completed" ? "returned" : "return_pending",
         },
-        { where: { id: req.params.id } }
+        { where: { id: req.params.id } },
       );
     }
-    console.log("---------------------- SaleModel Status Update ----------------------");
+    console.log(
+      "---------------------- SaleModel Status Update ----------------------",
+    );
     let allReturnPurchase = await PurchaseProductModel.count({
       where: { purchase_id: purchase.id, is_return: true },
     });
@@ -4490,12 +4712,14 @@ exports.returnSaleNew = async (req, res) => {
     if (allReturnPurchase == purchase.purchaseProducts.length) {
       await PurchaseModel.update(
         {
-          status: return_status == "completed"?"returned":"return_pending",
+          status: return_status == "completed" ? "returned" : "return_pending",
         },
-        { where: { sale_id: sale.id } }
+        { where: { sale_id: sale.id } },
       );
     }
-    console.log("---------------------- PurchaseModel Status Update ----------------------");
+    console.log(
+      "---------------------- PurchaseModel Status Update ----------------------",
+    );
 
     res.send(formatResponse([], "Returned successfully!"));
   } catch (error) {
@@ -4567,7 +4791,7 @@ exports.delete = async (req, res) => {
                 id: sale.saleProducts[i].stock_id,
               },
               paranoid: false,
-            }
+            },
           );
           await StockMaterialModel.update(
             { deletedAt: null },
@@ -4577,14 +4801,14 @@ exports.delete = async (req, res) => {
                 stock_id: sale.saleProducts[i].stock_id,
               },
               paranoid: false,
-            }
+            },
           );
         } else {
           let result = await updateOrCreate(
             StockModel,
             { product_id: product.id, user_id: userID },
             { product_id: product.id },
-            null
+            null,
           );
           let stock = result.item;
           let totalQnty = 0;
@@ -4614,7 +4838,7 @@ exports.delete = async (req, res) => {
                 where: {
                   stock_id: stock.id,
                   material_id: thisItem.material_id,
-                  purity_id: thisItem.purity_id
+                  purity_id: thisItem.purity_id,
                 },
               });
               if (stockMaterial) {
@@ -4622,13 +4846,13 @@ exports.delete = async (req, res) => {
                   {
                     weight: weightFormat(
                       parseFloat(stockMaterial.weight) +
-                        parseFloat(thisItem.weight)
+                        parseFloat(thisItem.weight),
                     ),
                     quantity:
                       parseInt(stockMaterial.quantity) +
                       parseInt(thisItem.quantity),
                   },
-                  { where: { id: stockMaterial.id } }
+                  { where: { id: stockMaterial.id } },
                 );
                 totalQnty += thisItem.quantity;
               }
@@ -4644,7 +4868,7 @@ exports.delete = async (req, res) => {
               quantity: totalQnty,
               total_weight: weightFormat(totalWeight),
             },
-            { where: { id: stock.id } }
+            { where: { id: stock.id } },
           );
         }
       }
@@ -4663,18 +4887,22 @@ exports.delete = async (req, res) => {
           let quantity = 0;
           for (let mItem of sale.saleProducts[i].saleMaterials) {
             let stockM = await StockMaterialModel.findOne({
-              where: { stock_id: stock2.id, material_id: mItem.material_id, purity_id: mItem.purity_id },
+              where: {
+                stock_id: stock2.id,
+                material_id: mItem.material_id,
+                purity_id: mItem.purity_id,
+              },
             });
             if (stockM) {
               await StockMaterialModel.update(
                 {
                   weight: weightFormat(
-                    parseFloat(stockM.weight) - parseFloat(mItem.weight)
+                    parseFloat(stockM.weight) - parseFloat(mItem.weight),
                   ),
                   quantity:
                     parseFloat(stockM.quantity) - parseFloat(mItem.quantity),
                 },
-                { where: { id: stockM.id } }
+                { where: { id: stockM.id } },
               );
               quantity += mItem.quantity ? parseInt(mItem.quantity) : 0;
             }
@@ -4689,7 +4917,7 @@ exports.delete = async (req, res) => {
                   parseFloat(stock2.total_weight) -
                   parseFloat(sale.saleProducts[i].total_weight),
               },
-              { where: { id: stock2.id } }
+              { where: { id: stock2.id } },
             );
           }
         } else {
@@ -4871,7 +5099,7 @@ exports.returnStockTransfer = async (req, res) => {
           invoice_number: invoice_number,
           req_data: req_data,
         },
-        { where: { id: sale.id } }
+        { where: { id: sale.id } },
       );
     }
 
@@ -4881,7 +5109,7 @@ exports.returnStockTransfer = async (req, res) => {
           invoice_number: purchase_invoice_number,
           req_data: req_data,
         },
-        { where: { id: purchase.id } }
+        { where: { id: purchase.id } },
       );
     }
 
@@ -4892,7 +5120,7 @@ exports.returnStockTransfer = async (req, res) => {
     }
 
     res.send(
-      formatResponse([], "Transfer successfully. Waiting for approval.")
+      formatResponse([], "Transfer successfully. Waiting for approval."),
     );
   } catch (error) {
     addLog("error: " + error.toString());
@@ -4913,11 +5141,7 @@ exports.saleProducts = async (req, res) => {
   //let adminRoleId = getRoleId("admin");
   let superAdminRoleId = getRoleId("superadmin");
   console.log("req ====> ", req.userId, req.role);
-  let saleProductsRes = await getOwnUserSaleProducts(
-    req,
-    req.query,
-    req.role
-  );
+  let saleProductsRes = await getOwnUserSaleProducts(req, req.query, req.role);
   res.send(formatResponse(saleProductsRes));
 };
 
@@ -5462,8 +5686,9 @@ exports.downloadInvoice = async (req, res) => {
                                                     saleData.products[i]
                                                       .product_name
                                                   } - ${
-      saleData.products[i].product_code
-    }
+                                                    saleData.products[i]
+                                                      .product_code
+                                                  }
                                               </td>
                                               <td style="text-align: left;
                                                   font-size: 11px;
@@ -5557,10 +5782,16 @@ exports.downloadInvoice = async (req, res) => {
                                                                     ].materials[
                                                                       x
                                                                     ]
-                                                                      .discount_percent
+                                                                      .discount_percent,
                                                                   )}% ${
-          saleData.products[i].materials[x].discount_amount_display
-        }</span> 
+                                                                    saleData
+                                                                      .products[
+                                                                      i
+                                                                    ].materials[
+                                                                      x
+                                                                    ]
+                                                                      .discount_amount_display
+                                                                  }</span> 
 															  <!--<span
                                                                   style="text-align:
                                                                   left; font-size:
@@ -5722,16 +5953,16 @@ exports.downloadInvoice = async (req, res) => {
                                                 payments.length == 0
                                                   ? 80
                                                   : payments.length == 1
-                                                  ? 71
-                                                  : payments.length == 2
-                                                  ? 67
-                                                  : payments.length == 3
-                                                  ? 50
-                                                  : payments.length == 4
-                                                  ? 20
-                                                  : payments.length == 5
-                                                  ? 10
-                                                  : 0
+                                                    ? 71
+                                                    : payments.length == 2
+                                                      ? 67
+                                                      : payments.length == 3
+                                                        ? 50
+                                                        : payments.length == 4
+                                                          ? 20
+                                                          : payments.length == 5
+                                                            ? 10
+                                                            : 0
                                               }px">
                                               <div style="display:
                                                   table-cell; width:
@@ -6405,17 +6636,17 @@ exports.downloadInvoice = async (req, res) => {
       fs.writeFileSync(file_path, pdfBuffer);
       console.log("PDF generated successfully!");
 
-        res.send(
-          formatResponse(
-            {
-              file_name: saleData.invoice_number + ".pdf",
-              url: getFileAbsulatePathPDF(file_path),
-              saleData,
-              payments,
-            },
-            "Invoice pdf"
-          )
-        );
+      res.send(
+        formatResponse(
+          {
+            file_name: saleData.invoice_number + ".pdf",
+            url: getFileAbsulatePathPDF(file_path),
+            saleData,
+            payments,
+          },
+          "Invoice pdf",
+        ),
+      );
     })();
 
     /*const doc = new jsPDF();
@@ -6563,10 +6794,10 @@ exports.downloadInvoiceInfo = async (req, res) => {
   payments = await PaymentCollection(payments);
 
   /* 18k gold purity value */
-  let purity18K = await PurityModel.findOne({  
+  let purity18K = await PurityModel.findOne({
     where: {
       id: 1, //18K
-    },  
+    },
   });
 
   purity18K = await PurityCollection(purity18K);
@@ -6779,7 +7010,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">SALE${saleData.is_approved == "3"?" ON APPROVAL":""} TAX INVOICE</h1>
+                                      300;">SALE${saleData.is_approved == "3" ? " ON APPROVAL" : ""} TAX INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -7005,8 +7236,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                             ${
                                               saleData.products[i].product_name
                                             } - ${
-        saleData.products[i].product_code
-      }
+                                              saleData.products[i].product_code
+                                            }
                                         </td>
                                         <td style="text-align: left;
                                             font-size: 11px;
@@ -7086,10 +7317,12 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                         400;">@${removeBlankZero(
                                                           saleData.products[i]
                                                             .materials[x]
-                                                            .discount_percent
+                                                            .discount_percent,
                                                         )}% ${
-            saleData.products[i].materials[x].discount_amount_display
-          }</span> 
+                                                          saleData.products[i]
+                                                            .materials[x]
+                                                            .discount_amount_display
+                                                        }</span> 
                                     <!--<span
                                                         style="text-align:
                                                         left; font-size:
@@ -7158,8 +7391,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                             </td>
 
                                         </tr>`;
-      }
-      html += `<tr style="
+    }
+    html += `<tr style="
                                             vertical-align: top;">
                                             <td colspan="6"
                                                 style="
@@ -7281,12 +7514,11 @@ exports.downloadInvoiceInfo = async (req, res) => {
                               <tbody>`;
     let fine_metals = 0;
     for (let i = 0; i < saleData.subCatItems.length; i++) {
-      saleData.subCatItems[i].material
-        .map((itm) => {
-          if(itm.id == 1){
-            fine_metals += parseFloat(itm.weight);
-          } 
-        });
+      saleData.subCatItems[i].material.map((itm) => {
+        if (itm.id == 1) {
+          fine_metals += parseFloat(itm.weight);
+        }
+      });
 
       let materialNames = saleData.subCatItems[i].material
         .map((itm) => itm.name)
@@ -7368,24 +7600,30 @@ exports.downloadInvoiceInfo = async (req, res) => {
     let receive_metal = 0;
     let metalExists = true;
     payments.map((itm) => {
-      if(itm.payment_mode.toLowerCase() == "metal" && itm.weight != null){
+      if (itm.payment_mode.toLowerCase() == "metal" && itm.weight != null) {
         metalExists = true;
         receive_metal += parseFloat(itm.weight);
       }
     });
     console.log("fine_metals before : ", fine_metals);
-    console.log("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
+    console.log(
+      "fine_metals 24k value : ",
+      (parseFloat(fine_metals) * parseFloat(purity18K.value)) / 100,
+    );
     /* convert gold to 24k from 18k */
-    if(purity18K && purity18K.value != null){
-      fine_metals = (parseFloat(fine_metals)*parseFloat(purity18K.value))/100;
+    if (purity18K && purity18K.value != null) {
+      fine_metals =
+        (parseFloat(fine_metals) * parseFloat(purity18K.value)) / 100;
     }
-    
+
     let rest_metal = fine_metals - receive_metal;
 
-    let totalReportCharge = parseInt(saleData.report_qty)*parseFloat(saleData.report_charge);
-    let taxOnReportCharge = (totalReportCharge*parseFloat(saleData.report_tax_percentage))/100;
+    let totalReportCharge =
+      parseInt(saleData.report_qty) * parseFloat(saleData.report_charge);
+    let taxOnReportCharge =
+      (totalReportCharge * parseFloat(saleData.report_tax_percentage)) / 100;
     let afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
-    
+
     html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="6"
@@ -7394,8 +7632,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
                                       </td>
                                   </tr>`;
-                                  if(saleData.report_qty > 0){
-                                    html += `<tr style="
+    if (saleData.report_qty > 0) {
+      html += `<tr style="
                                         vertical-align: top;
                                         background-color: #0A8AB8;
                                         font-size: 12px; 
@@ -7410,7 +7648,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         <td colspan="2">Total</td>
                                         
                                     </tr>`;
-                                    html += `<tr style="
+      html += `<tr style="
                                         vertical-align: top;
                                         font-size: 14px; 
                                         font-weight:400;
@@ -7423,8 +7661,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         <td colspan="2" style="background-color: #C1BDBD;">${afterTaxTotalReportCharge.toFixed(2)}</td>
                                         
                                     </tr>`;
-                                  }
-                                  html += `<tr style="
+    }
+    html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="6"
                                           style="
@@ -7432,32 +7670,32 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
                                       </td>
                                   </tr>`;
-                          if(metalExists){
-                            html += `<tr style="
+    if (metalExists) {
+      html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Fine Metals : </td>
                                       <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${fine_metals.toFixed(2)} GM</td>
                                       <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
-                          }
-                          if(metalExists){
-                            html += `<tr style="
+    }
+    if (metalExists) {
+      html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Receive Fine Metal : </td>
                                       <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${receive_metal.toFixed(2)} GM</td>
                                       <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
-                          }
-                          if(metalExists){
-                            html += `<tr style="
+    }
+    if (metalExists) {
+      html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Rest : </td>
                                       <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${rest_metal.toFixed(2)} GM</td>
                                       <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
-                          }
-                                          
-                            html += ` </tbody>
+    }
+
+    html += ` </tbody>
                           </table>`;
   }
 
@@ -7474,16 +7712,16 @@ exports.downloadInvoiceInfo = async (req, res) => {
                               payments.length == 0
                                 ? 180
                                 : payments.length == 1
-                                ? 180
-                                : payments.length == 2
-                                ? 180
-                                : payments.length == 3
-                                ? 180
-                                : payments.length == 4
-                                ? 180
-                                : payments.length == 5
-                                ? 180
-                                : 180
+                                  ? 180
+                                  : payments.length == 2
+                                    ? 180
+                                    : payments.length == 3
+                                      ? 180
+                                      : payments.length == 4
+                                        ? 180
+                                        : payments.length == 5
+                                          ? 180
+                                          : 180
                             }px">
                             
                             <div style="display:
@@ -7499,16 +7737,16 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                       payments.length == 0
                                         ? 100
                                         : payments.length == 1
-                                        ? 130
-                                        : payments.length == 2
-                                        ? 120
-                                        : payments.length == 3
-                                        ? 110
-                                        : payments.length == 4
-                                        ? 95
-                                        : payments.length == 5
-                                        ? 80
-                                        : 180
+                                          ? 130
+                                          : payments.length == 2
+                                            ? 120
+                                            : payments.length == 3
+                                              ? 110
+                                              : payments.length == 4
+                                                ? 95
+                                                : payments.length == 5
+                                                  ? 80
+                                                  : 180
                                     }px;
                                 ">
                                     `;
@@ -7566,7 +7804,13 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                             <td
                                                 style="border-right:
                                                 none; font-size: 12px;">${
-                                                  payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight:payments[i].amount
+                                                  payments[
+                                                    i
+                                                  ].payment_mode.toLowerCase() ==
+                                                    "metal" &&
+                                                  payments[i].weight != null
+                                                    ? payments[i].weight
+                                                    : payments[i].amount
                                                 }</td>
                                         </tr>`;
     }
@@ -7870,19 +8114,19 @@ exports.downloadInvoiceInfo = async (req, res) => {
       fs.writeFileSync(file_path, pdfBuffer);
       console.log("PDF generated successfully!");
 
-        res.send(
-          formatResponse(
-            {
-              file_name: saleData.invoice_number + "_info.pdf",
-              url: getFileAbsulatePathPDF(file_path),
-              html,
-              sale,
-              saleData,
-              payments,
-            },
-            "Invoice pdf"
-          )
-        );
+      res.send(
+        formatResponse(
+          {
+            file_name: saleData.invoice_number + "_info.pdf",
+            url: getFileAbsulatePathPDF(file_path),
+            html,
+            sale,
+            saleData,
+            payments,
+          },
+          "Invoice pdf",
+        ),
+      );
     })();
   } catch (error) {
     return res
@@ -7967,7 +8211,6 @@ exports.downloadInvoiceItemList = async (req, res) => {
   }
   let saleData = SaleCollection(sale);
 
-  
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
   const logoUrl = `public/images/logo.png`;
@@ -8121,7 +8364,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">SALE${saleData.is_approved == "3"?" ON APPROVAL":""} ITEM LIST INVOICE</h1>
+                                      300;">SALE${saleData.is_approved == "3" ? " ON APPROVAL" : ""} ITEM LIST INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -8373,7 +8616,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                           </tr>
                                       </thead>
                                       <tbody>`;
-  
+
   let totalGrossWeight = 0;
   let totalStoneWeight = 0;
   let totalGoldAmt = 0;
@@ -8389,21 +8632,20 @@ exports.downloadInvoiceItemList = async (req, res) => {
     let productAmt = 0;
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
       //grossWeight += parseFloat(saleData.products[i].total_weight);
-      
-      if(saleData.products[i].materials[x].unit_name.toUpperCase() != "GM"){
-          stoneWeight += parseFloat(saleData.products[i].materials[x].weight);
-          stoneAmt += saleData.products[i].materials[x].material_cost
-              ? parseFloat(saleData.products[i].materials[x].material_cost)
-              : 0;
+
+      if (saleData.products[i].materials[x].unit_name.toUpperCase() != "GM") {
+        stoneWeight += parseFloat(saleData.products[i].materials[x].weight);
+        stoneAmt += saleData.products[i].materials[x].material_cost
+          ? parseFloat(saleData.products[i].materials[x].material_cost)
+          : 0;
       } else {
         goldAmt += saleData.products[i].materials[x].material_cost
-              ? 
-                  parseFloat(saleData.products[i].materials[x].material_cost)
-              : 
-                  0;
+          ? parseFloat(saleData.products[i].materials[x].material_cost)
+          : 0;
       }
     }
-    productAmt = goldAmt + stoneAmt + parseFloat(saleData.products[i].making_charge);
+    productAmt =
+      goldAmt + stoneAmt + parseFloat(saleData.products[i].making_charge);
     totalGrossWeight += grossWeight;
     totalStoneWeight += stoneWeight;
     totalGoldAmt += goldAmt;
@@ -8488,7 +8730,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalGrossWeight
+                                                            totalGrossWeight,
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -8503,7 +8745,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalStoneWeight
+                                                            totalStoneWeight,
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -8518,7 +8760,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalGoldAmt
+                                                            totalGoldAmt,
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -8534,7 +8776,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalStoneAmt
+                                                            totalStoneAmt,
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -8549,7 +8791,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalMaterialAmt
+                                                            totalMaterialAmt,
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -8564,7 +8806,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalAmt
+                                                            totalAmt,
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -8599,7 +8841,8 @@ exports.downloadInvoiceItemList = async (req, res) => {
               </html>`;
 
   try {
-    let file_path = "public/invoices/" + saleData.invoice_number + "_item_list.pdf";
+    let file_path =
+      "public/invoices/" + saleData.invoice_number + "_item_list.pdf";
     const options = { format: "A4" };
 
     (async () => {
@@ -8612,17 +8855,17 @@ exports.downloadInvoiceItemList = async (req, res) => {
       fs.writeFileSync(file_path, pdfBuffer);
       console.log("PDF generated successfully!");
 
-        res.send(
-          formatResponse(
-            {
-              file_name: saleData.invoice_number + "_item_list.pdf",
-              url: getFileAbsulatePathPDF(file_path),
-              html : html,
-              saleData
-            },
-            "Invoice pdf"
-          )
-        );
+      res.send(
+        formatResponse(
+          {
+            file_name: saleData.invoice_number + "_item_list.pdf",
+            url: getFileAbsulatePathPDF(file_path),
+            html: html,
+            saleData,
+          },
+          "Invoice pdf",
+        ),
+      );
     })();
   } catch (error) {
     return res
@@ -8934,7 +9177,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                   align="center" width="100%">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
-                                      300;">SALE${saleData.is_approved == "3"?" ON APPROVAL":""} ITEM DETAILS INVOICE</h1>
+                                      300;">SALE${saleData.is_approved == "3" ? " ON APPROVAL" : ""} ITEM DETAILS INVOICE</h1>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -9211,8 +9454,12 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                     saleData.products[i]
                                                       .product_name
                                                   } - ${
-      saleData.products[i].product_code ? saleData.products[i].product_code : ""
-    }
+                                                    saleData.products[i]
+                                                      .product_code
+                                                      ? saleData.products[i]
+                                                          .product_code
+                                                      : ""
+                                                  }
                                               </td>
                                               <td style="text-align: left;
                                                   font-size: 11px;
@@ -9257,18 +9504,25 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                               .materials[x]
                                                               .material_name
                                                           } ${
-            saleData.products[i].materials[x].pakka_weight
-              ? 
-                  saleData.products[i].materials[x].pakka_weight
-                
-              : 
-                  saleData.products[i].materials[x].weight
-                
-          } ${
-            saleData.products[i].materials[x].unit_name
-          } x ${
-            saleData.products[i].materials[x].rate
-          }
+                                                            saleData.products[i]
+                                                              .materials[x]
+                                                              .pakka_weight
+                                                              ? saleData
+                                                                  .products[i]
+                                                                  .materials[x]
+                                                                  .pakka_weight
+                                                              : saleData
+                                                                  .products[i]
+                                                                  .materials[x]
+                                                                  .weight
+                                                          } ${
+                                                            saleData.products[i]
+                                                              .materials[x]
+                                                              .unit_name
+                                                          } x ${
+                                                            saleData.products[i]
+                                                              .materials[x].rate
+                                                          }
                                                       </span>
                                                       <!-- span
                                                           style="
@@ -9317,7 +9571,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                                 saleData
                                                                   .products[i]
                                                                   .materials[x]
-                                                                  .amount
+                                                                  .amount,
                                                               )}</span>
                                                       </div>
                                                   </div>`;
@@ -9335,11 +9589,13 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                     removeCurrencyAndDecimalFromPrice(
                                                       saleData.products[i]
                                                         .materials[x]
-                                                        .discount_percent
-                                                    )
+                                                        .discount_percent,
+                                                    ),
                                                   )}% ${removeCurrencyAndDecimalFromPrice(
-          saleData.products[i].materials[x].discount_amount_display
-        )}
+                                                    saleData.products[i]
+                                                      .materials[x]
+                                                      .discount_amount_display,
+                                                  )}
                                                 </span> 
                                                 <!--<span style="text-align:left; font-size:10px; font-weight:400;">${
                                                   saleData.products[i]
@@ -9359,7 +9615,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                       line-height:1;">${removeCurrencyAndDecimalFromPrice(
                                                         saleData.products[i]
                                                           .materials[x]
-                                                          .material_cost
+                                                          .material_cost,
                                                       )}</div>`;
     }
     html += `
@@ -9373,16 +9629,18 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
                                                     saleData.products[i]
-                                                      .making_charge
+                                                      .making_charge,
                                                   )}@${removeBlankZero(
-      removeCurrencyAndDecimalFromPrice(
-        saleData.products[i].making_charge_discount
-      )
-    )}%=${removeBlankZero(
-      removeCurrencyAndDecimalFromPrice(
-        saleData.products[i].total_making_charge_discount
-      )
-    )}
+                                                    removeCurrencyAndDecimalFromPrice(
+                                                      saleData.products[i]
+                                                        .making_charge_discount,
+                                                    ),
+                                                  )}%=${removeBlankZero(
+                                                    removeCurrencyAndDecimalFromPrice(
+                                                      saleData.products[i]
+                                                        .total_making_charge_discount,
+                                                    ),
+                                                  )}
                                               </td>
 
                                               <td style="text-align:left;
@@ -9394,7 +9652,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
                                                     saleData.products[i]
-                                                      .sub_price
+                                                      .sub_price,
                                                   )}
                                               </td>
                                               <td style="text-align:left;
@@ -9406,7 +9664,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
                                                     saleData.products[i]
-                                                      .total_discount_display
+                                                      .total_discount_display,
                                                   )}
                                               </td>
                                               <td style="text-align:left;
@@ -9418,7 +9676,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
                                                     saleData.products[i]
-                                                      .sub_total
+                                                      .sub_total,
                                                   )}
                                               </td>
                                               <td style="text-align:left;
@@ -9429,7 +9687,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   border-bottom: 1px solid
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
-                                                    saleData.products[i].tax
+                                                    saleData.products[i].tax,
                                                   )}
                                               </td>
                                               <td style="text-align:left;
@@ -9441,7 +9699,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                   #1E2757;">
                                                   ${removeCurrencyAndDecimalFromPrice(
                                                     saleData.products[i]
-                                                      .total_display
+                                                      .total_display,
                                                   )}
                                               </td>
 
@@ -9465,7 +9723,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalTagPriceDisplay
+                                                            totalTagPriceDisplay,
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -9481,7 +9739,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                           600; display:
                                                           ;">
                                                           <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalSaveDisplay
+                                                            totalSaveDisplay,
                                                           )}</div></h4>
                                                   </div>
                                               </td>
@@ -9505,7 +9763,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                           <div><input
                                                               type="text"
                                                               value="${removeCurrencyAndDecimalFromPrice(
-                                                                saleData?.taxable_amount
+                                                                saleData?.taxable_amount,
                                                               )}"
                                                               style="width:
                                                               80px;"></div></h4>
@@ -9540,7 +9798,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.cgst_tax
+                                                              saleData?.cgst_tax,
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -9573,7 +9831,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.sgst_tax
+                                                              saleData?.sgst_tax,
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -9607,7 +9865,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.igst_tax
+                                                              saleData?.igst_tax,
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -9642,7 +9900,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.total_amount
+                                                              saleData?.total_amount,
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -9675,7 +9933,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.discount
+                                                              saleData?.discount,
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -9708,7 +9966,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.total_payable
+                                                              saleData?.total_payable,
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -9798,7 +10056,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.paid_amount_display
+                                                              saleData?.paid_amount_display,
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -9853,7 +10111,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                         <div><input
                                                             type="text"
                                                             value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.due_amount_display
+                                                              saleData?.due_amount_display,
                                                             )}"
                                                             style="width:
                                                             80px;"></div></h4>
@@ -10168,7 +10426,8 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
   /* -------------- commented by Soumalya Nandy ------------ */
 
   try {
-    let file_path = "public/invoices/" + saleData.invoice_number + "_item_details.pdf";
+    let file_path =
+      "public/invoices/" + saleData.invoice_number + "_item_details.pdf";
     const options = { format: "A4" };
 
     (async () => {
@@ -10181,18 +10440,18 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
       fs.writeFileSync(file_path, pdfBuffer);
       console.log("PDF generated successfully!");
 
-        res.send(
-          formatResponse(
-            {
-              file_name: saleData.invoice_number + "_item_details.pdf",
-              url: getFileAbsulatePathPDF(file_path),
-              html : html,
-              saleData,
-              payments,
-            },
-            "Invoice pdf"
-          )
-        );
+      res.send(
+        formatResponse(
+          {
+            file_name: saleData.invoice_number + "_item_details.pdf",
+            url: getFileAbsulatePathPDF(file_path),
+            html: html,
+            saleData,
+            payments,
+          },
+          "Invoice pdf",
+        ),
+      );
     })();
 
     /*const doc = new jsPDF();
