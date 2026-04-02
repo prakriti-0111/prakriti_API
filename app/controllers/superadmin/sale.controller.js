@@ -122,6 +122,7 @@ exports.index = async (req, res) => {
     is_assigned,
     is_approval,
     own_sale,
+    is_own_sale,
   } = req.query;
 
   is_assigned = is_assigned === undefined ? false : true;
@@ -157,6 +158,10 @@ exports.index = async (req, res) => {
     conditions.invoice_number = { [Op.like]: `%${search}%` };
   }
 
+  if (is_own_sale == 1) {
+    conditions.sale_by = userID;
+  }
+
   if (own_sale == 1) {
     let ownUsers = await UserModel.findAll({
       attributes: ["id"],
@@ -168,10 +173,12 @@ exports.index = async (req, res) => {
   }
 
   const superAdminId = await getSuperAdminId();
-  if (
-    isSuperAdmin(req) ||
-    (!isEmpty(user_id) && Number(user_id) === Number(superAdminId))
-  ) {
+  if (isSuperAdmin(req)) {
+    conditions.sale_by = superAdminId;
+    if (isEmpty(user_id)) {
+      delete conditions.user_id;
+    }
+  } else if (!isEmpty(user_id) && Number(user_id) === Number(superAdminId)) {
     conditions.sale_by = superAdminId;
     delete conditions.user_id;
   }
