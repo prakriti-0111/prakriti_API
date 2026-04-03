@@ -494,6 +494,33 @@ exports.index = async (req, res) => {
       totalSupplier = await UserModel.count({
         where: { role_id: supplierRoleId, parent_id: userID },
       });
+
+      /* Other admin who sale item to current user will also be a supplier */
+      const otherAdmins = await PurchaseModel.findAll({
+        where: {
+          user_id: userID,
+          is_approved: { [Op.ne]: 2 },
+          is_assigned: false,
+          is_approval: false,
+        },
+        attributes: [
+          "supplier_id",
+        ],
+      });
+
+      if (otherAdmins.length > 0) {
+        const otherAdminObjList = await UserModel.findAll({
+          where: {
+            id: { [Op.in]: otherAdmins.map(p => p.supplier_id) },
+            role_id: adminRoleId,
+          },
+        });
+        
+        if(otherAdminObjList.length > 0){
+          totalSupplier += otherAdminObjList.length;
+        }
+      }
+
       totalSupplier += 1; //bnecause superadmin is also a supplier
       saleDueAmount = await saleModel.sum("due_amount", {
         where: {
