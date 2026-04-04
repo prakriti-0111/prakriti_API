@@ -74,6 +74,7 @@ exports.index = async (req, res) => {
     let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
     let totalAdmin = 0,
       totalOtherAdmin = 0,
+      totalOtherAdminBuyer = 0,
       totalDistributor = 0,
       totalOtherDistributor = 0,
       totalRetailer = 0,
@@ -84,6 +85,7 @@ exports.index = async (req, res) => {
     (totalStock = 0),
       (purchaseDueAmount = 0),
       (saleDueAmount = 0),
+      (saleDueAmountOtherAdminBuyer = 0),
       (otherDistributorSaleDueAmount = 0),
       (totalStockPrice = 0),
       (walletBalance = 0),
@@ -518,6 +520,16 @@ exports.index = async (req, res) => {
         
         if(otherAdminObjList.length > 0){
           totalSupplier += otherAdminObjList.length;
+          totalOtherAdminBuyer = otherAdminObjList.length;
+
+          saleDueAmountOtherAdminBuyer = await saleModel.sum("due_amount", {
+            where: {
+              sale_by: { [Op.in]: otherAdminObjList.map(a => a.id) },
+              is_approved: { [Op.ne]: 2 },
+              is_assigned: false,
+              is_approval: false,
+            },
+          });
         }
       }
 
@@ -1029,6 +1041,8 @@ exports.index = async (req, res) => {
       total_admin: totalAdmin,
       total_other_admin: totalOtherAdmin,
       total_distributor: totalDistributor,
+      total_other_admin_buyer: totalOtherAdminBuyer,
+      total_other_admin_buyer_due_amount: displayAmount(saleDueAmountOtherAdminBuyer),
       total_other_distributor: totalOtherDistributor,
       total_other_distributor_due_amount: displayAmount(
         otherDistributorSaleDueAmount
