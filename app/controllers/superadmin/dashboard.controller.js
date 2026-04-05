@@ -498,7 +498,7 @@ exports.index = async (req, res) => {
       });
 
       /* Other admin who sale item to current user will also be a supplier */
-      const otherAdmins = await PurchaseModel.findAll({
+      const otherAdminSuppliers = await PurchaseModel.findAll({
         where: {
           user_id: userID,
           is_approved: { [Op.ne]: 2 },
@@ -510,30 +510,20 @@ exports.index = async (req, res) => {
         ],
       });
 
-      if (otherAdmins.length > 0) {
-        const otherAdminObjList = await UserModel.findAll({
+      if (otherAdminSuppliers.length > 0) {
+        const otherAdminSupplierObjList = await UserModel.findAll({
           where: {
-            id: { [Op.in]: otherAdmins.map(p => p.supplier_id) },
+            id: { [Op.in]: otherAdminSuppliers.map(p => p.supplier_id) },
             role_id: adminRoleId,
           },
         });
         
-        if(otherAdminObjList.length > 0){
-          totalSupplier += otherAdminObjList.length;
-          totalOtherAdminBuyer = otherAdminObjList.length;
-
-          saleDueAmountOtherAdminBuyer = await saleModel.sum("due_amount", {
-            where: {
-              sale_by: { [Op.in]: otherAdminObjList.map(a => a.id) },
-              is_approved: { [Op.ne]: 2 },
-              is_assigned: false,
-              is_approval: false,
-            },
-          });
+        if(otherAdminSupplierObjList.length > 0){
+          totalSupplier += otherAdminSupplierObjList.length;
         }
       }
 
-      totalSupplier += 1; //bnecause superadmin is also a supplier
+      totalSupplier += 1; //because superadmin is also a supplier
       saleDueAmount = await saleModel.sum("due_amount", {
         where: {
           sale_by: userID,
@@ -542,6 +532,41 @@ exports.index = async (req, res) => {
           is_approval: false,
         },
       });
+
+      /* Other admin who purchase item from current user will be the buyer */
+      const otherAdminBuyers = await PurchaseModel.findAll({
+        where: {
+          supplier_id: userID,
+          is_approved: { [Op.ne]: 2 },
+          is_assigned: false,
+          is_approval: false,
+        },
+        attributes: [
+          "user_id",
+        ],
+      });
+
+      if(otherAdminBuyers.length > 0){
+        const otherAdminBuyerObjList = await UserModel.findAll({
+          where: {
+            id: { [Op.in]: otherAdminBuyers.map(p => p.user_id) },
+            role_id: adminRoleId,
+          },
+        });
+        if(otherAdminBuyerObjList.length > 0){
+          totalOtherAdminBuyer = otherAdminBuyerObjList.length;
+          saleDueAmountOtherAdminBuyer = await saleModel.sum("due_amount", {
+            where: {
+              user_id: { [Op.in]: otherAdminBuyerObjList.map(a => a.id) },
+              sale_by: userID,
+              is_approved: { [Op.ne]: 2 },
+              is_assigned: false,
+              is_approval: false,
+            },
+          });
+        }
+      }
+
 
       //total sale & related products
       let ownSaleResult = await getOwnUserSaleProducts(req, "", adminRoleId);
