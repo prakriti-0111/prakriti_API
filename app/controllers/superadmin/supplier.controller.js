@@ -62,8 +62,36 @@ exports.index = async (req, res) => {
             currentUserId,
             false
           );
-          console.log("------------------loged superAdminItem",superAdminItem);
+          //console.log("------------------loged superAdminItem",superAdminItem);
           items = [superAdminItem].concat(items);
+
+          /* Other admin who sale item to current user */
+          const otherAdmins = await PurchaseModel.findAll({
+            where: {
+              user_id: currentUserId,
+              is_approved: { [Op.ne]: 2 },
+              is_assigned: false,
+              is_approval: false,
+            },
+            attributes: [
+              "supplier_id",
+            ],
+          });
+
+          if (otherAdmins.length > 0) {
+            
+            const otherAdminObjList = await userModel.findAll({
+              where: {
+                id: { [Op.in]: otherAdmins.map(p => p.supplier_id) },
+                role_id: getRoleId("admin"),
+              },
+            });
+            //console.log("------------------loged otherAdminObjList",otherAdminObjList);
+            
+            const adminItem = await SupplierCollection(otherAdminObjList, currentUserId, false);
+            //console.log("------------------loged adminItem",adminItem);
+            items = [...adminItem].concat(items);
+          }
         } else if (isDistributor(req)/*  && page == 1 */) {
           let user = await getDistributorAdmin(req.userId, null, true);
           let adminItem = await SupplierCollection(user, currentUserId, false);
@@ -77,6 +105,7 @@ exports.index = async (req, res) => {
         res.send(formatResponse(result, "All Supplier"));
       })
       .catch((err) => {
+        console.log(err);
         res
           .status(errorCodes.default)
           .send(formatErrorResponse(errorCodes.defaultErrorMsg));
@@ -150,6 +179,35 @@ exports.index = async (req, res) => {
             false
           );
           items = [superAdminItem].concat(items);
+
+          /* Other admin who sale item to current user */
+          const otherAdmins = await PurchaseModel.findAll({
+            where: {
+              user_id: currentUserId,
+              is_approved: { [Op.ne]: 2 },
+              is_assigned: false,
+              is_approval: false,
+            },
+            attributes: [
+              "supplier_id",
+            ],
+          });
+
+          if (otherAdmins.length > 0) {
+            
+            const otherAdminObjList = await userModel.findAll({
+              where: {
+                id: { [Op.in]: otherAdmins.map(p => p.supplier_id) },
+                role_id: getRoleId("admin"),
+              },
+            });
+            //console.log("------------------loged otherAdminObjList",otherAdminObjList);
+            
+            const adminItem = await SupplierCollection(otherAdminObjList, currentUserId, false);
+            //console.log("------------------loged adminItem",adminItem);
+            items = [...adminItem].concat(items);
+          }
+
         } else if (isDistributor(req) && page == 1) {
           let user = await getDistributorAdmin(req.userId, null, true);
           let adminItem = await SupplierCollection(user, currentUserId, false);

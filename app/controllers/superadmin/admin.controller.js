@@ -9,13 +9,18 @@ const {
   removeFile,
   filterFilesFromRemove,
 } = require("@helpers/upload");
-const { isEmpty, isArray, priceFormat } = require("@helpers/helper");
+const {
+  isEmpty,
+  isArray,
+  priceFormat,
+  arrayColumn,
+} = require("@helpers/helper");
 const db = require("@models");
 const { Op } = require("sequelize");
 const {
   getRoleId,
   getNextUserName,
-  getSuperAdminId,
+  isAdmin,
   isDistributor,
   isSalesExecutive,
   getUserColumnValue,
@@ -45,7 +50,7 @@ exports.index = async (req, res) => {
     if (isDistributor(req)) {
       let admin_id = await getUserColumnValue(req.userId, "parent_id");
       condition.id = admin_id;
-    } else if(isSalesExecutive(req)){
+    } else if (isSalesExecutive(req)) {
       let admin_id = await getUserColumnValue(req.userId, "parent_id");
       condition.id = admin_id;
     } else {
@@ -53,6 +58,10 @@ exports.index = async (req, res) => {
         condition.own = true;
       } else if (own == "0") {
         condition.own = false;
+      }
+
+      if (isAdmin(req)) {
+        condition.id = { [Op.ne]: req.userId };
       }
     }
 
@@ -63,7 +72,7 @@ exports.index = async (req, res) => {
       })
       .then(async (data) => {
         let result = {
-          items: await AdminCollection(data),
+          items: await AdminCollection(data, req.userId),
           total: data.length,
         };
         res.send(formatResponse(result, "All Admin"));
@@ -79,6 +88,10 @@ exports.index = async (req, res) => {
       condition.own = true;
     } else if (own == "0") {
       condition.own = false;
+    }
+
+    if (isAdmin(req)) {
+      condition.id = { [Op.ne]: req.userId };
     }
 
     const paginatorOptions = getPaginationOptions(page, limit);
@@ -104,42 +117,37 @@ exports.index = async (req, res) => {
         ],
       })
       .then(async (data) => {
-        let superAdminId = await getSuperAdminId();
-        let total_sale = await SaleModel.sum("bill_amount", {
-          where: {
-            sale_by: superAdminId,
+        let total_sale = 0;
+        let total_sale_due = 0;
+        let total_sale_paid = 0;
+        let total_sale_return = 0;
+
+        let adminIds = arrayColumn(data.rows, "id");
+        if (adminIds.length > 0) {
+          let saleConditions = {
+            user_id: { [Op.in]: adminIds },
+            sale_by: req.userId,
             is_approved: { [Op.ne]: 2 },
             is_assigned: false,
             is_approval: false,
-          },
-        });
-        let total_sale_due = await SaleModel.sum("due_amount", {
-          where: {
-            sale_by: superAdminId,
-            is_approved: { [Op.ne]: 2 },
-            is_assigned: false,
-            is_approval: false,
-          },
-        });
-        let total_sale_paid = await SaleModel.sum("paid_amount", {
-          where: {
-            sale_by: superAdminId,
-            is_approved: { [Op.ne]: 2 },
-            is_assigned: false,
-            is_approval: false,
-          },
-        });
-        let total_sale_return = await SaleModel.sum("return_amount", {
-          where: {
-            sale_by: superAdminId,
-            is_approved: { [Op.ne]: 2 },
-            is_assigned: false,
-            is_approval: false,
-          },
-        });
+          };
+
+          total_sale = await SaleModel.sum("bill_amount", {
+            where: saleConditions,
+          });
+          total_sale_due = await SaleModel.sum("due_amount", {
+            where: saleConditions,
+          });
+          total_sale_paid = await SaleModel.sum("paid_amount", {
+            where: saleConditions,
+          });
+          total_sale_return = await SaleModel.sum("return_amount", {
+            where: saleConditions,
+          });
+        }
 
         let result = {
-          items: await AdminCollection(data.rows),
+          items: await AdminCollection(data.rows, req.userId),
           total: data.count,
           total_sale: priceFormat(total_sale),
           total_sale_due: priceFormat(total_sale_due),
@@ -507,7 +515,10 @@ exports.fetch = async (req, res) => {
       .send(formatErrorResponse("Admin not found"));
   }
   res.send(
-    formatResponse(await AdminCollection(admin), "Admin fetched successfully!")
+    formatResponse(
+      await AdminCollection(admin, req.userId),
+      "Admin fetched successfully!",
+    ),
   );
 };
 

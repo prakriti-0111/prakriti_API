@@ -74,6 +74,7 @@ exports.index = async (req, res) => {
     let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
     let totalAdmin = 0,
       totalOtherAdmin = 0,
+      totalOtherAdminBuyer = 0,
       totalDistributor = 0,
       totalOtherDistributor = 0,
       totalRetailer = 0,
@@ -84,6 +85,7 @@ exports.index = async (req, res) => {
     (totalStock = 0),
       (purchaseDueAmount = 0),
       (saleDueAmount = 0),
+      (saleDueAmountOtherAdminBuyer = 0),
       (otherDistributorSaleDueAmount = 0),
       (totalStockPrice = 0),
       (walletBalance = 0),
@@ -494,6 +496,43 @@ exports.index = async (req, res) => {
       totalSupplier = await UserModel.count({
         where: { role_id: supplierRoleId, parent_id: userID },
       });
+
+      /* Other admin who sale item to current user will also be a supplier */
+      const otherAdmins = await PurchaseModel.findAll({
+        where: {
+          user_id: userID,
+          is_approved: { [Op.ne]: 2 },
+          is_assigned: false,
+          is_approval: false,
+        },
+        attributes: [
+          "supplier_id",
+        ],
+      });
+
+      if (otherAdmins.length > 0) {
+        const otherAdminObjList = await UserModel.findAll({
+          where: {
+            id: { [Op.in]: otherAdmins.map(p => p.supplier_id) },
+            role_id: adminRoleId,
+          },
+        });
+        
+        if(otherAdminObjList.length > 0){
+          totalSupplier += otherAdminObjList.length;
+          totalOtherAdminBuyer = otherAdminObjList.length;
+
+          saleDueAmountOtherAdminBuyer = await saleModel.sum("due_amount", {
+            where: {
+              sale_by: { [Op.in]: otherAdminObjList.map(a => a.id) },
+              is_approved: { [Op.ne]: 2 },
+              is_assigned: false,
+              is_approval: false,
+            },
+          });
+        }
+      }
+
       totalSupplier += 1; //bnecause superadmin is also a supplier
       saleDueAmount = await saleModel.sum("due_amount", {
         where: {
@@ -1002,6 +1041,8 @@ exports.index = async (req, res) => {
       total_admin: totalAdmin,
       total_other_admin: totalOtherAdmin,
       total_distributor: totalDistributor,
+      total_other_admin_buyer: totalOtherAdminBuyer,
+      total_other_admin_buyer_due_amount: displayAmount(saleDueAmountOtherAdminBuyer),
       total_other_distributor: totalOtherDistributor,
       total_other_distributor_due_amount: displayAmount(
         otherDistributorSaleDueAmount
