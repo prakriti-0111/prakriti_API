@@ -65,9 +65,9 @@ const getModelObject = async(data, req) => {
         let return_charge_percent = 0;
         if(isAdmin(req) || isDistributor(req)){
             let returnPolicy = null;
-            if(isAdmin(req)){
+            if(isAdmin(req) && item.product && item.product.category_id){
                 returnPolicy = await ReturnPolicyModel.findOne({where: {category_id: item.product.category_id, role: 'admin'}});
-            }else if(isDistributor(req)){
+            }else if(isDistributor(req) && item.product && item.product.category_id){
                 returnPolicy = await ReturnPolicyModel.findOne({where: {category_id: item.product.category_id, role: 'distributor'}});
             }
             if(returnPolicy){
