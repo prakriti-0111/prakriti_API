@@ -3057,10 +3057,23 @@ exports.update = async (req, res) => {
       for (let i = 0; i < data.products.length; i++) {
         let thisItem = data.products[i];
         if (thisItem.id == 0) {
+          // Handle current_image upload for new products
+          let image_path = await base64FileUpload(
+            data.products[i].current_image,
+            "products"
+          );
+
+          let current_image =
+            data.products[i].current_image == null ||
+            data.products[i].current_image === undefined
+              ? null
+              : `${image_path.path}`;
+
           let worker_id = thisItem.worker_id || null;
           // console.log("----------------thisis purchases productv ",thisItem);
 
           let thisObj = {
+            current_image: current_image,
             purchase_id: purchase.id,
             product_id: thisItem.product_id,
             worker_id: worker_id,
