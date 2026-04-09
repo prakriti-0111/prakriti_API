@@ -1428,27 +1428,37 @@ console.log("is_certificate_exist : ", is_certificate_exist);
     for (let i = 0; i < data.products.length; i++) {
       let thisItem = data.products[i];
       // console.log("--data.product[0].current_image",data.products[i].current_image)
-      let image_path = await base64FileUpload(
-        data.products[i].current_image,
-        "products"
-      );
+      
+      // Handle current_image upload - check if it exists
+      let current_image = null;
+      if (data.products[i].current_image && 
+          data.products[i].current_image !== null && 
+          data.products[i].current_image !== undefined &&
+          data.products[i].current_image !== '') {
+        try {
+          let image_path = await base64FileUpload(
+            data.products[i].current_image,
+            "products"
+          );
+          current_image = image_path.path;
+        } catch (imgErr) {
+          console.log("Image upload error for product " + i + ": ", imgErr);
+          current_image = null;
+        }
+      }
+      
       // console.log(
       //   "image_path________________________________________________________",
       //   image_path
       // );
 
-      let current_image =
-        data.products[i].current_image == null ||
-        data.products[i].current_image === undefined
-          ? null
-          : `${image_path.path}`;
       // console.log(current_image)
       // console.log("----------current image ",current_image )
       let worker_id = thisItem.worker_id || null;
       let thisObj = {
         current_image: current_image,
         purchase_id: purchase.id,
-        product_id: thisItem.product_id || null,
+        product_id: isEmpty(thisItem.product_id) ? null : thisItem.product_id,
         worker_id: worker_id,
         size_id: thisItem.size_id || null,
         certificate_no: cleanInput(thisItem.certificate_no),
@@ -3058,16 +3068,22 @@ exports.update = async (req, res) => {
         let thisItem = data.products[i];
         if (thisItem.id == 0) {
           // Handle current_image upload for new products
-          let image_path = await base64FileUpload(
-            data.products[i].current_image,
-            "products"
-          );
-
-          let current_image =
-            data.products[i].current_image == null ||
-            data.products[i].current_image === undefined
-              ? null
-              : `${image_path.path}`;
+          let current_image = null;
+          if (data.products[i].current_image && 
+              data.products[i].current_image !== null && 
+              data.products[i].current_image !== undefined &&
+              data.products[i].current_image !== '') {
+            try {
+              let image_path = await base64FileUpload(
+                data.products[i].current_image,
+                "products"
+              );
+              current_image = image_path.path;
+            } catch (imgErr) {
+              console.log("Image upload error for product " + i + ": ", imgErr);
+              current_image = null;
+            }
+          }
 
           let worker_id = thisItem.worker_id || null;
           // console.log("----------------thisis purchases productv ",thisItem);
@@ -3075,7 +3091,7 @@ exports.update = async (req, res) => {
           let thisObj = {
             current_image: current_image,
             purchase_id: purchase.id,
-            product_id: thisItem.product_id,
+            product_id: isEmpty(thisItem.product_id) ? null : thisItem.product_id,
             worker_id: worker_id,
 
             size_id: thisItem.size_id || null,
