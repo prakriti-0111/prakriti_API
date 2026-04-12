@@ -7116,7 +7116,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                               .materials[x]
                                                               .material_name
                                                           } ${
-            purchaseData.products[i].materials[x].pakka_weight
+            purchaseData.products[i].materials[x].pakka_weight > 0
               ? removeCurrencyAndDecimalFromPrice(
                   purchaseData.products[i].materials[x].pakka_weight
                 )
