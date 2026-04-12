@@ -132,9 +132,7 @@ exports.index = async (req, res) => {
     if (isSuperAdmin(req)) {
       //totalAdmin = await UserModel.count({where: {role_id: adminRoleId}});
       //totalDistributor = await UserModel.count({where: {role_id: distributorRoleId}});
-      totalRetailer = await UserModel.count({
-        where: { role_id: retailerRoleId },
-      });
+      
       totalCustomer = await UserModel.count({
         where: { role_id: customerRoleId },
       });
@@ -366,12 +364,19 @@ exports.index = async (req, res) => {
       totalAvlTransferStockPrice = superAdminTotalTransferStockPrice =
         transferStockData.totalPrice;
 
+      totalRetailer = await UserModel.count({
+        where: { role_id: retailerRoleId, parent_id: { [Op.in]: avl_User_ids } },
+      });
+
       //retailer due
       total_retailer_due = await saleModel.sum("sales.due_amount", {
         where: {
           is_approved: { [Op.ne]: 2 },
           is_assigned: false,
           is_approval: false,
+          sale_by: {
+            [Op.in]: avl_User_ids,
+          }
         },
         include: [
           {
@@ -617,7 +622,15 @@ exports.index = async (req, res) => {
           is_approved: { [Op.ne]: 2 },
           is_assigned: false,
           is_approval: false,
-        },
+          sale_by: {
+            [Op.or]: [
+              { [Op.eq]: userID },
+              { [Op.in]: distributorIds },
+              { [Op.in]: otherdistributorIds },
+              { [Op.in]: seIds }, 
+            ],
+          }
+        }/* ,
         include: [
           {
             model: UserModel,
@@ -627,7 +640,7 @@ exports.index = async (req, res) => {
             attributes: ["id"],
           },
         ],
-        group: ["user.id"], // Add the group option here
+        group: ["user.id"], // Add the group option here */
       });
     } else if (isDistributor(req)) {
       let district_id = await getUserColumnValue(req.userId, "district_id");

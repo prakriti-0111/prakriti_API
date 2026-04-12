@@ -7117,12 +7117,12 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                               .material_name
                                                           } ${
             purchaseData.products[i].materials[x].pakka_weight > 0
-              ? removeCurrencyAndDecimalFromPrice(
+              ? 
                   purchaseData.products[i].materials[x].pakka_weight
-                )
-              : removeCurrencyAndDecimalFromPrice(
+                
+              : 
                   purchaseData.products[i].materials[x].weight
-                )
+                
           } ${
             purchaseData.products[i].materials[x].unit_name
           } x ${removeCurrencyAndDecimalFromPrice(

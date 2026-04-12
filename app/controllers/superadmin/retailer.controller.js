@@ -57,6 +57,7 @@ const e = require("cors");
  */
 exports.index = async (req, res) => {
   let roleId = getRoleId("retailer");
+  let sales_executiveRoleId = getRoleId("sales_executive");
   /**
    * add default address
    */
@@ -173,6 +174,17 @@ exports.index = async (req, res) => {
             });
             let seIds = arrayColumn(se, "id");
             adminSaleByIds = seIds.concat(allDstIds);
+            /* get admin own SE's */
+            const adminSE = await userModel.findAll({
+              attributes: ["id"],
+              where: {
+                parent_id: { [Op.in]: [req.userId] },
+                role_id: sales_executiveRoleId,
+              },
+            });
+            const adminSEIds = arrayColumn(adminSE, "id");
+            adminSaleByIds = adminSaleByIds.concat(adminSEIds);
+            console.log("adminSaleByIds : ", adminSaleByIds);
             conditions.sale_by = { [Op.in]: adminSaleByIds };
           } else {
             conditions.sale_by = req.userId;
@@ -211,7 +223,7 @@ exports.index = async (req, res) => {
           include: includes /*, group: ['user_id']*/,
         };
         //console.log("userWhere : ", userWhere);
-        //console.log("whereObj : ", whereObj);
+        console.log("whereObj : ", JSON.stringify(whereObj));
         let total_sale = await SaleModel.sum("bill_amount", whereObj);
         let total_sale_due = await SaleModel.sum("sales.due_amount", whereObj);
         let total_sale_paid = await SaleModel.sum("paid_amount", whereObj);
