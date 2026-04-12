@@ -1076,6 +1076,10 @@ exports.store = async (req, res) => {
             });
             await updateWalletRemainingBalance(data.user_id, payment.id);
 
+            /* check data.user_id role */
+            let user = await UserModel.findOne({ where: { id: data.user_id } });
+            
+
             //debit from sales executive
             let payment2 = await PaymentModel.create({
               parent_id: payment.id,
@@ -1094,7 +1098,7 @@ exports.store = async (req, res) => {
               payment_belongs: currentUserID,
               due_date: null,
               type: 'debit',
-              purpose: 'sent to distributor',
+              purpose: `sent to ${user.role.name}`,
               can_accept: false,
               is_advance: false
             });
