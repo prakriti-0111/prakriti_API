@@ -251,6 +251,7 @@ exports.txnLedger = async (req, res) => {
 
     // Flatten purchases and payments into a single table structure
     let tableData = [];
+    let c = 1;
     allPurchases.forEach((purchase, index) => {
       let approve_status = 'Pending';
       if(purchase.is_approved == 1){
@@ -271,6 +272,7 @@ exports.txnLedger = async (req, res) => {
 
       // Add Purchase row
       tableData.push({
+        index: c,
         id: purchase.id,
         date: formatDateTime(purchase.invoice_date, 8),
         txn_date: purchase.invoice_date,
@@ -287,10 +289,12 @@ exports.txnLedger = async (req, res) => {
         approve_status: approve_status,
         is_advance: 0
       });
+      c++;
 
       // Add related payment rows
       purchase.payments.forEach((pay, idx) => {
         tableData.push({
+          index: c,
           id: purchase.id,
           date: formatDateTime(pay.payment_date, 8),
           txn_date: pay.payment_date,
@@ -307,13 +311,15 @@ exports.txnLedger = async (req, res) => {
           approve_status: "Accepted",
           is_advance: pay.is_advance,
         });
+        c++;
       });
     });
 
+    tableData.sort((a, b) => new Date(b.index) - new Date(a.index));
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      //console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
       return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
     });
 
@@ -366,6 +372,8 @@ exports.txnLedger = async (req, res) => {
       }
       if (tx.txn_type == '' && tx.is_approved != 2) {
         runningBalance += tx.txn_amount;
+      } else if (tx.type.toLowerCase() == "payment" && tx.txn_type == "credit") {
+          runningBalance -= tx.pay_amount;
       } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
         runningBalance += tx.txn_amount;
       } else if (tx.txn_type == "debit" && tx.is_advance) {
@@ -452,6 +460,7 @@ exports.downloadTxnLedger = async (req, res) => {
 
     // Flatten purchases and payments into a single table structure
     let tableData = [];
+    let c = 1;
     allPurchases.forEach((purchase, index) => {
       let approve_status = 'Pending';
       if(purchase.is_approved == 1){
@@ -472,6 +481,7 @@ exports.downloadTxnLedger = async (req, res) => {
       
       // Add Purchase row
       tableData.push({
+        index: c,
         id: purchase.id,
         date: formatDateTime(purchase.invoice_date, 8),
         txn_date: purchase.invoice_date,
@@ -481,6 +491,7 @@ exports.downloadTxnLedger = async (req, res) => {
         bill_amount: displayAmount(purchase.bill_amount),
         txn_amount : parseFloat(purchase.bill_amount),
         payment_amount: null,
+        pay_amount: null,
         payment_mode: purchase.payment_mode || "-",
         type: "Purchase",
         txn_type: "",
@@ -488,10 +499,12 @@ exports.downloadTxnLedger = async (req, res) => {
         approve_status: approve_status,
         is_advance: 0
       });
+      c++;
 
       // Add related payment rows
       purchase.payments.forEach((pay, idx) => {
         tableData.push({
+          index: c,
           id: purchase.id,
           date: formatDateTime(pay.payment_date, 8),
           txn_date: pay.payment_date,
@@ -500,6 +513,7 @@ exports.downloadTxnLedger = async (req, res) => {
           purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
+          pay_amount: pay.amount,
           txn_amount : parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
           type: "Payment",
@@ -508,13 +522,15 @@ exports.downloadTxnLedger = async (req, res) => {
           approve_status: "Accepted",
           is_advance: pay.is_advance,
         });
+        c++;
       });
     });
 
+    tableData.sort((a, b) => new Date(b.index) - new Date(a.index));
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      //console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
       return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
     });
 
@@ -568,6 +584,8 @@ exports.downloadTxnLedger = async (req, res) => {
       }
       if (tx.txn_type == '' && tx.is_approved != 2) {
         runningBalance += tx.txn_amount;
+      } else if (tx.type.toLowerCase() == "payment" && tx.txn_type == "credit") {
+        runningBalance -= tx.pay_amount;
       } else if (tx.txn_type == "credit" && (tempAdvanceDebitInvoice_idx == -1 || (tempAdvanceDebitInvoice_idx > -1 && tempAdvanceDebitInvoice_idx + 1 != index))) {
         runningBalance += tx.txn_amount;
       } else if (tx.txn_type == "debit" && tx.is_advance) {
@@ -1410,27 +1428,37 @@ console.log("is_certificate_exist : ", is_certificate_exist);
     for (let i = 0; i < data.products.length; i++) {
       let thisItem = data.products[i];
       // console.log("--data.product[0].current_image",data.products[i].current_image)
-      let image_path = await base64FileUpload(
-        data.products[i].current_image,
-        "products"
-      );
+      
+      // Handle current_image upload - check if it exists
+      let current_image = null;
+      if (data.products[i].current_image && 
+          data.products[i].current_image !== null && 
+          data.products[i].current_image !== undefined &&
+          data.products[i].current_image !== '') {
+        try {
+          let image_path = await base64FileUpload(
+            data.products[i].current_image,
+            "products"
+          );
+          current_image = image_path.path;
+        } catch (imgErr) {
+          console.log("Image upload error for product " + i + ": ", imgErr);
+          current_image = null;
+        }
+      }
+      
       // console.log(
       //   "image_path________________________________________________________",
       //   image_path
       // );
 
-      let current_image =
-        data.products[i].current_image == null ||
-        data.products[i].current_image === undefined
-          ? null
-          : `${image_path.path}`;
       // console.log(current_image)
       // console.log("----------current image ",current_image )
       let worker_id = thisItem.worker_id || null;
       let thisObj = {
         current_image: current_image,
         purchase_id: purchase.id,
-        product_id: thisItem.product_id || null,
+        product_id: isEmpty(thisItem.product_id) ? null : thisItem.product_id,
         worker_id: worker_id,
         size_id: thisItem.size_id || null,
         certificate_no: cleanInput(thisItem.certificate_no),
@@ -3039,12 +3067,31 @@ exports.update = async (req, res) => {
       for (let i = 0; i < data.products.length; i++) {
         let thisItem = data.products[i];
         if (thisItem.id == 0) {
+          // Handle current_image upload for new products
+          let current_image = null;
+          if (data.products[i].current_image && 
+              data.products[i].current_image !== null && 
+              data.products[i].current_image !== undefined &&
+              data.products[i].current_image !== '') {
+            try {
+              let image_path = await base64FileUpload(
+                data.products[i].current_image,
+                "products"
+              );
+              current_image = image_path.path;
+            } catch (imgErr) {
+              console.log("Image upload error for product " + i + ": ", imgErr);
+              current_image = null;
+            }
+          }
+
           let worker_id = thisItem.worker_id || null;
           // console.log("----------------thisis purchases productv ",thisItem);
 
           let thisObj = {
+            current_image: current_image,
             purchase_id: purchase.id,
-            product_id: thisItem.product_id,
+            product_id: isEmpty(thisItem.product_id) ? null : thisItem.product_id,
             worker_id: worker_id,
 
             size_id: thisItem.size_id || null,
@@ -7069,13 +7116,13 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                               .materials[x]
                                                               .material_name
                                                           } ${
-            purchaseData.products[i].materials[x].pakka_weight
-              ? removeCurrencyAndDecimalFromPrice(
+            purchaseData.products[i].materials[x].pakka_weight > 0
+              ? 
                   purchaseData.products[i].materials[x].pakka_weight
-                )
-              : removeCurrencyAndDecimalFromPrice(
+                
+              : 
                   purchaseData.products[i].materials[x].weight
-                )
+                
           } ${
             purchaseData.products[i].materials[x].unit_name
           } x ${removeCurrencyAndDecimalFromPrice(

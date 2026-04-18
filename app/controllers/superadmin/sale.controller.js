@@ -310,6 +310,7 @@ exports.txnLedger = async (req, res) => {
 
     // Flatten sales and payments into a single table structure
     let tableData = [];
+    let c = 1;
     allSales.forEach((sale, index) => {
       let approve_status = "Pending";
       if (sale.is_approved == 1) {
@@ -330,6 +331,7 @@ exports.txnLedger = async (req, res) => {
 
       // Add Purchase row
       tableData.push({
+        index: c,
         id: sale.id,
         date: formatDateTime(sale.invoice_date, 8),
         txn_date: sale.invoice_date,
@@ -339,6 +341,7 @@ exports.txnLedger = async (req, res) => {
         bill_amount: displayAmount(sale.bill_amount),
         txn_amount: parseFloat(sale.bill_amount),
         payment_amount: null,
+        pay_amount: null,
         payment_mode: sale.payment_mode || "-",
         type: "Sale",
         txn_type: "",
@@ -346,10 +349,11 @@ exports.txnLedger = async (req, res) => {
         approve_status: approve_status,
         is_advance: 0,
       });
-
+      c++;
       // Add related payment rows
       sale.payments.forEach((pay, idx) => {
         tableData.push({
+          index: c,
           id: sale.id,
           date: formatDateTime(pay.payment_date, 8),
           txn_date: pay.payment_date,
@@ -358,6 +362,7 @@ exports.txnLedger = async (req, res) => {
           purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
+          pay_amount: pay.amount,
           txn_amount: parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
           type: "Payment",
@@ -366,17 +371,21 @@ exports.txnLedger = async (req, res) => {
           approve_status: "Accepted",
           is_advance: pay.is_advance,
         });
+        c++;
       });
     });
 
+    //console.log("before tableData: ", tableData);
+
+    tableData.sort((a, b) => new Date(b.index) - new Date(a.index));
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      console.log(
+      /* console.log(
         "----------a.invoice_number,b.invoice_number----------",
         a.invoice_number.split("").pop(),
         b.invoice_number.split("").pop(),
-      );
+      ); */
       return (
         b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop()
       );
@@ -391,7 +400,7 @@ exports.txnLedger = async (req, res) => {
       );
     }
 
-    console.log("tableData: ", tableData);
+    //console.log("tableData: ", tableData);
 
     let temp_invoice_no = "";
     let temp_invoice_index = -1;
@@ -439,6 +448,8 @@ exports.txnLedger = async (req, res) => {
         }
         if (tx.txn_type == "" && tx.is_approved != 2) {
           runningBalance += tx.txn_amount;
+        } else if (tx.type.toLowerCase() == "payment" && tx.txn_type == "credit") {
+          runningBalance -= tx.pay_amount;
         } else if (
           tx.txn_type == "credit" &&
           (tempAdvanceDebitInvoice_idx == -1 ||
@@ -452,6 +463,8 @@ exports.txnLedger = async (req, res) => {
         } else if (tx.txn_type == "debit") {
           runningBalance -= tx.txn_amount;
         }
+
+        runningBalance = runningBalance > 0 ? runningBalance : 0;
 
         return {
           ...tx,
@@ -554,6 +567,7 @@ exports.downloadTxnLedger = async (req, res) => {
 
     // Flatten sales and payments into a single table structure
     let tableData = [];
+    let c = 1;
     allSales.forEach((sale, index) => {
       let approve_status = "Pending";
       if (sale.is_approved == 1) {
@@ -574,6 +588,7 @@ exports.downloadTxnLedger = async (req, res) => {
 
       // Add Purchase row
       tableData.push({
+        index: c,
         id: sale.id,
         date: formatDateTime(sale.invoice_date, 8),
         txn_date: sale.invoice_date,
@@ -583,6 +598,7 @@ exports.downloadTxnLedger = async (req, res) => {
         bill_amount: displayAmount(sale.bill_amount),
         txn_amount: parseFloat(sale.bill_amount),
         payment_amount: null,
+        pay_amount: null,
         payment_mode: sale.payment_mode || "-",
         type: "Sale",
         txn_type: "",
@@ -590,10 +606,12 @@ exports.downloadTxnLedger = async (req, res) => {
         approve_status: approve_status,
         is_advance: 0,
       });
+      c++;
 
       // Add related payment rows
       sale.payments.forEach((pay, idx) => {
         tableData.push({
+          index: c,
           id: sale.id,
           date: formatDateTime(pay.payment_date, 8),
           txn_date: pay.payment_date,
@@ -602,6 +620,7 @@ exports.downloadTxnLedger = async (req, res) => {
           purpose: pay.purpose || "",
           bill_amount: null,
           payment_amount: displayAmount(pay.amount),
+          pay_amount: pay.amount,
           txn_amount: parseFloat(pay.amount),
           payment_mode: pay.payment_mode,
           type: "Payment",
@@ -610,17 +629,19 @@ exports.downloadTxnLedger = async (req, res) => {
           approve_status: "Accepted",
           is_advance: pay.is_advance,
         });
+        c++;
       });
     });
 
+    tableData.sort((a, b) => new Date(b.index) - new Date(a.index));
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      console.log(
+      /* console.log(
         "----------a.invoice_number,b.invoice_number----------",
         a.invoice_number.split("").pop(),
         b.invoice_number.split("").pop(),
-      );
+      ); */
       return (
         b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop()
       );
@@ -683,6 +704,8 @@ exports.downloadTxnLedger = async (req, res) => {
         }
         if (tx.txn_type == "" && tx.is_approved != 2) {
           runningBalance += tx.txn_amount;
+        } else if (tx.type.toLowerCase() == "payment" && tx.txn_type == "credit") {
+          runningBalance -= tx.pay_amount;
         } else if (
           tx.txn_type == "credit" &&
           (tempAdvanceDebitInvoice_idx == -1 ||
