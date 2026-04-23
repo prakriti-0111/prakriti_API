@@ -1436,11 +1436,15 @@ console.log("is_certificate_exist : ", is_certificate_exist);
           data.products[i].current_image !== undefined &&
           data.products[i].current_image !== '') {
         try {
-          let image_path = await base64FileUpload(
-            data.products[i].current_image,
-            "products"
-          );
-          current_image = image_path.path;
+          if(/^data:([A-Za-z-+/]+);base64,/.test(data.products[i].current_image)){
+            let image_path = await base64FileUpload(
+              data.products[i].current_image,
+              "products"
+            );
+            current_image = image_path.path;
+          } else {
+            current_image = data.products[i].current_image; // Assuming it's a URL or existing path
+          }
         } catch (imgErr) {
           console.log("Image upload error for product " + i + ": ", imgErr);
           current_image = null;
