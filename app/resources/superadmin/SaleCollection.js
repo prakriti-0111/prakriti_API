@@ -45,6 +45,14 @@ const getModelObject = (data) => {
             
         }
 
+        /* reorder material so that gold will be always comes as first item if exists */
+        // Move the first material whose name contains 'gold' (case-insensitive) to the front
+        const goldIndex = materials.findIndex(m => m.material_name && m.material_name.toLowerCase().includes('gold'));
+        if (goldIndex > 0) {
+            const [goldItem] = materials.splice(goldIndex, 1);
+            materials.unshift(goldItem);
+        }
+
         let total_weight = '';
         if(materials.length == 1){
             total_weight = weightFormat(materials[0].weight).toFixed(3);
