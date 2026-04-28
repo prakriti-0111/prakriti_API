@@ -9512,7 +9512,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                                     font-weight: 400;">Gross Weight-
                                                     ${
                                                       saleData.products[i]
-                                                        .total_weight
+                                                        .total_weight_display
                                                     }
                                               </td>
   
