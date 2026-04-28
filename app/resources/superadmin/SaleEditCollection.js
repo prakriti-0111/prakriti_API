@@ -54,6 +54,14 @@ const getModelObject = async(data) => {
             })
         }
 
+        /* reorder material so that gold will be always comes as first item if exists */
+        // Move the first material whose name contains 'gold' (case-insensitive) to the front
+        const goldIndex = materials.findIndex(m => m.material_name && m.material_name.toLowerCase().includes('gold'));
+        if (goldIndex > 0) {
+            const [goldItem] = materials.splice(goldIndex, 1);
+            materials.unshift(goldItem);
+        }
+
         let return_charge_percent = 0;
         let saleUserRole = data.user && data.user.role ? data.user.role.name : '';
         if(saleUserRole && parseFloat(data.due_amount) <= 0){
