@@ -139,7 +139,7 @@ const getModelObject = (data) => {
                         subCatWiseProductMaterials[mItem.material_id] = {
                             "id" : mItem.material_id,
                             "name" : mItem.material_name,
-                            "weight" : parseFloat(mItem.pakka_weight),
+                            "weight" : parseFloat(mItem.weight),
                             "unit" : mItem.unit_name,
                             "rate" : mItem.rate
                         };
