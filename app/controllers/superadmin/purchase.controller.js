@@ -2073,7 +2073,7 @@ exports.statuschange = async (req, res) => {
               let _wC = { user_id: stock_con, type: stock_type },
                 _iu_data = {
                   quantity: quantity,
-                  total_weight: thisItem.total_weight,
+                  total_weight: thisItem.total_weight.toString().replace(/[^0-9.]/g, ''),
                   user_id: userID, //isSuperAdmin(req) ? null : req.userId,
                   type: stock_type,
                   purchase_id: purchase.id,
@@ -2120,7 +2120,7 @@ exports.statuschange = async (req, res) => {
                   purity_id: thisItem.materials[0].purity_id || null,
                   certificate_no: cleanInput(thisItem.certificate_no),
                   quantity: 1,
-                  total_weight: thisItem.total_weight,
+                  total_weight: thisItem.total_weight.toString().replace(/[^0-9.]/g, ''),
                   user_id: userID, //isSuperAdmin(req) ? null : req.userId,
                   type: stock_type,
                 },
