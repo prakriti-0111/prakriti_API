@@ -11,6 +11,7 @@ const PaymentModel = db.payments;
 const PurchaseModel = db.purchases;
 const SaleModel = db.sales;
 const UserModel = db.users;
+const RoleModel = db.roles;
 const NoticationModel = db.notifiactions;
 const OrderModel = db.orders;
 
@@ -1077,8 +1078,16 @@ exports.store = async (req, res) => {
             await updateWalletRemainingBalance(data.user_id, payment.id);
 
             /* check data.user_id role */
-            let user = await UserModel.findOne({ where: { id: data.user_id } });
-            
+            let user = await UserModel.findOne({ 
+              where: { id: data.user_id },  
+              include: [
+                {
+                  model: RoleModel,
+                  as: "role",
+                },
+              ],
+            });
+            console.log("=====USER ROLE=====", user.role.name);
 
             //debit from sales executive
             let payment2 = await PaymentModel.create({
@@ -1246,6 +1255,7 @@ exports.store = async (req, res) => {
     res.send(formatResponse("", "Payment successfully!"));
 
   } catch (error) {
+    console.log(error);
     return res.status(errorCodes.default).send(formatErrorResponse(error.toString()));
   }
 
