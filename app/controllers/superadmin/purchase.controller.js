@@ -2068,8 +2068,9 @@ exports.statuschange = async (req, res) => {
                   : 0;
               }
 
-              let Current_image = await purchase.purchaseProducts[i]
-                .current_image;
+              let Current_image = (purchase.purchaseProducts && purchase.purchaseProducts[i] && purchase.purchaseProducts[i].current_image)
+                ? purchase.purchaseProducts[i].current_image
+                : thisItem.current_image || null;
               let _wC = { user_id: stock_con, type: stock_type },
                 _iu_data = {
                   quantity: quantity,
@@ -2108,8 +2109,9 @@ exports.statuschange = async (req, res) => {
 
               console.log(query);
               let resData = await StockModel.findAll(query);
-              let Current_image = await purchase.purchaseProducts[i]
-                .current_image;
+              let Current_image = (purchase.purchaseProducts && purchase.purchaseProducts[i] && purchase.purchaseProducts[i].current_image)
+                ? purchase.purchaseProducts[i].current_image
+                : thisItem.current_image || null;
               stock = await StockModel.create(
                 {
                   purchase_id: purchase.id,
@@ -3259,6 +3261,58 @@ exports.delete = async (req, res) => {
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse("Purchase does not delete due to some error"));
+  }
+};
+
+/**
+ * delete single purchase product
+ *
+ * @param {*} req
+ * @param {*} res
+ */
+exports.deleteProduct = async (req, res) => {
+  try {
+    const purchaseId = req.params.purchaseId;
+    const productId = req.params.productId;
+
+    // Ensure purchase exists
+    const purchase = await PurchaseModel.findOne({ where: { id: purchaseId } });
+    if (!purchase) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse('Purchase not found'));
+    }
+
+    // Ensure product exists under this purchase
+    const purchaseProduct = await PurchaseProductModel.findOne({
+      where: { id: productId, purchase_id: purchaseId },
+    });
+
+    if (!purchaseProduct) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse('Purchase product not found'));
+    }
+
+    // Delete product and its materials in a transaction
+    await sequelize.transaction(async (t) => {
+      await PurchaseProductMaterialModel.destroy({
+        where: { purchase_product_id: purchaseProduct.id },
+        transaction: t,
+      });
+
+      await PurchaseProductModel.destroy({
+        where: { id: purchaseProduct.id },
+        transaction: t,
+      });
+    });
+
+    return res.send(formatResponse([], 'Purchase product deleted successfully'));
+  } catch (err) {
+    addLog('err: ' + err.toString());
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse('Failed to delete purchase product'));
   }
 };
 
