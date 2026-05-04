@@ -939,6 +939,11 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     purchaseController.pre_purchase_delete
   );
+  router.delete(
+    "/purchases/:purchaseId/products/:productId",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    purchaseController.deleteProduct
+  );
   router.get(
     "/purchases/new-invoice-number",
     [authJwt.verifyToken, authJwt.isSuperAdmin],

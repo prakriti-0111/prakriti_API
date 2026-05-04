@@ -59,7 +59,7 @@ const getModelObject = (data) => {
         }
         let sub_total = !isEmpty(data.sale_id) ? displayAmount(item.sub_price) : displayAmount(parseFloat(item.sub_price) + parseFloat(item.making_charge));
         products.push({
-            id: item.product ? item.product.id : 0,
+            id: item.id,
             product_name: item.product ? item.product.name : '',
             product_type: item.product ? item.product.type : '',
             product_code: item.product ? item.product.product_code : '',
