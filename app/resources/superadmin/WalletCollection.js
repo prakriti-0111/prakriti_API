@@ -43,25 +43,38 @@ const getModelObject = async(data, index = null, p_mode = null) => {
     }
 
     let action_status = '', display_mode = '<p style="margin: 0;">'+payment_mode+'</p>';
-    if(data.payment_mode == "cheque" && data.status != "pending"){
-        action_status = (data.status == "success") ? "Accepted" : "Declined";
-        if(data.status == "success" && !isEmpty(data.ref_no)){
-            display_mode += '<p style="margin: 0;font-size: 12px;">' + data.ref_no + '</p>';
-        }else if(data.status != "success" && !isEmpty(data.reasons)){
-            display_mode += '<p style="margin: 0;font-size: 12px;">' + data.reasons + '</p>';
-        }
-    }else if(data.status != "pending"){
-        if(data.status == "failed"){
-            action_status = "Declined";
-        }else{
-            action_status = "Accepted";
-        }
-    }
 
-    if(data.parent_id){
-        let parentPay = await PaymentModel.findByPk(data.parent_id);
-        if(parentPay.status == "pending"){
-            action_status = "Pending";
+    // Show 'Processed' only for original pending rows that have been acted on (can_accept=false and no parent)
+    if (data.can_accept === false && !data.parent_id && (data.status == 'pending' || data.status == 'failed')) {
+        action_status = 'Processed';
+        if (data.payment_mode == "cheque") {
+            if (!isEmpty(data.ref_no)) {
+                display_mode += '<p style="margin: 0;font-size: 12px;">' + data.ref_no + '</p>';
+            } else if (!isEmpty(data.reasons)) {
+                display_mode += '<p style="margin: 0;font-size: 12px;">' + data.reasons + '</p>';
+            }
+        } else {
+            if (!isEmpty(data.reasons)) {
+                display_mode += '<p style="margin: 0;font-size: 12px;">' + data.reasons + '</p>';
+            }
+        }
+    } else if (data.status == 'pending') {
+        // actionable pending rows
+        action_status = data.can_accept ? 'Pending' : 'Processed';
+    } else {
+        // not pending: show Accepted/Declined as before
+        if (data.payment_mode == "cheque") {
+            action_status = (data.status == "success") ? "Accepted" : "Declined";
+            if (data.status == "success" && !isEmpty(data.ref_no)) {
+                display_mode += '<p style="margin: 0;font-size: 12px;">' + data.ref_no + '</p>';
+            } else if (data.status != "success" && !isEmpty(data.reasons)) {
+                display_mode += '<p style="margin: 0;font-size: 12px;">' + data.reasons + '</p>';
+            }
+        } else {
+            action_status = (data.status == "failed") ? "Declined" : "Accepted";
+            if (data.status != "success" && !isEmpty(data.reasons)) {
+                display_mode += '<p style="margin: 0;font-size: 12px;">' + data.reasons + '</p>';
+            }
         }
     }
     let purpose = [data.purpose];
@@ -74,7 +87,16 @@ const getModelObject = async(data, index = null, p_mode = null) => {
     if(index == 0 && p_mode == "advance"){ 
         remaining_balance = await getWalletBalance(data.payment_belongs, "Advance");
     } else remaining_balance = data.remaining_balance || 0;
-    
+    // If this payment is pending, always hide the credit amount
+    // and show it as "To be processed" in the display_mode
+    if (data.status == 'pending') {
+        credit_amount = 0;
+        display_mode += '<p style="margin:0;font-size:12px;color:#ff9800;">To be processed: ' + displayAmount(data.amount) + '</p>';
+    }
+
+    // Ensure action buttons are only enabled for truly pending rows that can be accepted.
+    const ui_can_accept = (data.status == 'pending' && data.can_accept) ? true : false;
+
     return {
         id: data.id,
         amount: displayAmount(data.amount),
@@ -93,7 +115,7 @@ const getModelObject = async(data, index = null, p_mode = null) => {
         display_user_details: display_user_details,
         action_value: action_status,
         display_mode: display_mode,
-        can_accept: data.can_accept
+        can_accept: ui_can_accept
     }
 }
 

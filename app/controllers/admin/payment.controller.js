@@ -236,12 +236,38 @@ exports.updateStatus = async (req, res) => {
 
   let payment = await PaymentModel.findOne({where: {id: req.params.id}});
   if(data.status == 1){
-    let remaining_balance = await getWalletBalance(req.userId);
-    await PaymentModel.update({
-      status: "success",
-      ref_no: data.ref_no || null,
-      remaining_balance: remaining_balance
-    },{where: {id: payment.id}});
+    // Keep the original request status as 'pending' but mark it non-actionable (processed)
+    const updateObj = { can_accept: false };
+    if (data.ref_no) updateObj.ref_no = data.ref_no;
+    await PaymentModel.update(updateObj, { where: { id: payment.id } });
+
+    // create accepted ledger row so receiver sees an entry at top
+    const acceptedPayment = await PaymentModel.create({
+      parent_id: payment.id,
+      user_id: payment.user_id,
+      payment_by: payment.payment_by,
+      amount: payment.amount,
+      payment_mode: payment.payment_mode,
+      remaining_balance: 0,
+      notes: payment.notes || null,
+      cheque_no: payment.cheque_no || null,
+      txn_id: payment.txn_id || null,
+      weight: payment.weight || null,
+      status: 'success',
+      payment_date: moment().format('YYYY-MM-DD'),
+      table_type: payment.table_type,
+      table_id: payment.table_id,
+      payment_belongs: req.userId,
+      due_date: payment.due_date ? moment(payment.due_date).format('YYYY-MM-DD') : null,
+      type: payment.type,
+      purpose: payment.purpose
+    });
+
+    await getWalletBalance(req.userId); // ensure balances computed
+    await updateWalletRemainingBalance(acceptedPayment.payment_belongs, acceptedPayment.id);
+
+    // do not modify sender-side (original child) rows; receiver list will have the new accepted row
+    // (original child left unchanged)
 
     let tableData = null;
     if(payment.table_type == "sale"){
@@ -283,10 +309,8 @@ exports.updateStatus = async (req, res) => {
     }
 
   }else{
-    await PaymentModel.update({
-      status: "failed",
-      reasons: data.reasons || null
-    },{where: {id: payment.id}});
+    // mark original request as processed and failed (disable accept)
+    await PaymentModel.update({ status: "failed", reasons: data.reasons || null, can_accept: false },{where: {id: payment.id}});
   }
 
   res.send(formatResponse("", "Updated successfully!"));

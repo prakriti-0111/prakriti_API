@@ -86,6 +86,7 @@ exports.store = async (req, res) => {
       }
     }
 
+
     if (isSalesExecutive(req)) {
       if ('payment_type' in data) {
         if (data.payment_type == "send_money") {
@@ -261,7 +262,7 @@ exports.store = async (req, res) => {
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: "purchase",
-                table_id: purchase.id,
+                table_id: purchase ? purchase.id : null,
                 payment_belongs: data.user_id,
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'debit',
@@ -599,7 +600,7 @@ exports.store = async (req, res) => {
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: "purchase",
-                table_id: purchase.id,
+                table_id: purchase ? purchase.id : null,
                 payment_belongs: data.user_id,
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'debit',
@@ -1087,7 +1088,7 @@ exports.store = async (req, res) => {
                 },
               ],
             });
-            console.log("=====USER ROLE=====", user.role.name);
+            console.log("=====USER ROLE=====", user && user.role ? user.role.name : null);
 
             //debit from sales executive
             let payment2 = await PaymentModel.create({
@@ -1303,157 +1304,123 @@ exports.walletBalance = async (req, res) => {
  */
 exports.updateStatus = async (req, res) => {
   let data = req.body;
-
   try {
-    
- 
+    let payment = await PaymentModel.findOne({ where: { id: req.params.id } });
+    if (!payment) return res.status(errorCodes.default).send(formatErrorResponse('Payment not found'));
 
-  let payment = await PaymentModel.findOne({ where: { id: req.params.id } });
-  if (data.status == 1) {
+    if (data.status == 1) {
+      // Keep the original request status as 'pending' (do not mark it success).
+      // Persist ref_no if provided and mark the original row as processed (disable further accept).
+      const updateObj = {};
+      if (data.ref_no) updateObj.ref_no = data.ref_no;
+      updateObj.can_accept = false;
+      await PaymentModel.update(updateObj, { where: { id: payment.id } });
 
-    await PaymentModel.update({
-      status: "success",
-      ref_no: data.ref_no || null
-    }, { where: { id: payment.id } });
+      // create a new ledger row representing the accepted payment (so it appears at top)
+      const acceptedPayment = await PaymentModel.create({
+        parent_id: payment.id,
+        user_id: payment.user_id,
+        payment_by: payment.payment_by,
+        amount: payment.amount,
+        payment_mode: payment.payment_mode,
+        payment_type: payment.payment_type,
+        remaining_balance: 0,
+        notes: payment.notes || null,
+        cheque_no: payment.cheque_no || null,
+        txn_id: payment.txn_id || null,
+        weight: payment.weight || null,
+        status: 'success',
+        payment_date: moment().format('YYYY-MM-DD'),
+        table_type: payment.table_type,
+        table_id: payment.table_id,
+        payment_belongs: payment.payment_belongs,
+        due_date: payment.due_date || null,
+        type: payment.type,
+        purpose: payment.purpose,
+        can_accept: false,
+        is_advance: payment.is_advance
+      });
 
-    await updateWalletRemainingBalance(payment.payment_belongs, payment.id);
+      // update wallet remaining balance for the newly created accepted payment
+      await updateWalletRemainingBalance(acceptedPayment.payment_belongs, acceptedPayment.id);
 
-    if (payment.is_advance) {
-      let childPayment = await PaymentModel.findOne({ where: { parent_id: req.params.id } });
-      if (childPayment) {
-        await PaymentModel.update({
-          status: "success",
-          ref_no: data.ref_no || null
-        }, { where: { id: childPayment.id } });
+      // do not modify sender-side (original child) rows; receiver list will get the new accepted row
+      const originalChild = await PaymentModel.findOne({ where: { parent_id: payment.id } });
+      let acceptedChild = null; // kept for compatibility but we won't create or update sender-side entries
 
-        await updateWalletRemainingBalance(childPayment.payment_belongs, childPayment.id);
+      // proceed with existing advance/non-advance flows but update balances against the newly created accepted rows
 
-        await updateAdvanceAmount(payment.user_id, payment.payment_belongs, payment.amount, true);
-      }else{
-        if(payment.table_type == 'orders'){
-          await OrderModel.increment('paid_amount', { by: parseFloat(payment.amount), where: { id: payment.table_id } });
-          // await OrderModel.update({
-          //   paid_amount: payment.amount
-          // }, {where: {id: payment.table_id}});
+      if (payment.is_advance) {
+        const childPayment = await PaymentModel.findOne({ where: { parent_id: req.params.id } });
+        if (childPayment) {
+          // do not alter sender side payment rows here
+          await updateAdvanceAmount(payment.user_id, payment.payment_belongs, payment.amount, true);
+        } else {
+          if (payment.table_type == 'orders') {
+            await OrderModel.increment('paid_amount', { by: parseFloat(payment.amount), where: { id: payment.table_id } });
+          }
+          await updateAdvanceAmount(payment.user_id, payment.payment_belongs, payment.amount, true);
         }
-
-        await updateAdvanceAmount(payment.user_id, payment.payment_belongs, payment.amount, true);
-      }
-
-    } else {
-
-      let tableData = null;
-      if (payment.table_type == "sale") {
-        tableData = await SaleModel.findOne({ where: { id: payment.table_id } });
       } else {
-        tableData = await PurchaseModel.findOne({ where: { id: payment.table_id } });
-      }
-      if (tableData) {
-        let amount = parseFloat(payment.amount);
-        let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
-        if (parseFloat(tableData.due_amount) <= amount) {
-          due_amount = 0;
-          paid_amount = parseFloat(tableData.total_payable);
-          amount = amount - parseFloat(tableData.due_amount);
-          status = "paid";
-          payment_amount = parseFloat(tableData.due_amount);
-        } else {
-          due_amount = parseFloat(tableData.due_amount) - amount;
-          paid_amount = priceFormat(tableData.paid_amount) + amount;
-          amount = 0;
-          payment_amount = amount;
-        }
+        let tableData = null;
+        if (payment.table_type == 'sale') tableData = await SaleModel.findOne({ where: { id: payment.table_id } });
+        else tableData = await PurchaseModel.findOne({ where: { id: payment.table_id } });
 
-        if (payment.table_type == "sale") {
-          let updateObj = {
-            due_amount: due_amount,
-            paid_amount: paid_amount,
-            status: status
-          }
-          if(payment.due_date){
-            updateObj.due_date = moment(payment.due_date).format("YYYY-MM-DD");
-          }
-          await SaleModel.update(updateObj, { where: { id: payment.table_id } });
-
-          if (isSuperAdmin(req) || isAdmin(req)) {
-            let childPayment = await PaymentModel.findOne({ where: { parent_id: req.params.id } });
-            if (childPayment) {
-              await PaymentModel.update({
-                status: "success",
-                ref_no: data.ref_no || null
-              }, { where: { id: childPayment.id } });
-
-              await updateWalletRemainingBalance(childPayment.payment_belongs, childPayment.id);
-
-              if (childPayment.payment_mode != "cheque") {
-                let updateObj2 = {
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status
-                }
-                if(payment.due_date){
-                  updateObj2.due_date = moment(payment.due_date).format("YYYY-MM-DD");
-                }
-                await PurchaseModel.update(updateObj2, { where: { sale_id: tableData.id } });
-              }
-            }
-          }
-
-          //read notification
-          let noticationCon = { type_id: tableData.id };
-          if (due_amount > 0) {
-            noticationCon.type = "sale_due";
+        if (tableData) {
+          let amount = parseFloat(payment.amount);
+          let status = 'due', due_amount = 0, paid_amount = 0;
+          if (parseFloat(tableData.due_amount) <= amount) {
+            due_amount = 0;
+            paid_amount = parseFloat(tableData.total_payable);
+            amount = amount - parseFloat(tableData.due_amount);
+            status = 'paid';
           } else {
-            noticationCon = { ...noticationCon, [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }] }
-          }
-          await NoticationModel.update({
-            is_read: true
-          }, { where: noticationCon });
-
-        } else {
-          let updateObj3 = {
-            due_amount: due_amount,
-            paid_amount: paid_amount,
-            status: status
-          }
-          if(payment.due_date){
-            updateObj3.due_date = moment(payment.due_date).format("YYYY-MM-DD");
+            due_amount = parseFloat(tableData.due_amount) - amount;
+            paid_amount = priceFormat(tableData.paid_amount) + amount;
+            amount = 0;
           }
 
-          await PurchaseModel.update(updateObj3, { where: { id: payment.table_id } });
+          if (payment.table_type == 'sale') {
+            const updateObj = { due_amount, paid_amount, status };
+            if (payment.due_date) updateObj.due_date = moment(payment.due_date).format('YYYY-MM-DD');
+            await SaleModel.update(updateObj, { where: { id: payment.table_id } });
 
-          //read notification
-          let noticationCon = { type_id: payment.table_id, type: "purchase_due" };
-          await NoticationModel.update({
-            is_read: true
-          }, { where: noticationCon });
+              if (isSuperAdmin(req) || isAdmin(req)) {
+                const childPayment = await PaymentModel.findOne({ where: { parent_id: req.params.id } });
+                if (childPayment) {
+                  // do not modify sender-side payment rows here; only update purchase records when appropriate
+                  if (childPayment.payment_mode != 'cheque') {
+                    const updateObj2 = { due_amount, paid_amount, status };
+                    if (payment.due_date) updateObj2.due_date = moment(payment.due_date).format('YYYY-MM-DD');
+                    await PurchaseModel.update(updateObj2, { where: { sale_id: tableData.id } });
+                  }
+                }
+              }
+
+            const noticationCon = (due_amount > 0) ? { type_id: tableData.id, type: 'sale_due' } : { type_id: tableData.id, [Op.or]: [{ type: 'sale_due' }, { type: 'sale_settlement' }] };
+            await NoticationModel.update({ is_read: true }, { where: noticationCon });
+          } else {
+            const updateObj3 = { due_amount, paid_amount, status };
+            if (payment.due_date) updateObj3.due_date = moment(payment.due_date).format('YYYY-MM-DD');
+            await PurchaseModel.update(updateObj3, { where: { id: payment.table_id } });
+            await NoticationModel.update({ is_read: true }, { where: { type_id: payment.table_id, type: 'purchase_due' } });
+          }
         }
       }
-
+    } else {
+      // mark original request as processed and failed (disable accept)
+      await PaymentModel.update({ status: 'failed', reasons: data.reasons || null, can_accept: false }, { where: { id: payment.id } });
+      await updateWalletRemainingBalance(payment.payment_belongs, payment.id);
+      const childPayment = await PaymentModel.findOne({ where: { parent_id: payment.id } });
+      if (childPayment) {
+        await PaymentModel.update({ status: 'failed', ref_no: data.reasons || null, can_accept: false }, { where: { id: childPayment.id } });
+        await updateWalletRemainingBalance(childPayment.payment_belongs, childPayment.id);
+      }
     }
 
-  } else {
-    await PaymentModel.update({
-      status: "failed",
-      reasons: data.reasons || null
-    }, { where: { id: payment.id } });
-    await updateWalletRemainingBalance(payment.payment_belongs, payment.id);
-
-    let childPayment = await PaymentModel.findOne({ where: { parent_id: payment.id } });
-    if (childPayment) {
-      await PaymentModel.update({
-        status: "failed",
-        ref_no: data.reasons || null
-      }, { where: { id: childPayment.id } });
-
-      await updateWalletRemainingBalance(childPayment.payment_belongs, childPayment.id);
-    }
+    res.send(formatResponse('', 'Updated successfully!'));
+  } catch (error) {
+    console.log(error);
+    return res.status(errorCodes.default).send(formatErrorResponse(error.toString()));
   }
-
-  res.send(formatResponse("", "Updated successfully!"));
-
-} catch (error) {
-  console.log(error)
-  return res.status(errorCodes.default).send(formatErrorResponse(error.toString()));
-}
-}
+};
