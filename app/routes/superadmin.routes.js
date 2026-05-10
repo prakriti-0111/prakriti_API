@@ -1286,6 +1286,10 @@ module.exports = (app, express, io) => {
     paymentController.updateStatus
   );
   router.get(
+    "/payments/recalculate-remaining-balance",
+    paymentController.recalculateRemainingBalance
+  );
+  router.get(
     "/wallet-history",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     walletController.index

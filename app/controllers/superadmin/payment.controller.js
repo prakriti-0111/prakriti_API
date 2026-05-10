@@ -7,6 +7,7 @@ const { isEmpty, generateOrderNo, getDateFromToWhere, displayAmount, priceFormat
 const sequelize = db.sequelize;
 const { PaymentCollection } = require("@resources/superadmin/PaymentCollection");
 const { getWalletBalance, getSuperAdminId, isSuperAdmin, isAdmin, isDistributor, updateWalletRemainingBalance, getWorkingUserID, isSalesExecutive, sendNotification, updateAdvanceAmount, isManager } = require("@library/common");
+const { recalculatePaymentRemainingBalance } = require("@library/paymentBalanceRecalculator");
 const PaymentModel = db.payments;
 const PurchaseModel = db.purchases;
 const SaleModel = db.sales;
@@ -1290,6 +1291,29 @@ exports.walletBalance = async (req, res) => {
   res.send(formatResponse({
     balance: remaining_balance
   }));
+}
+
+
+/**
+ * Recalculate payment remaining balances
+ *
+ * @param {*} req
+ * @param {*} res
+ */
+exports.recalculateRemainingBalance = async (req, res) => {
+  try {
+    const summary = await recalculatePaymentRemainingBalance({
+      userId: req.body.user_id ?? req.query.user_id,
+      paymentBy: req.body.payment_by ?? req.query.payment_by,
+      paymentId: req.body.payment_id ?? req.query.payment_id,
+      dryRun: req.body.dry_run ?? req.query.dry_run,
+    });
+
+    res.send(formatResponse(summary, 'Payment remaining balances recalculated successfully!'));
+  } catch (error) {
+    console.log(error);
+    return res.status(errorCodes.default).send(formatErrorResponse(error.toString()));
+  }
 }
 
 
