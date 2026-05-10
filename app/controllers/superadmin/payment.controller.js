@@ -1638,50 +1638,18 @@ exports.recalculateRemainingBalance = async (req, res) => {
 exports.updateStatus = async (req, res) => {
   let data = req.body;
   try {
-    let payment = await PaymentModel.findOne({ where: { id: req.params.id } });
-    if (!payment) return res.status(errorCodes.default).send(formatErrorResponse('Payment not found'));
+    
+ 
 
-    if (data.status == 1) {
-      // Keep the original request status as 'pending' (do not mark it success).
-      // Persist ref_no if provided and mark the original row as processed (disable further accept).
-      const updateObj = {};
-      if (data.ref_no) updateObj.ref_no = data.ref_no;
-      updateObj.can_accept = false;
-      await PaymentModel.update(updateObj, { where: { id: payment.id } });
+  let payment = await PaymentModel.findOne({ where: { id: req.params.id } });
+  if (data.status == 1) {
 
-      // create a new ledger row representing the accepted payment (so it appears at top)
-      const acceptedPayment = await PaymentModel.create({
-        parent_id: payment.id,
-        user_id: payment.user_id,
-        payment_by: payment.payment_by,
-        amount: payment.amount,
-        payment_mode: payment.payment_mode,
-        payment_type: payment.payment_type,
-        remaining_balance: 0,
-        notes: payment.notes || null,
-        cheque_no: payment.cheque_no || null,
-        txn_id: payment.txn_id || null,
-        weight: payment.weight || null,
-        status: 'success',
-        payment_date: moment().format('YYYY-MM-DD'),
-        table_type: payment.table_type,
-        table_id: payment.table_id,
-        payment_belongs: payment.payment_belongs,
-        due_date: payment.due_date || null,
-        type: payment.type,
-        purpose: payment.purpose,
-        can_accept: false,
-        is_advance: payment.is_advance
-      });
+    await PaymentModel.update({
+      status: "success",
+      ref_no: data.ref_no || null
+    }, { where: { id: payment.id } });
 
-      // update wallet remaining balance for the newly created accepted payment
-      await updateWalletRemainingBalance(acceptedPayment.payment_belongs, acceptedPayment.id);
-
-      // do not modify sender-side (original child) rows; receiver list will get the new accepted row
-      const originalChild = await PaymentModel.findOne({ where: { parent_id: payment.id } });
-      let acceptedChild = null; // kept for compatibility but we won't create or update sender-side entries
-
-      // proceed with existing advance/non-advance flows but update balances against the newly created accepted rows
+    await updateWalletRemainingBalance(payment.payment_belongs, payment.id);
 
       if (payment.is_advance) {
         const childPayment = await PaymentModel.findOne({ where: { parent_id: req.params.id } });
