@@ -1,8 +1,11 @@
-const db = require('@models');
-const { getWalletBalance, updateWalletRemainingBalance } = require('@library/common');
+const db = require("@models");
+const {
+  getWalletBalance,
+  updateWalletRemainingBalance,
+} = require("@library/common");
 
 const parseId = (value) => {
-  if (value === undefined || value === null || value === '') {
+  if (value === undefined || value === null || value === "") {
     return null;
   }
 
@@ -11,12 +14,12 @@ const parseId = (value) => {
 };
 
 const parseBoolean = (value) => {
-  if (typeof value === 'boolean') {
+  if (typeof value === "boolean") {
     return value;
   }
 
-  if (typeof value === 'string') {
-    return !['false', '0', 'no', 'off', ''].includes(value.toLowerCase());
+  if (typeof value === "string") {
+    return !["false", "0", "no", "off", ""].includes(value.toLowerCase());
   }
 
   return Boolean(value);
@@ -45,7 +48,7 @@ const recalculatePaymentRemainingBalance = async (filters = {}) => {
 
   const payments = await db.payments.findAll({
     where,
-    order: [['id', 'ASC']],
+    order: [["id", "ASC"]],
   });
 
   const results = [];
@@ -61,29 +64,35 @@ const recalculatePaymentRemainingBalance = async (filters = {}) => {
         user_id: payment.user_id,
         payment_by: payment.payment_by,
         payment_belongs: payment.payment_belongs,
-        payment_type: payment.payment_type || 'wallet',
+        payment_type: payment.payment_type || "wallet",
         skipped: true,
-        reason: 'missing payment_belongs',
+        reason: "missing payment_belongs",
       });
       continue;
     }
 
-    const paymentType = payment.payment_type || 'wallet';
+    const paymentType = payment.payment_type || "wallet";
     const recalculatedBalance = await getWalletBalance(
       payment.payment_belongs,
       null,
       paymentType,
-      payment.id
+      payment.id,
     );
 
-    const currentBalance = payment.remaining_balance === null || payment.remaining_balance === undefined
-      ? null
-      : Number(payment.remaining_balance);
+    const currentBalance =
+      payment.remaining_balance === null ||
+      payment.remaining_balance === undefined
+        ? null
+        : Number(payment.remaining_balance);
     const nextBalance = Number(recalculatedBalance);
     const shouldUpdate = !dryRun && currentBalance !== nextBalance;
 
     if (shouldUpdate) {
-      await updateWalletRemainingBalance(payment.payment_belongs, payment.id, paymentType);
+      await updateWalletRemainingBalance(
+        payment.payment_belongs,
+        payment.id,
+        paymentType,
+      );
     }
 
     if (currentBalance === nextBalance) {

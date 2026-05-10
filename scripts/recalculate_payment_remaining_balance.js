@@ -1,34 +1,38 @@
 #!/usr/bin/env node
 
-require('module-alias/register');
-require('dotenv').config();
+require("module-alias/register");
+require("dotenv").config();
 
-const { recalculatePaymentRemainingBalance } = require('@library/paymentBalanceRecalculator');
+const {
+  recalculatePaymentRemainingBalance,
+} = require("@library/paymentBalanceRecalculator");
 
 const args = process.argv.slice(2).reduce((acc, item) => {
-  if (!item.startsWith('--')) {
+  if (!item.startsWith("--")) {
     return acc;
   }
 
-  const [rawKey, ...rawValueParts] = item.slice(2).split('=');
+  const [rawKey, ...rawValueParts] = item.slice(2).split("=");
   const key = rawKey.trim();
-  const value = rawValueParts.length ? rawValueParts.join('=') : 'true';
+  const value = rawValueParts.length ? rawValueParts.join("=") : "true";
   acc[key] = value;
   return acc;
 }, {});
 
 const toBoolean = (value) => {
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     return Boolean(value);
   }
 
-  return !['false', '0', 'no', 'off'].includes(value.toLowerCase());
+  return !["false", "0", "no", "off"].includes(value.toLowerCase());
 };
 
-const userId = args['user-id'] ?? args.user_id ?? args.userId;
-const paymentBy = args['payment-by'] ?? args.payment_by ?? args.paymentBy;
-const paymentId = args['payment-id'] ?? args.payment_id ?? args.paymentId;
-const dryRun = toBoolean(args['dry-run'] ?? args.dry_run ?? args.dryRun ?? false);
+const userId = args["user-id"] ?? args.user_id ?? args.userId;
+const paymentBy = args["payment-by"] ?? args.payment_by ?? args.paymentBy;
+const paymentId = args["payment-id"] ?? args.payment_id ?? args.paymentId;
+const dryRun = toBoolean(
+  args["dry-run"] ?? args.dry_run ?? args.dryRun ?? false,
+);
 
 const main = async () => {
   const summary = await recalculatePaymentRemainingBalance({
@@ -39,7 +43,7 @@ const main = async () => {
   });
 
   if (!summary.total) {
-    console.log('No payments found.');
+    console.log("No payments found.");
     return;
   }
 
@@ -56,7 +60,7 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    const db = require('@models');
+    const db = require("@models");
     if (db.sequelize) {
       await db.sequelize.close();
     }
