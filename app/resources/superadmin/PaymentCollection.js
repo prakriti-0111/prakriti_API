@@ -40,7 +40,7 @@ const getModelObject = async(data) => {
             }
         }
     } else if (data.status == 'pending') {
-        if (data.can_accept) {
+        if (data.can_accept || data.parent_id) {
             action_status = 'Pending';
         } else {
             action_status = 'processed';

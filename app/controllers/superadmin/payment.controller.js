@@ -149,7 +149,7 @@ exports.store = async (req, res) => {
             cheque_no: data.cheque_no || null,
             txn_id: data.txn_id || null,
             weight: data.effective_weight || null,
-            status: data.payment_mode != "cheque" ? "success" : "pending",
+            status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
             payment_date: moment(data.payment_date).format("YYYY-MM-DD"),
             payment_belongs: currentUserID,
             due_date: data.due_date
@@ -196,7 +196,7 @@ exports.store = async (req, res) => {
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
               weight: data.effective_weight || null,
-              status: data.payment_mode != "cheque" ? "success" : "pending",
+              status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                 "YYYY-MM-DD",
               ),
@@ -244,7 +244,7 @@ exports.store = async (req, res) => {
               console.log("======PAID AMOUNT=====", paid_amount);
               console.log("======STATUS=====", status);
               console.log("======PAYMENT AMOUNT=====", payment_amount);
-              if (data.payment_mode != "cheque") {
+              if (data.payment_mode != "cheque" && data.payment_mode != "cash") {
                 await SaleModel.update(
                   {
                     due_amount: due_amount,
@@ -303,7 +303,7 @@ exports.store = async (req, res) => {
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
                 weight: data.effective_weight || null,
-                status: data.payment_mode != "cheque" ? "success" : "pending",
+                status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                   "YYYY-MM-DD",
                 ),
@@ -336,7 +336,7 @@ exports.store = async (req, res) => {
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
                 weight: data.effective_weight || null,
-                status: data.payment_mode != "cheque" ? "success" : "pending",
+                status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                   "YYYY-MM-DD",
                 ),
@@ -382,7 +382,7 @@ exports.store = async (req, res) => {
                 amount = 0;
               }
 
-              if (data.payment_mode != "cheque") {
+              if (data.payment_mode != "cheque" && data.payment_mode != "cash") {
                 await PurchaseModel.update(
                   {
                     due_amount: due_amount,
@@ -416,7 +416,7 @@ exports.store = async (req, res) => {
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
                 weight: data.effective_weight || null,
-                status: data.payment_mode != "cheque" ? "success" : "pending",
+                status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
                 payment_date: moment(data.payment_date).format("YYYY-MM-DD"),
                 table_type: data.table_type,
                 table_id: item.id,
@@ -483,7 +483,10 @@ exports.store = async (req, res) => {
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
               weight: data.effective_weight || null,
-              status: "success",
+              status:
+                data.payment_mode != "cheque" && data.payment_mode != "cash"
+                  ? "success"
+                  : "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                 "YYYY-MM-DD",
               ),
@@ -612,7 +615,7 @@ exports.store = async (req, res) => {
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
                 weight: data.effective_weight || null,
-                status: data.payment_mode != "cheque" ? "success" : "pending",
+                status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                   "YYYY-MM-DD",
                 ),
@@ -656,7 +659,7 @@ exports.store = async (req, res) => {
                 amount = 0;
               }
 
-              if (data.payment_mode != "cheque") {
+              if (data.payment_mode != "cheque" && data.payment_mode != "cash") {
                 await SaleModel.update(
                   {
                     due_amount: due_amount,
@@ -715,7 +718,7 @@ exports.store = async (req, res) => {
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
                 weight: data.effective_weight || null,
-                status: data.payment_mode != "cheque" ? "success" : "pending",
+                status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                   "YYYY-MM-DD",
                 ),
@@ -748,7 +751,7 @@ exports.store = async (req, res) => {
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
                 weight: data.effective_weight || null,
-                status: data.payment_mode != "cheque" ? "success" : "pending",
+                status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                   "YYYY-MM-DD",
                 ),
@@ -949,7 +952,10 @@ exports.store = async (req, res) => {
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
               weight: data.effective_weight || null,
-              status: "success",
+              status:
+                data.payment_mode != "cheque" && data.payment_mode != "cash"
+                  ? "success"
+                  : "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                 "YYYY-MM-DD",
               ),
@@ -1190,7 +1196,7 @@ exports.store = async (req, res) => {
                 amount = 0;
               }
 
-              if (data.payment_mode != "cheque") {
+              if (data.payment_mode != "cheque" && data.payment_mode != "cash") {
                 await SaleModel.update(
                   {
                     due_amount: due_amount,
@@ -1248,7 +1254,7 @@ exports.store = async (req, res) => {
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
                 weight: data.effective_weight || null,
-                status: data.payment_mode != "cheque" ? "success" : "pending",
+                status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                   "YYYY-MM-DD",
                 ),
@@ -1280,7 +1286,7 @@ exports.store = async (req, res) => {
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
                 weight: data.effective_weight || null,
-                status: data.payment_mode != "cheque" ? "success" : "pending",
+                status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                   "YYYY-MM-DD",
                 ),
@@ -1368,7 +1374,10 @@ exports.store = async (req, res) => {
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
               weight: data.effective_weight || null,
-              status: "success",
+              status:
+                data.payment_mode != "cheque" && data.payment_mode != "cash"
+                  ? "success"
+                  : "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                 "YYYY-MM-DD",
               ),
@@ -1395,7 +1404,7 @@ exports.store = async (req, res) => {
               cheque_no: data.cheque_no || null,
               txn_id: data.txn_id || null,
               weight: data.effective_weight || null,
-              status: data.payment_mode != "cheque" ? "success" : "pending",
+              status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
               payment_date: moment(data.payment_date).format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
               due_date: null,
@@ -1440,7 +1449,7 @@ exports.store = async (req, res) => {
                 amount = 0;
               }
 
-              if (data.payment_mode != "cheque") {
+              if (data.payment_mode != "cheque" && data.payment_mode != "cash") {
                 await SaleModel.update(
                   {
                     due_amount: due_amount,
@@ -1498,7 +1507,7 @@ exports.store = async (req, res) => {
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
                 weight: data.effective_weight || null,
-                status: data.payment_mode != "cheque" ? "success" : "pending",
+                status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                   "YYYY-MM-DD",
                 ),
@@ -1530,7 +1539,7 @@ exports.store = async (req, res) => {
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
                 weight: data.effective_weight || null,
-                status: data.payment_mode != "cheque" ? "success" : "pending",
+                status: (data.payment_mode != "cheque" && data.payment_mode != "cash") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                   "YYYY-MM-DD",
                 ),
@@ -1647,14 +1656,12 @@ exports.updateStatus = async (req, res) => {
         .send(formatErrorResponse("Payment not found"));
 
     if (data.status == 1) {
-      // Keep the original request status as 'pending' (do not mark it success).
-      // Persist ref_no if provided and mark the original row as processed (disable further accept).
-      const updateObj = {};
+      // keep original receiver-side request row as processed
+      const updateObj = { can_accept: false };
       if (data.ref_no) updateObj.ref_no = data.ref_no;
-      updateObj.can_accept = false;
       await PaymentModel.update(updateObj, { where: { id: payment.id } });
 
-      // create a new ledger row representing the accepted payment (so it appears at top)
+      // create a new accepted ledger row after approval
       const acceptedPayment = await PaymentModel.create({
         parent_id: payment.id,
         user_id: payment.user_id,
@@ -1678,20 +1685,28 @@ exports.updateStatus = async (req, res) => {
         can_accept: false,
         is_advance: payment.is_advance,
       });
-
-      // update wallet remaining balance for the newly created accepted payment
       await updateWalletRemainingBalance(
         acceptedPayment.payment_belongs,
         acceptedPayment.id,
       );
 
-      // do not modify sender-side (original child) rows; receiver list will get the new accepted row
-      const originalChild = await PaymentModel.findOne({
+      // mark sender-side mirrored row as accepted so sender panel reflects admin action
+      const childPayment = await PaymentModel.findOne({
         where: { parent_id: payment.id },
       });
-      let acceptedChild = null; // kept for compatibility but we won't create or update sender-side entries
+      if (childPayment) {
+        const childUpdateObj = { status: "success", can_accept: false };
+        if (data.ref_no) childUpdateObj.ref_no = data.ref_no;
+        await PaymentModel.update(childUpdateObj, {
+          where: { id: childPayment.id },
+        });
+        await updateWalletRemainingBalance(
+          childPayment.payment_belongs,
+          childPayment.id,
+        );
+      }
 
-      // proceed with existing advance/non-advance flows but update balances against the newly created accepted rows
+      // proceed with existing advance/non-advance settlement flow
 
       if (payment.is_advance) {
         const childPayment = await PaymentModel.findOne({
@@ -1762,7 +1777,7 @@ exports.updateStatus = async (req, res) => {
               });
               if (childPayment) {
                 // do not modify sender-side payment rows here; only update purchase records when appropriate
-                if (childPayment.payment_mode != "cheque") {
+                if (childPayment.payment_mode != "cheque" && childPayment.payment_mode != "cash") {
                   const updateObj2 = { due_amount, paid_amount, status };
                   if (payment.due_date)
                     updateObj2.due_date = moment(payment.due_date).format(
