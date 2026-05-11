@@ -1,16 +1,10 @@
 const { errorCodes, formatErrorResponse, formatResponse } = require("@utils/response.config");
 const { getPaginationOptions } = require('@helpers/paginator');
-const { errorCodes, formatErrorResponse, formatResponse } = require("@utils/response.config");
-const { getPaginationOptions } = require('@helpers/paginator');
 const db = require("@models");
-const moment = require('moment');
 const moment = require('moment');
 const { Op, QueryTypes } = require("sequelize");
 const { isEmpty, generateOrderNo, getDateFromToWhere, displayAmount, priceFormat } = require("@helpers/helper");
-const { isEmpty, generateOrderNo, getDateFromToWhere, displayAmount, priceFormat } = require("@helpers/helper");
 const sequelize = db.sequelize;
-const { PaymentCollection } = require("@resources/superadmin/PaymentCollection");
-const { getWalletBalance, getSuperAdminId, isSuperAdmin, isAdmin, isDistributor, updateWalletRemainingBalance, getWorkingUserID, isSalesExecutive, sendNotification, updateAdvanceAmount, isManager } = require("@library/common");
 const { PaymentCollection } = require("@resources/superadmin/PaymentCollection");
 const { getWalletBalance, getSuperAdminId, isSuperAdmin, isAdmin, isDistributor, updateWalletRemainingBalance, getWorkingUserID, isSalesExecutive, sendNotification, updateAdvanceAmount, isManager } = require("@library/common");
 const PaymentModel = db.payments;
@@ -29,7 +23,6 @@ const OrderModel = db.orders;
 exports.index = async (req, res) => {
   let { page, limit, date_from, date_to, table_type, table_id } = req.query;
   let conditions = { ...getDateFromToWhere(date_from, date_to, 'payment_date') };
-  let conditions = { ...getDateFromToWhere(date_from, date_to, 'payment_date') };
   if (!isEmpty(table_type)) {
     conditions.table_type = table_type;
   }
@@ -39,7 +32,6 @@ exports.index = async (req, res) => {
 
   const paginatorOptions = getPaginationOptions(page, limit);
   PaymentModel.findAndCountAll({
-    order: [['id', 'DESC']],
     order: [['id', 'DESC']],
     where: { payment_by: req.userId, ...conditions },
     offset: paginatorOptions.offset,
@@ -58,27 +50,12 @@ exports.index = async (req, res) => {
     res.send(formatResponse(result, 'All Payments'));
   })
     .catch(err => {
-        as: 'user'
-      }
-    ]
-  }).then(async (data) => {
-    let result = {
-      items: await PaymentCollection(data.rows),
-      total: data.count
-    }
-    res.send(formatResponse(result, 'All Payments'));
-  })
-    .catch(err => {
       res.status(errorCodes.default).send(formatErrorResponse(err));
     });
-}
 }
 
 /**
  * Create Payment
- * 
- * @param {*} req 
- * @param {*} res 
  * 
  * @param {*} req 
  * @param {*} res 
@@ -90,23 +67,15 @@ exports.store = async (req, res) => {
     return res.status(errorCodes.default).send("Advance payment is currently disabled.");
   }*/
   
-  
   try {
-
-    data.payment_mode = isEmpty(data.payment_mode) ? 'cash' : data.payment_mode;
-    let currentUserID = isManager(req) ? req.userId : await getWorkingUserID(req);
 
     data.payment_mode = isEmpty(data.payment_mode) ? 'cash' : data.payment_mode;
     let currentUserID = isManager(req) ? req.userId : await getWorkingUserID(req);
     let amount = parseFloat(data.amount);
     let conditions = { status: 'due' };
     if ('table_id' in data && !isEmpty(data.table_id)) {
-    let conditions = { status: 'due' };
-    if ('table_id' in data && !isEmpty(data.table_id)) {
       conditions.id = data.table_id;
     }
-    if ('user_id' in data && !isEmpty(data.user_id)) {
-      if (!('payment_type' in data && data.payment_type == "advance")) {
     if ('user_id' in data && !isEmpty(data.user_id)) {
       if (!('payment_type' in data && data.payment_type == "advance")) {
         if (data.table_type == "sale") {
@@ -120,13 +89,10 @@ exports.store = async (req, res) => {
 
     if (isSalesExecutive(req)) {
       if ('payment_type' in data) {
-      if ('payment_type' in data) {
         if (data.payment_type == "send_money") {
           //check have money in wallet
           let walletBalance = await getWalletBalance(currentUserID, data.payment_mode);
-          let walletBalance = await getWalletBalance(currentUserID, data.payment_mode);
           if (amount > 0 && walletBalance < amount) {
-            return res.status(errorCodes.default).send(formatErrorResponse("Insufficient wallet balance."));
             return res.status(errorCodes.default).send(formatErrorResponse("Insufficient wallet balance."));
           }
         }
@@ -135,11 +101,7 @@ exports.store = async (req, res) => {
 
     const trans = await sequelize.transaction(async (t) => {
 
-
       if (isSuperAdmin(req)) {
-
-        if ('payment_type' in data && data.payment_type == "advance") {
-
 
         if ('payment_type' in data && data.payment_type == "advance") {
 
@@ -149,7 +111,6 @@ exports.store = async (req, res) => {
             amount: amount,
             payment_mode: data.payment_mode,
             payment_type: data.payment_mode == "metal"?"gold":"wallet",
-            payment_type: data.payment_mode == "metal"?"gold":"wallet",
             table_type: data.table_type,
             remaining_balance: 0,
             notes: data.notes || null,
@@ -157,27 +118,17 @@ exports.store = async (req, res) => {
             txn_id: data.txn_id || null,
             weight: data.effective_weight || null,
             status: (data.payment_mode != "cheque") ? "success" : "pending",
-            status: (data.payment_mode != "cheque") ? "success" : "pending",
             payment_date: moment(data.payment_date).format("YYYY-MM-DD"),
             payment_belongs: currentUserID,
             due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
             type: data.table_type == "purchase" ? 'debit' : 'credit',
             purpose: data.table_type == "sale" ? 'admin advance' : 'supplier advance',
-            due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-            type: data.table_type == "purchase" ? 'debit' : 'credit',
-            purpose: data.table_type == "sale" ? 'admin advance' : 'supplier advance',
             can_accept: true,
-            is_advance: true
             is_advance: true
           });
 
           await updateWalletRemainingBalance(currentUserID, payment.id);
 
-          if(payment.status == "success"){
-            if (data.table_type == "sale"){
-              await updateAdvanceAmount(payment.user_id, payment.payment_belongs, payment.amount, true);
-            }else{
-              await updateAdvanceAmount(payment.payment_belongs, payment.user_id, payment.amount, true);
           if(payment.status == "success"){
             if (data.table_type == "sale"){
               await updateAdvanceAmount(payment.user_id, payment.payment_belongs, payment.amount, true);
@@ -194,7 +145,6 @@ exports.store = async (req, res) => {
               amount: amount,
               payment_mode: data.payment_mode,
               payment_type: data.payment_mode == "metal"?"gold":"wallet",
-              payment_type: data.payment_mode == "metal"?"gold":"wallet",
               table_type: "purchase",
               remaining_balance: 0,
               notes: data.notes || null,
@@ -203,35 +153,25 @@ exports.store = async (req, res) => {
               weight: data.effective_weight || null,
               status: (data.payment_mode != "cheque") ? "success" : "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-              status: (data.payment_mode != "cheque") ? "success" : "pending",
-              payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: data.user_id,
               due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
               type: 'debit',
               purpose: 'superadmin advance',
-              due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-              type: 'debit',
-              purpose: 'superadmin advance',
               can_accept: false,
-              is_advance: true
               is_advance: true
             });
 
             await updateWalletRemainingBalance(data.user_id, payment2.id);
           }
 
-
         } else {
-
 
           if (data.table_type == "sale") {
             console.log("======sale=====");
             let tableData = await SaleModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, sale_by: currentUserID } });
-            let tableData = await SaleModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, sale_by: currentUserID } });
 
             for (let i = 0; i < tableData.length; i++) {
               let item = tableData[i];
-              let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               if (parseFloat(item.due_amount) <= amount) {
                 due_amount = 0;
@@ -246,19 +186,12 @@ exports.store = async (req, res) => {
                 amount = 0;
               }
               
-              
               console.log("======AMOUNT=====", amount);
               console.log("======DUE AMOUNT=====", due_amount);
               console.log("======PAID AMOUNT=====", paid_amount);
               console.log("======STATUS=====", status);
               console.log("======PAYMENT AMOUNT=====", payment_amount);
               if (data.payment_mode != "cheque") {
-                await SaleModel.update({
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null
-                }, { where: { id: item.id }, transaction: t });
                 await SaleModel.update({
                   due_amount: due_amount,
                   paid_amount: paid_amount,
@@ -274,13 +207,6 @@ exports.store = async (req, res) => {
                   due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null
                 }, { where: { sale_id: item.id }, transaction: t });
 
-                await PurchaseModel.update({
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null
-                }, { where: { sale_id: item.id }, transaction: t });
-
 
                 //read notification
                 let noticationCon = { type_id: item.id };
@@ -288,11 +214,7 @@ exports.store = async (req, res) => {
                   noticationCon.type = "sale_due";
                 } else {
                   noticationCon = { ...noticationCon, [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }] }
-                  noticationCon = { ...noticationCon, [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }] }
                 }
-                await NoticationModel.update({
-                  is_read: true
-                }, { where: noticationCon, transaction: t });
                 await NoticationModel.update({
                   is_read: true
                 }, { where: noticationCon, transaction: t });
@@ -305,7 +227,6 @@ exports.store = async (req, res) => {
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
                 payment_type: data.payment_mode == "metal"?"gold":"wallet",
-                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
@@ -313,15 +234,9 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                status: (data.payment_mode != "cheque") ? "success" : "pending",
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
                 table_id: item.id,
                 payment_belongs: currentUserID,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'credit',
-                purpose: 'sale',
-                can_accept: true
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'credit',
                 purpose: 'sale',
@@ -332,14 +247,12 @@ exports.store = async (req, res) => {
 
               //payment insert into admin wallet
               let purchase = await PurchaseModel.findOne({ where: { sale_id: item.id } });
-              let purchase = await PurchaseModel.findOne({ where: { sale_id: item.id } });
               let payment2 = await PaymentModel.create({
                 parent_id: payment.id,
                 user_id: currentUserID,
                 payment_by: req.userId,
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
-                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
@@ -348,15 +261,9 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                status: (data.payment_mode != "cheque") ? "success" : "pending",
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: "purchase",
                 table_id: purchase ? purchase.id : null,
                 payment_belongs: data.user_id,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'debit',
-                purpose: 'sale',
-                can_accept: false
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'debit',
                 purpose: 'sale',
@@ -370,14 +277,11 @@ exports.store = async (req, res) => {
               }
             }
 
-
           } else if (data.table_type == "purchase") {
-            let tableData = await PurchaseModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, user_id: currentUserID } });
             let tableData = await PurchaseModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, user_id: currentUserID } });
 
             for (let i = 0; i < tableData.length; i++) {
               let item = tableData[i];
-              let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               if (parseFloat(item.due_amount) <= amount) {
                 due_amount = 0;
@@ -399,18 +303,9 @@ exports.store = async (req, res) => {
                   status: status,
                   due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null
                 }, { where: { id: item.id }, transaction: t });
-                await PurchaseModel.update({
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null
-                }, { where: { id: item.id }, transaction: t });
 
                 //read notification
                 let noticationCon = { type_id: item.id, type: "purchase_due" };
-                await NoticationModel.update({
-                  is_read: true
-                }, { where: noticationCon, transaction: t });
                 await NoticationModel.update({
                   is_read: true
                 }, { where: noticationCon, transaction: t });
@@ -422,22 +317,16 @@ exports.store = async (req, res) => {
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
                 payment_type: data.payment_mode == "metal"?"gold":"wallet",
-                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
                 txn_id: data.txn_id || null,
                 weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
-                status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date).format("YYYY-MM-DD"),
                 table_type: data.table_type,
                 table_id: item.id,
                 payment_belongs: currentUserID,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'debit',
-                purpose: 'purchase',
-                can_accept: true
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'debit',
                 purpose: 'purchase',
@@ -453,16 +342,11 @@ exports.store = async (req, res) => {
           }
         }
 
-
       } else if (isAdmin(req)) {
 
         if ('payment_type' in data && (data.payment_type == "advance" || data.payment_type == "send_money")) {
 
-
-        if ('payment_type' in data && (data.payment_type == "advance" || data.payment_type == "send_money")) {
-
           if (data.payment_type == "send_money") {
-
 
             //credit to superadmin
             let payment = await PaymentModel.create({
@@ -470,7 +354,6 @@ exports.store = async (req, res) => {
               payment_by: req.userId,
               amount: amount,
               payment_mode: data.payment_mode,
-              payment_type: data.payment_mode == "metal"?"gold":"wallet",
               payment_type: data.payment_mode == "metal"?"gold":"wallet",
               table_type: "send_money",
               remaining_balance: 0,
@@ -480,15 +363,11 @@ exports.store = async (req, res) => {
               weight: data.effective_weight || null,
               status: "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-              payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: data.user_id,
               due_date: null,
               type: 'credit',
               purpose: 'sent from superadmin',
-              type: 'credit',
-              purpose: 'sent from superadmin',
               can_accept: true,
-              is_advance: false
               is_advance: false
             });
             await updateWalletRemainingBalance(data.user_id, payment.id);
@@ -502,7 +381,6 @@ exports.store = async (req, res) => {
               amount: amount,
               payment_mode: data.payment_mode,
               payment_type: data.payment_mode == "metal"?"gold":"wallet",
-              payment_type: data.payment_mode == "metal"?"gold":"wallet",
               remaining_balance: 0,
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
@@ -510,15 +388,11 @@ exports.store = async (req, res) => {
               weight: data.effective_weight || null,
               status: "success",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-              payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
               due_date: null,
               type: 'debit',
               purpose: 'sent to superadmin',
-              type: 'debit',
-              purpose: 'sent to superadmin',
               can_accept: false,
-              is_advance: false
               is_advance: false
             });
             await updateWalletRemainingBalance(currentUserID, payment2.id);
@@ -527,11 +401,7 @@ exports.store = async (req, res) => {
             sendNotification('send_money', req, { payment: payment });
 
 
-            sendNotification('send_money', req, { payment: payment });
-
-
           } else if (data.payment_type == "advance") {
-
 
             let user = await UserModel.findByPk(data.user_id);
             let isPaymentToSuperAdmin = false;
@@ -547,7 +417,6 @@ exports.store = async (req, res) => {
                 amount: amount,
                 payment_mode: data.payment_mode,
                 payment_type: data.payment_mode == "metal"?"gold":"wallet",
-                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 table_type: "sale",
                 remaining_balance: 0,
                 notes: data.notes || null,
@@ -556,25 +425,17 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 payment_belongs: data.user_id,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'credit',
-                purpose: 'admin advance',
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'credit',
                 purpose: 'admin advance',
                 can_accept: true,
                 is_advance: true
-                is_advance: true
               });
             }
             let paymentStatus = (isPaymentToSuperAdmin || data.payment_mode == "cheque") ? "pending" : "success";
             let purpose = '', type = '';
-            let paymentStatus = (isPaymentToSuperAdmin || data.payment_mode == "cheque") ? "pending" : "success";
-            let purpose = '', type = '';
             if (isPaymentToSuperAdmin) {
-              purpose = 'superadmin advance';
               purpose = 'superadmin advance';
               type = "debit";
             } else {
@@ -594,7 +455,6 @@ exports.store = async (req, res) => {
               amount: amount,
               payment_mode: data.payment_mode,
               payment_type: data.payment_mode == "metal"?"gold":"wallet",
-              payment_type: data.payment_mode == "metal"?"gold":"wallet",
               remaining_balance: 0,
               notes: data.notes || null,
               cheque_no: data.cheque_no || null,
@@ -602,25 +462,18 @@ exports.store = async (req, res) => {
               weight: data.effective_weight || null,
               status: paymentStatus,
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-              payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
-              due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
               due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
               type: type,
               purpose: purpose,
               can_accept: isPaymentToSuperAdmin ? false : true,
-              is_advance: true
               is_advance: true
             });
 
             await updateWalletRemainingBalance(currentUserID, payment2.id);
 
             if(payment2.status == "success"){
-            if(payment2.status == "success"){
               if (data.table_type == "sale") {
-                await updateAdvanceAmount(payment2.user_id, payment2.payment_belongs, payment2.amount, true);
-              }else{
-                await updateAdvanceAmount(payment2.payment_belongs, payment2.user_id, payment2.amount, true);
                 await updateAdvanceAmount(payment2.user_id, payment2.payment_belongs, payment2.amount, true);
               }else{
                 await updateAdvanceAmount(payment2.payment_belongs, payment2.user_id, payment2.amount, true);
@@ -636,7 +489,6 @@ exports.store = async (req, res) => {
                 table_type: "purchase",
                 payment_mode: data.payment_mode,
                 payment_type: data.payment_mode == "metal"?"gold":"wallet",
-                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
@@ -644,36 +496,26 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                status: (data.payment_mode != "cheque") ? "success" : "pending",
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 payment_belongs: data.user_id,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'debit',
-                purpose: 'admin advance',
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'debit',
                 purpose: 'admin advance',
                 can_accept: false,
                 is_advance: true
-                is_advance: true
               });
 
               await updateWalletRemainingBalance(data.user_id, payment3.id);
 
-
             }
           }
-
 
         } else {
           console.log("======HERE=====");
           if (data.table_type == "sale") {
             let tableData = await SaleModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, sale_by: currentUserID } });
-            let tableData = await SaleModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, sale_by: currentUserID } });
 
             for (let i = 0; i < tableData.length; i++) {
               let item = tableData[i];
-              let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               if (parseFloat(item.due_amount) <= amount) {
                 due_amount = 0;
@@ -695,20 +537,8 @@ exports.store = async (req, res) => {
                   status: status,
                   due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 }, { where: { id: item.id }, transaction: t });
-                await SaleModel.update({
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                }, { where: { id: item.id }, transaction: t });
 
                 //update to related purchase table
-                await PurchaseModel.update({
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                }, { where: { sale_id: item.id }, transaction: t });
                 await PurchaseModel.update({
                   due_amount: due_amount,
                   paid_amount: paid_amount,
@@ -722,11 +552,7 @@ exports.store = async (req, res) => {
                   noticationCon.type = "sale_due";
                 } else {
                   noticationCon = { ...noticationCon, [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }] }
-                  noticationCon = { ...noticationCon, [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }] }
                 }
-                await NoticationModel.update({
-                  is_read: true
-                }, { where: noticationCon, transaction: t });
                 await NoticationModel.update({
                   is_read: true
                 }, { where: noticationCon, transaction: t });
@@ -739,7 +565,6 @@ exports.store = async (req, res) => {
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
                 payment_type: data.payment_mode == "metal"?"gold":"wallet",
-                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
@@ -747,15 +572,9 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                status: (data.payment_mode != "cheque") ? "success" : "pending",
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
                 table_id: item.id,
                 payment_belongs: currentUserID,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'credit',
-                purpose: 'sale',
-                can_accept: true
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'credit',
                 purpose: 'sale',
@@ -766,14 +585,12 @@ exports.store = async (req, res) => {
 
               //payment insert into admin wallet
               let purchase = await PurchaseModel.findOne({ where: { sale_id: item.id } });
-              let purchase = await PurchaseModel.findOne({ where: { sale_id: item.id } });
               let payment2 = await PaymentModel.create({
                 parent_id: payment.id,
                 user_id: currentUserID,
                 payment_by: req.userId,
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
-                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
@@ -782,15 +599,9 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                status: (data.payment_mode != "cheque") ? "success" : "pending",
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: "purchase",
                 table_id: purchase ? purchase.id : null,
                 payment_belongs: data.user_id,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'debit',
-                purpose: 'sale',
-                can_accept: false
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'debit',
                 purpose: 'sale',
@@ -804,10 +615,8 @@ exports.store = async (req, res) => {
               }
             }
 
-
           } else if (data.table_type == "purchase") {
             console.log("======purchase=====");
-            let tableData = await PurchaseModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, user_id: currentUserID } });
             let tableData = await PurchaseModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, user_id: currentUserID } });
             let user = await UserModel.findByPk(data.user_id);
             let isPaymentToSuperAdmin = false;
@@ -815,10 +624,8 @@ exports.store = async (req, res) => {
               isPaymentToSuperAdmin = true;
             }
             console.log(data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null);
-            console.log(data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null);
             for (let i = 0; i < tableData.length; i++) {
               let item = tableData[i];
-              let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               if (parseFloat(item.due_amount) <= amount) {
                 due_amount = 0;
@@ -832,7 +639,6 @@ exports.store = async (req, res) => {
                 payment_amount = amount;
                 amount = 0;
               }
-              console.log("======isPaymentToSuperAdmin=====", isPaymentToSuperAdmin);
               console.log("======isPaymentToSuperAdmin=====", isPaymentToSuperAdmin);
               console.log("======AMOUNT=====", amount);
               console.log("======DUE AMOUNT=====", due_amount);
@@ -848,24 +654,14 @@ exports.store = async (req, res) => {
                   status: status,
                   due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 }, { where: { id: item.id }, transaction: t });
-                await PurchaseModel.update({
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                }, { where: { id: item.id }, transaction: t });
 
                 //read notification
                 let noticationCon = { type_id: item.id, type: "purchase_due" };
                 await NoticationModel.update({
                   is_read: true
                 }, { where: noticationCon, transaction: t });
-                await NoticationModel.update({
-                  is_read: true
-                }, { where: noticationCon, transaction: t });
               }
 
-              let paymentStatus = (isPaymentToSuperAdmin || data.payment_mode == "cheque") ? "pending" : "success";
               let paymentStatus = (isPaymentToSuperAdmin || data.payment_mode == "cheque") ? "pending" : "success";
 
               let payment = null;
@@ -876,14 +672,12 @@ exports.store = async (req, res) => {
                   amount: payment_amount,
                   payment_mode: data.payment_mode,
                   payment_type: data.payment_mode == "metal"?"gold":"wallet",
-                  payment_type: data.payment_mode == "metal"?"gold":"wallet",
                   remaining_balance: 0,
                   notes: data.notes || null,
                   cheque_no: data.cheque_no || null,
                   txn_id: data.txn_id || null,
                   weight: data.effective_weight || null,
                   status: "pending",
-                  payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                   payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                   table_type: "sale",
                   table_id: item.sale_id,
@@ -892,12 +686,7 @@ exports.store = async (req, res) => {
                   type: 'credit',
                   purpose: 'sale',
                   can_accept: true
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                  type: 'credit',
-                  purpose: 'sale',
-                  can_accept: true
                 });
-
 
               }
 
@@ -908,7 +697,6 @@ exports.store = async (req, res) => {
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
                 payment_type: data.payment_mode == "metal"?"gold":"wallet",
-                payment_type: data.payment_mode == "metal"?"gold":"wallet",
                 remaining_balance: 0,
                 notes: data.notes || null,
                 cheque_no: data.cheque_no || null,
@@ -916,14 +704,9 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: paymentStatus,
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
                 table_id: item.id,
                 payment_belongs: currentUserID,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'debit',
-                purpose: 'purchase',
-                can_accept: isPaymentToSuperAdmin ? false : true
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'debit',
                 purpose: 'purchase',
@@ -939,16 +722,11 @@ exports.store = async (req, res) => {
           }
         }
 
-
       } else if (isDistributor(req)) {
 
         if ('payment_type' in data && (data.payment_type == "advance" || data.payment_type == "send_money")) {
 
-
-        if ('payment_type' in data && (data.payment_type == "advance" || data.payment_type == "send_money")) {
-
           if (data.payment_type == "send_money") {
-
 
             //credit to admin
             let payment = await PaymentModel.create({
@@ -964,15 +742,11 @@ exports.store = async (req, res) => {
               weight: data.effective_weight || null,
               status: "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-              payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: data.user_id,
               due_date: null,
               type: 'credit',
               purpose: 'sent from distributor',
-              type: 'credit',
-              purpose: 'sent from distributor',
               can_accept: true,
-              is_advance: false
               is_advance: false
             });
             await updateWalletRemainingBalance(data.user_id, payment.id);
@@ -992,23 +766,16 @@ exports.store = async (req, res) => {
               weight: data.effective_weight || null,
               status: "success",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-              payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
               due_date: null,
               type: 'debit',
               purpose: 'sent to admin',
-              type: 'debit',
-              purpose: 'sent to admin',
               can_accept: false,
-              is_advance: false
               is_advance: false
             });
             await updateWalletRemainingBalance(currentUserID, payment2.id);
 
             //send notification
-            sendNotification('send_money', req, { payment: payment });
-
-
             sendNotification('send_money', req, { payment: payment });
 
 
@@ -1034,28 +801,19 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 payment_belongs: data.user_id,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'credit',
-                purpose: 'distributor advance',
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'credit',
                 purpose: 'distributor advance',
                 can_accept: true,
                 is_advance: true
-                is_advance: true
               });
             }
             let paymentStatus = (isPaymentToAdmin || data.payment_mode == "cheque") ? "pending" : "success";
             let purpose = '';
-            let paymentStatus = (isPaymentToAdmin || data.payment_mode == "cheque") ? "pending" : "success";
-            let purpose = '';
             if (isPaymentToAdmin) {
               purpose = 'admin advance';
-              purpose = 'admin advance';
             } else {
-              purpose = 'retailer advance';
               purpose = 'retailer advance';
             }
 
@@ -1073,15 +831,11 @@ exports.store = async (req, res) => {
               weight: data.effective_weight || null,
               status: paymentStatus,
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-              payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
-              due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-              type: isPaymentToAdmin ? 'debit' : 'credit',
               due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
               type: isPaymentToAdmin ? 'debit' : 'credit',
               purpose: purpose,
               can_accept: isPaymentToAdmin ? false : true,
-              is_advance: true
               is_advance: true
             });
 
@@ -1089,17 +843,12 @@ exports.store = async (req, res) => {
 
             if(payment2.status == "success"){
               await updateAdvanceAmount(payment2.user_id, payment2.payment_belongs, payment2.amount, true);
-            if(payment2.status == "success"){
-              await updateAdvanceAmount(payment2.user_id, payment2.payment_belongs, payment2.amount, true);
             }
           }
 
-
         } else {
 
-
           if (data.table_type == "purchase") {
-            let tableData = await PurchaseModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, user_id: currentUserID } });
             let tableData = await PurchaseModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, user_id: currentUserID } });
             let user = await UserModel.findByPk(data.user_id);
             let isPaymentToAdmin = false;
@@ -1109,7 +858,6 @@ exports.store = async (req, res) => {
 
             for (let i = 0; i < tableData.length; i++) {
               let item = tableData[i];
-              let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               if (parseFloat(item.due_amount) <= amount) {
                 due_amount = 0;
@@ -1131,24 +879,14 @@ exports.store = async (req, res) => {
                   status: status,
                   due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 }, { where: { id: item.id }, transaction: t });
-                await PurchaseModel.update({
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                }, { where: { id: item.id }, transaction: t });
 
                 //read notification
                 let noticationCon = { type_id: item.id, type: "purchase_due" };
                 await NoticationModel.update({
                   is_read: true
                 }, { where: noticationCon, transaction: t });
-                await NoticationModel.update({
-                  is_read: true
-                }, { where: noticationCon, transaction: t });
               }
 
-              let paymentStatus = (isPaymentToAdmin || data.payment_mode == "cheque") ? "pending" : "success";
               let paymentStatus = (isPaymentToAdmin || data.payment_mode == "cheque") ? "pending" : "success";
 
               let payment = null;
@@ -1165,14 +903,9 @@ exports.store = async (req, res) => {
                   weight: data.effective_weight || null,
                   status: "pending",
                   payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                  payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                   table_type: "sale",
                   table_id: item.sale_id,
                   payment_belongs: data.user_id,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                  type: 'credit',
-                  purpose: 'sale',
-                  can_accept: true
                   due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                   type: 'credit',
                   purpose: 'sale',
@@ -1193,14 +926,9 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: paymentStatus,
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
                 table_id: item.id,
                 payment_belongs: currentUserID,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'debit',
-                purpose: 'purchase',
-                can_accept: isPaymentToAdmin ? false : true
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'debit',
                 purpose: 'purchase',
@@ -1215,11 +943,9 @@ exports.store = async (req, res) => {
             }
           } else if (data.table_type == "sale") {
             let tableData = await SaleModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, sale_by: currentUserID } });
-            let tableData = await SaleModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, sale_by: currentUserID } });
 
             for (let i = 0; i < tableData.length; i++) {
               let item = tableData[i];
-              let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               if (parseFloat(item.due_amount) <= amount) {
                 due_amount = 0;
@@ -1241,20 +967,8 @@ exports.store = async (req, res) => {
                   status: status,
                   due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 }, { where: { id: item.id }, transaction: t });
-                await SaleModel.update({
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                }, { where: { id: item.id }, transaction: t });
 
                 //update to related purchase table
-                await PurchaseModel.update({
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                }, { where: { sale_id: item.id }, transaction: t });
                 await PurchaseModel.update({
                   due_amount: due_amount,
                   paid_amount: paid_amount,
@@ -1268,11 +982,7 @@ exports.store = async (req, res) => {
                   noticationCon.type = "sale_due";
                 } else {
                   noticationCon = { ...noticationCon, [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }] }
-                  noticationCon = { ...noticationCon, [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }] }
                 }
-                await NoticationModel.update({
-                  is_read: true
-                }, { where: noticationCon, transaction: t });
                 await NoticationModel.update({
                   is_read: true
                 }, { where: noticationCon, transaction: t });
@@ -1291,15 +1001,9 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                status: (data.payment_mode != "cheque") ? "success" : "pending",
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
                 table_id: item.id,
                 payment_belongs: currentUserID,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'credit',
-                purpose: 'sale',
-                can_accept: true
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'credit',
                 purpose: 'sale',
@@ -1309,7 +1013,6 @@ exports.store = async (req, res) => {
               await updateWalletRemainingBalance(currentUserID, payment.id);
 
               //payment insert into admin wallet
-              let purchase = await PurchaseModel.findOne({ where: { sale_id: item.id } });
               let purchase = await PurchaseModel.findOne({ where: { sale_id: item.id } });
               let payment2 = await PaymentModel.create({
                 parent_id: payment.id,
@@ -1324,15 +1027,9 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                status: (data.payment_mode != "cheque") ? "success" : "pending",
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: "purchase",
                 table_id: purchase.id,
                 payment_belongs: data.user_id,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'debit',
-                purpose: 'sale',
-                can_accept: false
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'debit',
                 purpose: 'sale',
@@ -1346,14 +1043,11 @@ exports.store = async (req, res) => {
               }
             }
 
-
           }
         }
       } else if (isSalesExecutive(req)) {
         if ('payment_type' in data && (data.payment_type == "advance" || data.payment_type == "send_money")) {
-        if ('payment_type' in data && (data.payment_type == "advance" || data.payment_type == "send_money")) {
           if (data.payment_type == "send_money") {
-
 
             //check have money in wallet
             //let walletBalance = await getWalletBalance(currentUserID, data.payment_mode);
@@ -1375,22 +1069,16 @@ exports.store = async (req, res) => {
               weight: data.effective_weight || null,
               status: "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-              payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: data.user_id,
               due_date: null,
               type: 'credit',
               purpose: 'sent from sales executive',
-              type: 'credit',
-              purpose: 'sent from sales executive',
               can_accept: true,
-              is_advance: false
               is_advance: false
             });
             await updateWalletRemainingBalance(data.user_id, payment.id);
 
             /* check data.user_id role */
-            let user = await UserModel.findOne({ 
-              where: { id: data.user_id },  
             let user = await UserModel.findOne({ 
               where: { id: data.user_id },  
               include: [
@@ -1417,22 +1105,16 @@ exports.store = async (req, res) => {
               weight: data.effective_weight || null,
               status: "success",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-              payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
               due_date: null,
               type: 'debit',
-              type: 'debit',
               purpose: `sent to ${user.role.name}`,
               can_accept: false,
-              is_advance: false
               is_advance: false
             });
             await updateWalletRemainingBalance(currentUserID, payment2.id);
 
             //send notification
-            sendNotification('send_money', req, { payment: payment });
-
-
             sendNotification('send_money', req, { payment: payment });
 
 
@@ -1449,22 +1131,16 @@ exports.store = async (req, res) => {
               txn_id: data.txn_id || null,
               weight: data.effective_weight || null,
               status: (data.payment_mode != "cheque") ? "success" : "pending",
-              status: (data.payment_mode != "cheque") ? "success" : "pending",
               payment_date: moment(data.payment_date).format("YYYY-MM-DD"),
               payment_belongs: currentUserID,
               due_date: null,
               type: 'credit',
               purpose: 'retailer advance',
-              type: 'credit',
-              purpose: 'retailer advance',
               can_accept: true,
-              is_advance: true
               is_advance: true
             });
             await updateWalletRemainingBalance(currentUserID, payment.id);
 
-            if(payment.status == "success"){
-              await updateAdvanceAmount(payment.user_id, payment.payment_belongs, payment.amount, true);
             if(payment.status == "success"){
               await updateAdvanceAmount(payment.user_id, payment.payment_belongs, payment.amount, true);
             }
@@ -1472,10 +1148,8 @@ exports.store = async (req, res) => {
         } else {
           if (data.table_type == "sale") {
             let tableData = await SaleModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, sale_by: currentUserID } });
-            let tableData = await SaleModel.findAll({ order: [['id', 'ASC']], where: { ...conditions, sale_by: currentUserID } });
             for (let i = 0; i < tableData.length; i++) {
               let item = tableData[i];
-              let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               let status = 'due', due_amount = 0, paid_amount = 0, payment_amount = 0;
               if (parseFloat(item.due_amount) <= amount) {
                 due_amount = 0;
@@ -1497,20 +1171,8 @@ exports.store = async (req, res) => {
                   status: status,
                   due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null
                 }, { where: { id: item.id }, transaction: t });
-                await SaleModel.update({
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null
-                }, { where: { id: item.id }, transaction: t });
 
                 //update to related purchase table
-                await PurchaseModel.update({
-                  due_amount: due_amount,
-                  paid_amount: paid_amount,
-                  status: status,
-                  due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null
-                }, { where: { sale_id: item.id }, transaction: t });
                 await PurchaseModel.update({
                   due_amount: due_amount,
                   paid_amount: paid_amount,
@@ -1524,11 +1186,7 @@ exports.store = async (req, res) => {
                   noticationCon.type = "sale_due";
                 } else {
                   noticationCon = { ...noticationCon, [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }] }
-                  noticationCon = { ...noticationCon, [Op.or]: [{ type: "sale_due" }, { type: "sale_settlement" }] }
                 }
-                await NoticationModel.update({
-                  is_read: true
-                }, { where: noticationCon, transaction: t });
                 await NoticationModel.update({
                   is_read: true
                 }, { where: noticationCon, transaction: t });
@@ -1547,15 +1205,9 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                status: (data.payment_mode != "cheque") ? "success" : "pending",
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: data.table_type,
                 table_id: item.id,
                 payment_belongs: currentUserID,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'credit',
-                purpose: 'sale',
-                can_accept: true
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'credit',
                 purpose: 'sale',
@@ -1565,7 +1217,6 @@ exports.store = async (req, res) => {
               await updateWalletRemainingBalance(currentUserID, payment.id);
 
               //payment insert into admin wallet
-              let purchase = await PurchaseModel.findOne({ where: { sale_id: item.id } });
               let purchase = await PurchaseModel.findOne({ where: { sale_id: item.id } });
               let payment2 = await PaymentModel.create({
                 parent_id: payment.id,
@@ -1580,15 +1231,9 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 status: (data.payment_mode != "cheque") ? "success" : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
-                status: (data.payment_mode != "cheque") ? "success" : "pending",
-                payment_date: moment(data.payment_date, "MM/DD/YYYY").format("YYYY-MM-DD"),
                 table_type: "purchase",
                 table_id: purchase ? purchase.id : null,
                 payment_belongs: data.user_id,
-                due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
-                type: 'debit',
-                purpose: 'sale',
-                can_accept: false
                 due_date: data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
                 type: 'debit',
                 purpose: 'sale',
@@ -1602,26 +1247,20 @@ exports.store = async (req, res) => {
               }
             }
 
-
           }
         }
       }
-
 
     });
 
     res.send(formatResponse("", "Payment successfully!"));
 
-
   } catch (error) {
     console.log(error);
     return res.status(errorCodes.default).send(formatErrorResponse(error.toString()));
-    return res.status(errorCodes.default).send(formatErrorResponse(error.toString()));
   }
 
-
 };
-
 
 
 /**
@@ -1629,19 +1268,8 @@ exports.store = async (req, res) => {
  * 
  * @param {*} req 
  * @param {*} res 
- * 
- * @param {*} req 
- * @param {*} res 
  */
 exports.totalDue = async (req, res) => {
-  let dueAmount = await PurchaseModel.sum('due_amount', { where: { supplier_id: req.query.user_id } });
-  res.send(formatResponse({
-    due_amount: priceFormat(dueAmount),
-    due_amount_display: displayAmount(dueAmount)
-  }));
-}
-
-
   let dueAmount = await PurchaseModel.sum('due_amount', { where: { supplier_id: req.query.user_id } });
   res.send(formatResponse({
     due_amount: priceFormat(dueAmount),
@@ -1656,20 +1284,9 @@ exports.totalDue = async (req, res) => {
  * 
  * @param {*} req 
  * @param {*} res 
- * 
- * @param {*} req 
- * @param {*} res 
  */
 exports.walletBalance = async (req, res) => {
   let superAdminId = await getWorkingUserID(req);
-  let remaining_balance = await getWalletBalance(superAdminId, req.query.payment_mode);
-  res.send(formatResponse({
-    balance: remaining_balance
-  }));
-}
-
-
-
   let remaining_balance = await getWalletBalance(superAdminId, req.query.payment_mode);
   res.send(formatResponse({
     balance: remaining_balance
@@ -1684,13 +1301,54 @@ exports.walletBalance = async (req, res) => {
  * 
  * @param {*} req 
  * @param {*} res 
- * 
- * @param {*} req 
- * @param {*} res 
  */
 exports.updateStatus = async (req, res) => {
   let data = req.body;
   try {
+    let payment = await PaymentModel.findOne({ where: { id: req.params.id } });
+    if (!payment) return res.status(errorCodes.default).send(formatErrorResponse('Payment not found'));
+
+    if (data.status == 1) {
+      // Keep the original request status as 'pending' (do not mark it success).
+      // Persist ref_no if provided and mark the original row as processed (disable further accept).
+      const updateObj = {};
+      if (data.ref_no) updateObj.ref_no = data.ref_no;
+      updateObj.can_accept = false;
+      await PaymentModel.update(updateObj, { where: { id: payment.id } });
+
+      // create a new ledger row representing the accepted payment (so it appears at top)
+      const acceptedPayment = await PaymentModel.create({
+        parent_id: payment.id,
+        user_id: payment.user_id,
+        payment_by: payment.payment_by,
+        amount: payment.amount,
+        payment_mode: payment.payment_mode,
+        payment_type: payment.payment_type,
+        remaining_balance: 0,
+        notes: payment.notes || null,
+        cheque_no: payment.cheque_no || null,
+        txn_id: payment.txn_id || null,
+        weight: payment.weight || null,
+        status: 'success',
+        payment_date: moment().format('YYYY-MM-DD'),
+        table_type: payment.table_type,
+        table_id: payment.table_id,
+        payment_belongs: payment.payment_belongs,
+        due_date: payment.due_date || null,
+        type: payment.type,
+        purpose: payment.purpose,
+        can_accept: false,
+        is_advance: payment.is_advance
+      });
+
+      // update wallet remaining balance for the newly created accepted payment
+      await updateWalletRemainingBalance(acceptedPayment.payment_belongs, acceptedPayment.id);
+
+      // do not modify sender-side (original child) rows; receiver list will get the new accepted row
+      const originalChild = await PaymentModel.findOne({ where: { parent_id: payment.id } });
+      let acceptedChild = null; // kept for compatibility but we won't create or update sender-side entries
+
+      // proceed with existing advance/non-advance flows but update balances against the newly created accepted rows
     let payment = await PaymentModel.findOne({ where: { id: req.params.id } });
     if (!payment) return res.status(errorCodes.default).send(formatErrorResponse('Payment not found'));
 
