@@ -79,12 +79,13 @@ const getModelObject = async (data) => {
 
   if (data.parent_id) {
     let parentPay = await PaymentModel.findByPk(data.parent_id);
-    if (
-      data.status == "pending" &&
-      parentPay.status == "pending" &&
-      data.can_accept
-    ) {
-      action_status = "Pending";
+    if (data.status == "pending") {
+      // if parent was acted on (can_accept=false), the sender mirror row should show 'processed'
+      if (parentPay && parentPay.can_accept === false) {
+        action_status = "processed";
+      } else if (data.can_accept) {
+        action_status = "Pending";
+      }
     }
   }
   let purpose = [data.purpose];
