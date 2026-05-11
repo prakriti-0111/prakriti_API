@@ -1710,12 +1710,18 @@ exports.updateStatus = async (req, res) => {
         .send(formatErrorResponse("Payment not found"));
 
     if (data.status == 1) {
-      // keep original receiver-side request row as processed
+      // find sender-side mirrored row BEFORE inserting new accepted row
+      // (both share parent_id = payment.id, so must look up before creating)
+      const senderMirrorRow = await PaymentModel.findOne({
+        where: { parent_id: payment.id, status: "pending" },
+      });
+
+      // mark original receiver-side request row as processed (keep status=pending so serializer shows 'processed')
       const updateObj = { can_accept: false };
       if (data.ref_no) updateObj.ref_no = data.ref_no;
       await PaymentModel.update(updateObj, { where: { id: payment.id } });
 
-      // create a new accepted ledger row after approval
+      // insert a new accepted ledger row so it appears at the top of the list
       const acceptedPayment = await PaymentModel.create({
         parent_id: payment.id,
         user_id: payment.user_id,
@@ -1744,19 +1750,16 @@ exports.updateStatus = async (req, res) => {
         acceptedPayment.id,
       );
 
-      // mark sender-side mirrored row as accepted so sender panel reflects admin action
-      const childPayment = await PaymentModel.findOne({
-        where: { parent_id: payment.id },
-      });
-      if (childPayment) {
-        const childUpdateObj = { status: "success", can_accept: false };
-        if (data.ref_no) childUpdateObj.ref_no = data.ref_no;
-        await PaymentModel.update(childUpdateObj, {
-          where: { id: childPayment.id },
+      // update sender-side mirrored row to success so sender panel shows 'Accepted'
+      if (senderMirrorRow) {
+        const senderUpdateObj = { status: "success", can_accept: false };
+        if (data.ref_no) senderUpdateObj.ref_no = data.ref_no;
+        await PaymentModel.update(senderUpdateObj, {
+          where: { id: senderMirrorRow.id },
         });
         await updateWalletRemainingBalance(
-          childPayment.payment_belongs,
-          childPayment.id,
+          senderMirrorRow.payment_belongs,
+          senderMirrorRow.id,
         );
       }
 
