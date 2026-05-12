@@ -12,7 +12,7 @@ const swaggerUi = require("swagger-ui-express");
 const fs = require('fs');
 const Pusher = require("pusher");
 require('module-alias/register');
-require('dotenv').config()
+require('dotenv').config();
 
 const app = express();
 app.use(helmet());
