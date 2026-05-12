@@ -18,36 +18,28 @@ const createMySqlConfig = ({ username, password, database, host, port }) => ({
 });
 
 const development = createMySqlConfig({
-  username: process.env.DB_DEV_USERNAME || process.env.DB_USERNAME || "mysql",
-  password:
-    process.env.DB_DEV_PASSWORD || process.env.DB_PASSWORD || "prakriti-dev",
-  database:
-    process.env.DB_DEV_DATABASE || process.env.DB_DATABASE || "prakriti-dev",
-  host: process.env.DB_DEV_HOST || process.env.DB_HOST || "194.238.18.233",
-  port: process.env.DB_DEV_PORT || process.env.DB_PORT || 3309,
+  username: process.env.DB_DEV_USERNAME || "mysql",
+  password: process.env.DB_DEV_PASSWORD || "prakriti-dev",
+  database: process.env.DB_DEV_DATABASE || "prakriti-dev",
+  host:     process.env.DB_DEV_HOST     || "194.238.18.233",
+  port:     parseInt(process.env.DB_DEV_PORT) || 3309,
 });
 
 const production = createMySqlConfig({
   username: process.env.DB_PROD_USERNAME || "mysql",
   password: process.env.DB_PROD_PASSWORD || "prakriti",
   database: process.env.DB_PROD_DATABASE || "prakriti",
-  host: process.env.DB_PROD_HOST || "194.238.18.233",
-  port: process.env.DB_PROD_PORT || 3307,
+  host:     process.env.DB_PROD_HOST     || "194.238.18.233",
+  port:     parseInt(process.env.DB_PROD_PORT) || 3307,
 });
 
 const test = createMySqlConfig({
   username: process.env.DB_TEST_USERNAME || "mysql",
   password: process.env.DB_TEST_PASSWORD || "prakriti-test",
   database: process.env.DB_TEST_DATABASE || "prakriti-test",
-  host: process.env.DB_TEST_HOST || "194.238.18.233",
-  port: process.env.DB_TEST_PORT || 3308,
+  host:     process.env.DB_TEST_HOST     || "194.238.18.233",
+  port:     parseInt(process.env.DB_TEST_PORT) || 3308,
 });
 
-module.exports = {
-  development,
-  production,
-  test,
-  DEV: development,
-  PROD: production,
-  TEST: test,
-};
+module.exports = { development, production, test, DEV: development, PROD: production, TEST: test };
+
