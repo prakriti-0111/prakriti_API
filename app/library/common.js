@@ -3927,11 +3927,14 @@ const getOwnUserSaleProducts = async (req, params, roleId = null) => {
   let sales = await SaleModel.findAll({
     where: {
       sale_by: { [Op.in]: userIds },
-      is_assigned: false, is_approval: false, /* is_approved: { [Op.ne]: 2 } */
+      //is_assigned: false, is_approval: false, /* is_approved: { [Op.ne]: 2 } */
       /* [Op.or]: [
         { is_approval: false, is_approved: { [Op.ne]: 2 } },
         { is_approval: true, is_approved: 3 },
       ], */
+      is_approved: { [Op.ne]: 2 },
+      is_assigned: false,
+      is_approval: false,
     },
     include: [
       {
