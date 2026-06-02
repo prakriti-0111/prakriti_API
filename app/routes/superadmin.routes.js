@@ -81,6 +81,7 @@ const roleController = require("@controllers/superadmin/role.controller");
 const orderController = require("@controllers/superadmin/order.controller");
 const customerController = require("@controllers/superadmin/customer.controller");
 const paymentController = require("@controllers/superadmin/payment.controller");
+const databaseSyncController = require("@controllers/superadmin/databaseSync.controller");
 const walletController = require("@controllers/superadmin/wallet.controller");
 const cartController = require("@controllers/superadmin/cart.controller");
 const expenseController = require("@controllers/superadmin/expense.controller");
@@ -1285,6 +1286,10 @@ module.exports = (app, express, io) => {
   router.get(
     "/payments/recalculate-remaining-balance",
     paymentController.recalculateRemainingBalance,
+  );
+  router.post(
+    "/payments/sync-prod-to-dev-test",
+    databaseSyncController.syncProdToDevAndTest,
   );
   router.get(
     "/wallet-history",
