@@ -182,6 +182,10 @@ exports.wishlistByNow = async (req, res) => {
           
         ]
       },
+      {
+        model: ProductModel,
+        as: 'product'
+      },
     ]
   });
 
@@ -189,8 +193,14 @@ exports.wishlistByNow = async (req, res) => {
     return res.status(errorCodes.default).send(formatErrorResponse("Wishlist not found."));
   }
 
-  //let cart = await cartsModel.findOne({where: {product_id: wishlist.product_id, size_id: wishlist.size_id, user_id: req.userId}});
-  let cart = await cartsModel.findOne({where: {product_id: wishlist.stock.certificate_no, size_id: wishlist.size_id, user_id: req.userId}});
+  let cart;
+  if (wishlist.stock && wishlist.stock.certificate_no) {
+    // carts table has a separate `certificate_no` column; match against that when stock certificate exists
+    cart = await cartsModel.findOne({ where: { certificate_no: wishlist.stock.certificate_no, size_id: wishlist.size_id, user_id: req.userId } });
+  } else {
+    // fallback to product_id (integer foreign key)
+    cart = await cartsModel.findOne({ where: { product_id: wishlist.product_id, size_id: wishlist.size_id, user_id: req.userId } });
+  }
   let isCartUpdated = false;
   if(cart){
     //check if cart metarials is match
@@ -217,17 +227,17 @@ exports.wishlistByNow = async (req, res) => {
   }
 
   if(!isCartUpdated){
-      let cart = await cartsModel.create({
+        let cart = await cartsModel.create({
           product_id: wishlist.product_id,
-          current_image: wishlist.stock.current_image != ""? getFileAbsulatePath(wishlist.stock.current_image) : getFileAbsulatePath(wishlist.product.main_image),
+          current_image: (wishlist.stock && wishlist.stock.current_image && wishlist.stock.current_image != "") ? getFileAbsulatePath(wishlist.stock.current_image) : (wishlist.product && wishlist.product.main_image ? getFileAbsulatePath(wishlist.product.main_image) : ''),
           stock_id: wishlist.stock_id,
-          certificate_no: wishlist.stock.certificate_no,
+          certificate_no: wishlist.stock ? wishlist.stock.certificate_no : null,
           user_id: req.userId,
           quantity: 1,
           total_weight: wishlist.total_weight,
           size_id: wishlist.size_id,
           rate: 0,
-      });
+        });
 
     for(let x = 0; x < wishlist.wishlistMaterial.length; x++){
       let material = wishlist.wishlistMaterial[x];
