@@ -271,7 +271,7 @@ exports.store = async (req, res) => {
       await cartsModel.update({quantity: cart.is_manual ? quantity : (parseInt(cart.quantity) + quantity)}, { where: { id: cart.id} });
       if(cart.is_manual){
         let cartMaterial = await cartMaterialsModel.findOne({where: {cart_id: cart.id}});
-        console.log("cartMaterial", cartMaterial);
+        compactLog("cartMaterial id:", cartMaterial && cartMaterial.id);
         if(cartMaterial){
           //await cartMaterialsModel.update({quantity: quantity, weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });
           await cartMaterialsModel.update({quantity: parseInt(data.materials[0].quantity), weight: parseFloat(data.materials[0].weight)}, { where: { id: cartMaterial.id} });

@@ -179,7 +179,7 @@ exports.index = async (req, res) => {
       })*/
   
   .then(async (data) => {
-    console.log(data.rows);
+    compactLog('product.find count:', data && (data.count || (Array.isArray(data.rows) ? data.rows.length : 0)));
     let result = {
       items: await ProductListCollection(data.rows, req),
       //items: await NewProductListCollection(data.rows, req),
@@ -188,7 +188,7 @@ exports.index = async (req, res) => {
     res.send(formatResponse(result, 'Products list'));
   })
   .catch(err => {
-    console.log(err)
+    console.error('product.find error:', err && err.message ? err.message : err);
     res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
   });
 

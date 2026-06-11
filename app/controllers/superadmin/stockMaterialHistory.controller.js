@@ -240,11 +240,11 @@ const UpdateStockMaterial = async (stockH, userID, t) => {
         type: 'material'
     }, t, ['quantity', 'total_weight']);
     let stock = result.item;
-    console.log("UpdateStockMaterial stock ===============: ", stock);
+    compactLog("UpdateStockMaterial stock id:", stock && stock.id);
     let stockMaterial = await StockMaterialModel.findOne({ where: { stock_id: stock.id, material_id: stockH.material_id } });
     let thisM = await MaterialModel.findByPk(stockH.material_id);
     category_id = thisM.id;
-    console.log("UpdateStockMaterial stockMaterial ===============: ", stockMaterial);
+    compactLog("UpdateStockMaterial stockMaterial id:", stockMaterial && stockMaterial.id);
     if (stockMaterial) {
         let thisquantity = stockH.quantity ? (parseInt(stockMaterial.quantity) + parseInt(stockH.quantity)) : stockMaterial.quantity;
         await StockMaterialModel.update({
@@ -275,7 +275,7 @@ exports.transferStockMaterial = async (req, res) => {
     try {
         let data = req.body;
         let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-        console.log("<=================== transferStockMaterial =================>");
+        compactLog("<=================== transferStockMaterial =================>");
         /* get all materials by from_user_id */
         let _include = [
             {
@@ -316,7 +316,7 @@ exports.transferStockMaterial = async (req, res) => {
               },
             ],
           });
-          console.log({ type: 'material', user_id: data.from_user_id, material_id: data.material_id });
+          compactLog({ type: 'material', user_id: data.from_user_id, material_id: data.material_id });
         let stocks = await StockModel
         .findAll({
             order: [["id", "DESC"]],
@@ -327,15 +327,15 @@ exports.transferStockMaterial = async (req, res) => {
         });
         
         stocks = await StocksMaterialCollection(stocks, data.from_user_id);
-        //console.log("stocks :==> ", stocks); return false;
-        console.log("stocks ====================: ", stocks);
-        console.log("data ============: "  , data);
+        //compactLog("stocks :==> ", stocks); return false;
+        compactLog("stocks len:", Array.isArray(stocks) ? stocks.length : typeof stocks);
+        compactLog("data keys:", data && typeof data === 'object' ? Object.keys(data).length : typeof data);
         let total_weight = 0;
         let total_quantity = 0; 
         stocks.forEach((item) => {
             total_weight += parseFloat(item.total_weight);
         });
-        console.log("transferMaterial ===============: ");
+        compactLog("transferMaterial ===============:");
         await transferMaterial(data, stocks[0]);
 
         res.send(formatResponse("", 'Sent Successfully.'));
@@ -384,8 +384,8 @@ const transferMaterial = async (data, stockMaterial) => {
         
         let unit = await UnitModel.findByPk(data.unit_id);
         let weight_in_gram = convertUnitToGram(unit.name, data.effective_weight);
-        console.log("stockH ===============: ", stockH);
-        console.log({
+        compactLog("stockH id:", stockH && stockH.id);
+        compactLog({
                 material_id: stockH.material_id,
                 purity_id: stockPurityId, //stockH.purity_id,
                 user_id: data.from_user_id,
@@ -399,11 +399,11 @@ const transferMaterial = async (data, stockMaterial) => {
                 type: 'material'
             }
         });
-        console.log("stockH stock ===============: ", stock);
+        compactLog("stock id:", stock && stock.id);
         if (stock) {
             let stockMaterial = await StockMaterialModel.findOne({ where: { material_id: data.material_id, stock_id: stock.id } });
             if (stockMaterial) {
-                console.log("stockMaterial ===============: ", stockMaterial);
+                compactLog("stockMaterial id:", stockMaterial && stockMaterial.id);
                 let quantity = data.quantity ? parseInt(data.quantity) : 0;
                 await StockMaterialModel.update({
                     weight: weightFormat(parseFloat(stockMaterial.weight) - weightFormat(data.effective_weight)),
@@ -419,7 +419,7 @@ const transferMaterial = async (data, stockMaterial) => {
                         total_weight: (parseFloat(stock.total_weight) - weight_in_gram),
                     }, { where: { id: stock.id } });
                 //}
-                console.log("UpdateStockMaterial ===============: ");
+                compactLog("UpdateStockMaterial ===============: ");
                 await UpdateStockMaterial(stockH, stockH.to_user_id, t);
             }
         }
@@ -1085,7 +1085,7 @@ exports.storeByProduct = async (req, res) => {
 
     } catch (error) {
         await t.rollback();
-        console.log(error)
+        compactLog(error)
         res.status(errorCodes.default).send(formatErrorResponse(error.toString()));
     }
 

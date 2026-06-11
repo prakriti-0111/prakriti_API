@@ -305,7 +305,7 @@ exports.placeOrder = async (req, res) => {
    });
   
     res.send(formatResponse(OrderCollection(result), "Order place successfully!"));
-  }).catch(error => { console.log(error)
+  }).catch(error => { compactLog(error)
     return res.status(errorCodes.default).send(formatErrorResponse('Order does not placed due to some error' + error));
   }); */
 }

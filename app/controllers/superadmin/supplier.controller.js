@@ -62,7 +62,7 @@ exports.index = async (req, res) => {
             currentUserId,
             false
           );
-          //console.log("------------------loged superAdminItem",superAdminItem);
+          //compactLog("------------------loged superAdminItem",superAdminItem);
           items = [superAdminItem].concat(items);
 
           /* Other admin who sale item to current user */
@@ -86,10 +86,10 @@ exports.index = async (req, res) => {
                 role_id: getRoleId("admin"),
               },
             });
-            //console.log("------------------loged otherAdminObjList",otherAdminObjList);
+            //compactLog("------------------loged otherAdminObjList",otherAdminObjList);
             
             const adminItem = await SupplierCollection(otherAdminObjList, currentUserId, false);
-            //console.log("------------------loged adminItem",adminItem);
+            //compactLog("------------------loged adminItem",adminItem);
             items = [...adminItem].concat(items);
           }
         } else if (isDistributor(req)/*  && page == 1 */) {
@@ -105,7 +105,7 @@ exports.index = async (req, res) => {
         res.send(formatResponse(result, "All Supplier"));
       })
       .catch((err) => {
-        console.log(err);
+        compactLog(err);
         res
           .status(errorCodes.default)
           .send(formatErrorResponse(errorCodes.defaultErrorMsg));
@@ -201,10 +201,10 @@ exports.index = async (req, res) => {
                 role_id: getRoleId("admin"),
               },
             });
-            //console.log("------------------loged otherAdminObjList",otherAdminObjList);
+            //compactLog("------------------loged otherAdminObjList",otherAdminObjList);
             
             const adminItem = await SupplierCollection(otherAdminObjList, currentUserId, false);
-            //console.log("------------------loged adminItem",adminItem);
+            //compactLog("------------------loged adminItem",adminItem);
             items = [...adminItem].concat(items);
           }
 

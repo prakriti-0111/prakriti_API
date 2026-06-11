@@ -300,7 +300,7 @@ exports.store = async (req, res) => {
       let images = [];
       for(let i = 0; i < data.images.length; i++){
         let result = await base64FileUpload(data.images[i], 'products');
-        console.log("uploade images++++++++++++++++",result );
+        compactLog("uploade images result:", result);
         
         if(result){
           images.push(result);
@@ -310,7 +310,7 @@ exports.store = async (req, res) => {
       //upload main image
       let main_image = null;
       let result = await base64FileUpload(data.main_image, 'products');
-      console.log("uploade main images++++++++++++++++",result );
+      compactLog("uploade main image result:", result);
       if(result){
         main_image = result.path;
       }
@@ -319,7 +319,7 @@ exports.store = async (req, res) => {
       let video = null;
       if(!isEmpty(data.video)){
         let result = await base64VideoFileUpload(data.video, 'products');
-        console.log("uploade video++++++++++++++++",result );
+        compactLog("uploade video result:", result);
         if(result){
           video = result.path;
         }
@@ -546,7 +546,7 @@ exports.update = async (req, res) => {
       try {
         for(let i = 0; i < data.images.length; i++){
           let result = await base64FileUpload(data.images[i], 'products');
-          console.log("images++++++++++++++++",result );
+          compactLog("images upload result:", result);
           if(result){
             images.push(result);
           }
@@ -561,7 +561,7 @@ exports.update = async (req, res) => {
         let result = await removeFile(product.video);
       }
       let result2 =await base64VideoFileUpload(data.video, 'products');
-      console.log("uploade video++++++++++++++++",result2 );
+      compactLog("uploade video result2:", result2);
       if(result2){
         video = result2.path;
       }
@@ -571,7 +571,7 @@ exports.update = async (req, res) => {
     if (!isEmpty(data.main_image)) {
       removeFile(product.main_image);
       let result2 =await base64FileUpload(data.main_image, 'products');
-      console.log("uploade main images++++++++++++++++",result2 );
+      compactLog("uploade main images result2:", result2);
       if(result2){
         main_image = result2.path;
       }
@@ -583,11 +583,11 @@ exports.update = async (req, res) => {
         where: { product_id: product.id },
         transaction: t,
       });
-      console.log("deleteCount : ", deleteCount);
+      compactLog("deleteCount :", deleteCount);
       //create product materials
       let mIds = [],
         pcertificatesIds = [];
-      console.log("data ============: ",data);
+      compactLog("data keys:", data && typeof data === 'object' ? Object.keys(data).length : typeof data);
       if (data.type != "material") {
         for (let i = 0; i < data.materials.length; i++) {
           let mObject = {
@@ -595,7 +595,7 @@ exports.update = async (req, res) => {
             material_id: data.materials[i],
             group: data.materialGroup && data.materialGroup[i] ? data.materialGroup[i] : null,
           };
-          console.log("mObject : ", mObject);
+          compactLog("mObject :", mObject);
           //let result = await updateOrCreate(ProductMaterialModel, mObject, mObject, t);
           let result = await ProductMaterialModel.create(mObject, {
             transaction: t,
@@ -628,7 +628,7 @@ exports.update = async (req, res) => {
         );
         pcertificatesIds.push(result.item.id);
       }
-      console.log("mIds : ", mIds);
+      compactLog("mIds :", mIds);
       //await ProductMaterialModel.destroy({ where: { id: {[Op.notIn]: mIds}, product_id: product.id}, transaction: t});
       await ProductCertificateModel.destroy({
         where: { id: { [Op.notIn]: pcertificatesIds }, product_id: product.id },

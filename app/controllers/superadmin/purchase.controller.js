@@ -92,6 +92,24 @@ const { base64FileUpload } = require("../../helpers/upload");
 const fs = require("fs");
 const html_to_pdf = require("html-pdf-node");
 
+// Note: logging is handled globally in server.js to prevent duplicate wrappers.
+
+// Compact helper for controller-level logs (keeps output small).
+const _compact = (v) => {
+  if (v === null || v === undefined) return String(v);
+  if (typeof v === 'string') return v.length > 200 ? v.slice(0, 200) + '...[truncated]' : v;
+  if (Array.isArray(v)) return `[Array len=${v.length}]`;
+  if (typeof v === 'object') {
+    if (v.id !== undefined) return `[obj id=${v.id}]`;
+    try {
+      return `[object keys=${Object.keys(v).length}]`;
+    } catch (e) {
+      return '[object]';
+    }
+  }
+  return String(v);
+};
+
 /**
  * Retrieve all purchase
  *
@@ -127,7 +145,7 @@ exports.index = async (req, res) => {
       userID = user.parent_id;
     }
   }
-  console.log("userID : ",userID);
+  compactLog("userID : ", userID);
   let conditions = { type: { [Op.ne]: "order_purchase" } };
   if (all_purchase == 1) {
     conditions = {
@@ -182,7 +200,7 @@ exports.index = async (req, res) => {
     distinct: true,
   })
     .then(async (data) => {
-      console.log("data.count : ",data.count);
+      compactLog("data.count : ", data.count);
       let result = {
         items: await PurchaseListCollection(data.rows, load_payments),
         total: data.count,
@@ -319,7 +337,7 @@ exports.txnLedger = async (req, res) => {
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      //console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      //compactLog("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
       return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
     });
 
@@ -327,7 +345,7 @@ exports.txnLedger = async (req, res) => {
       tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
     }
 
-    console.log("tableData: ", tableData);
+    compactLog("tableData:", _compact(tableData));
 
     let temp_invoice_no = '';
     let temp_invoice_index = -1;
@@ -346,16 +364,16 @@ exports.txnLedger = async (req, res) => {
       }
 
       if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
-        //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
+        //compactLog(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
         temp_balance -= tx.txn_amount;
         temp_balance = temp_balance > 0?temp_balance:0;
       } else if(tx.type.toLowerCase() == "purchase" && tx.is_approved != 2) {
         temp_balance = tx.txn_amount;
       }
-      //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
+      //compactLog("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
     }
 
-    //console.log("after tableData: ", tableData);
+    //compactLog("after tableData: ", tableData);
 
     // Compute running balance (Due Amount)
     let runningBalance = 0;
@@ -388,7 +406,7 @@ exports.txnLedger = async (req, res) => {
     }).reverse();
     
     
-    console.log("----------passbook----------", passbook);
+    compactLog("passbook:", _compact(passbook));
 
     let result = {
       items: passbook,
@@ -530,7 +548,7 @@ exports.downloadTxnLedger = async (req, res) => {
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      //console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      //compactLog("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
       return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
     });
 
@@ -538,7 +556,7 @@ exports.downloadTxnLedger = async (req, res) => {
       tableData = tableData.filter((table) => table.type.toLowerCase() == search.toLowerCase());
     }
 
-    console.log("tableData: ", tableData);
+    compactLog("tableData:", _compact(tableData));
 
     let temp_invoice_no = '';
     let temp_invoice_index = -1;
@@ -557,16 +575,16 @@ exports.downloadTxnLedger = async (req, res) => {
       }
 
       if(tx.type.toLowerCase() == "payment" && tx.txn_type == "credit"){
-        //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
+        //compactLog(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
         temp_balance -= tx.txn_amount;
         temp_balance = temp_balance > 0?temp_balance:0;
       } else if(tx.type.toLowerCase() == "purchase" && tx.is_approved != 2) {
         temp_balance = tx.txn_amount;
       }
-      //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
+      //compactLog("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
     }
 
-    //console.log("after tableData: ", tableData);
+    //compactLog("after tableData: ", tableData);
 
     // Compute running balance (Due Amount)
     let runningBalance = 0;
@@ -599,10 +617,10 @@ exports.downloadTxnLedger = async (req, res) => {
     }).reverse();
 
     passbook = passbook.sort((a, b) => {
-      console.log("----------a.invoice_number,b.invoice_number----------",a.invoice_number.split("").pop(),b.invoice_number.split("").pop());
+      compactLog("----------a.invoice_number,b.invoice_number----------", a.invoice_number.split("").pop(), b.invoice_number.split("").pop());
       return b.invoice_number.split("-").pop() - a.invoice_number.split("-").pop();
     });
-    console.log("----------passbook----------", passbook);
+    compactLog("passbook:", _compact(passbook));
 
     /* let result = {
       items: passbook,
@@ -1151,7 +1169,7 @@ exports.downloadTxnLedger = async (req, res) => {
 
         // Save PDF to file
         fs.writeFileSync(file_path, pdfBuffer);
-        console.log("PDF generated successfully!");
+        compactLog("PDF generated successfully!");
 
         res.send(
           formatResponse(
@@ -1186,7 +1204,7 @@ exports.pre_store = async (req, res) => {
   let data = req.body;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   try { 
-    console.log("pre purchase store payload : ", data);
+    compactLog("pre purchase store payload :", _compact(data));
     //return false;
     let req_data = data; //JSON.stringify(data);
     //req_data = new Buffer.from(req_data).toString("base64");
@@ -1198,7 +1216,7 @@ exports.pre_store = async (req, res) => {
 
     data.current_image = image_path.path;
 
-    console.log("pre purchase store payload after image upload : ", data.current_image);
+    compactLog("pre purchase store payload after image upload :", _compact(data.current_image));
     
     req_data = encodeForStorage(req_data);  
     let prePurchaseObj = {
@@ -1256,7 +1274,7 @@ exports.pre_purchase_delete = async (req, res) => {
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   try {
     let id = req.params.id;
-    console.log("----pre purchase delete id",id, " ", userID);
+    compactLog("----pre purchase delete id", id, userID);
     if(id == 'all'){
       await PrePurchaseModel.destroy({
         where: { user_id: userID }
@@ -1281,9 +1299,9 @@ exports.pre_purchase_delete = async (req, res) => {
  * @param {*} res
  */
 exports.store = async (req, res) => {
-  // console.log("------------this data is purchases",req)
+  // compactLog("------------this data is purchases",req)
   let data = req.body;
-  console.log("purchase store payload : ", data);
+  compactLog("purchase store payload :", _compact(data));
   //return false;
   if (!isEmpty(data.invoice_number)) {
     let purchaseData = await PurchaseModel.findOne({
@@ -1352,7 +1370,7 @@ exports.store = async (req, res) => {
       is_certificate_exist = purchaseProduct ? thisItem.certificate_no : is_certificate_exist;
     }
   }
-console.log("is_certificate_exist : ", is_certificate_exist);
+compactLog("is_certificate_exist : ", is_certificate_exist);
   if(is_certificate_exist){
     return res
         .status(errorCodes.default)
@@ -1389,13 +1407,13 @@ console.log("is_certificate_exist : ", is_certificate_exist);
         paid_amount = parseFloat(data.total_payable);
       }
     }
-    // console.log("data is Current image ", data.current_image)
+    // compactLog("data is Current image ", data.current_image)
     /* let current_image =
       data.current_image == undefined
         ? null
         : `${(await base64FileUpload(data.current_image, "products")).path}`; */
 
-    // console.log("current image is the ",current_image)
+    // compactLog("current image is the ",current_image)
 
     let purchaseObj = {
       supplier_id: data.supplier_id,
@@ -1427,7 +1445,7 @@ console.log("is_certificate_exist : ", is_certificate_exist);
     //insert into purchase product table
     for (let i = 0; i < data.products.length; i++) {
       let thisItem = data.products[i];
-      // console.log("--data.product[0].current_image",data.products[i].current_image)
+      // compactLog("--data.product[0].current_image",data.products[i].current_image)
       
       // Handle current_image upload - check if it exists
       let current_image = null;
@@ -1446,18 +1464,18 @@ console.log("is_certificate_exist : ", is_certificate_exist);
             current_image = data.products[i].current_image; // Assuming it's a URL or existing path
           }
         } catch (imgErr) {
-          console.log("Image upload error for product " + i + ": ", imgErr);
+          compactLog("Image upload error for product " + i + ": ", imgErr);
           current_image = null;
         }
       }
       
-      // console.log(
+      // compactLog(
       //   "image_path________________________________________________________",
       //   image_path
       // );
 
-      // console.log(current_image)
-      // console.log("----------current image ",current_image )
+      // compactLog(current_image)
+      // compactLog("----------current image ",current_image )
       let worker_id = thisItem.worker_id || null;
       let thisObj = {
         current_image: current_image,
@@ -1474,7 +1492,7 @@ console.log("is_certificate_exist : ", is_certificate_exist);
         total: priceFormat(thisItem.total),
       };
 
-      console.log(
+      compactLog(
         "thisObj_________________________________________________________________________________",
         thisObj
       );
@@ -1528,7 +1546,7 @@ console.log("is_certificate_exist : ", is_certificate_exist);
           rate: thisItem.materials[x].rate,
           amount: thisItem.materials[x].amount,
         };
-        console.log("thisMObj : ", thisMObj);
+        compactLog("thisMObj : ", thisMObj);
         await PurchaseProductMaterialModel.create(thisMObj);
 
         if (!isEmpty(worker_id)) {
@@ -1787,7 +1805,7 @@ console.log("is_certificate_exist : ", is_certificate_exist);
     res.send(formatResponse([], "Purchase successfully!"));
     //});
   } catch (error) {
-    console.log("err: " + error.toString());
+    compactLog("err: " + error.toString());
     addLog("err: " + error.toString());
 
     return res
@@ -1938,7 +1956,7 @@ exports.onapprove_view = async (req, res) => {
  * @param {*} res
  */
 exports.statuschange = async (req, res) => {
-  // console.log("Status Change", req.body)
+  // compactLog("Status Change", req.body)
   let data = req.body;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   let purchase = await PurchaseModel.findOne({
@@ -1991,7 +2009,7 @@ exports.statuschange = async (req, res) => {
     ],
   });
 
-  // console.log("-------new Data IS ",JSON.stringify(purchase));
+  // compactLog("-------new Data IS ",JSON.stringify(purchase));
 
   if (!purchase) {
     return res
@@ -2020,7 +2038,7 @@ exports.statuschange = async (req, res) => {
        */
       if (data.approve_status == 1) {
         let req_data = purchase.req_data;
-        // console.log("--------------------------req.data valus ",req_data);
+        // compactLog("--------------------------req.data valus ",req_data);
 
         let stock_con = userID; //isSuperAdmin(req) ? {[Op.is]: null} : userID;
         if (!isEmpty(req_data)) {
@@ -2036,10 +2054,15 @@ exports.statuschange = async (req, res) => {
 
           for (let i = 0; i < req_data.products.length; i++) {
             let thisItem = req_data.products[i];
-            // console.log("------- change status ",base64FileUpload(req_data.products[i].current_image,"products").path)
+            // compactLog("------- change status ",base64FileUpload(req_data.products[i].current_image,"products").path)
             let worker_id = thisItem.worker_id || null;
-            console.log("purchase : ", JSON.stringify(purchase));
-            console.log("thisItem : ", JSON.stringify(thisItem));
+            // Avoid logging full objects (can overflow stdout buffer on large payloads)
+            try {
+              compactLog("approve: purchase id:", purchase && purchase.id ? purchase.id : 'n/a');
+              compactLog("approve: thisItem product_id:", thisItem && thisItem.product_id ? thisItem.product_id : 'n/a', "certificate_no:", thisItem && thisItem.certificate_no ? thisItem.certificate_no : '');
+            } catch (logErr) {
+              // swallow logging errors to avoid breaking the flow
+            }
             let product_type = "",
               product = null,
               category_id = null,
@@ -2107,7 +2130,12 @@ exports.statuschange = async (req, res) => {
                 },
               };
 
-              console.log(query);
+              // log only the certificate query filter to avoid huge dumps
+              try {
+                if (query && query.where && query.where.certificate_no) {
+                  compactLog("certificate_no query: ", query.where.certificate_no);
+                }
+              } catch (logErr) {}
               let resData = await StockModel.findAll(query);
               let Current_image = (purchase.purchaseProducts && purchase.purchaseProducts[i] && purchase.purchaseProducts[i].current_image)
                 ? purchase.purchaseProducts[i].current_image
@@ -2164,7 +2192,7 @@ exports.statuschange = async (req, res) => {
               /**
                * add to stock materials
                */
-              // console.log("----stock is ",stockMaterial)
+              // compactLog("----stock is ",stockMaterial)
               if (product_type == "material" || (product_type != "material" && isEmpty(thisItem.certificate_no))) {
                 let stockMaterial = await StockMaterialModel.findOne({
                   where: {
@@ -2447,7 +2475,7 @@ exports.statuschange = async (req, res) => {
                   );
                   stock = result.item;
                 } else {
-                  // console.log("----else Stock 888",req_data.products[0].current_image)
+                  // compactLog("----else Stock 888",req_data.products[0].current_image)
                   let current_image_path = await base64FileUpload(
                     req_data.products[i].current_image,
                     "products"
@@ -2752,7 +2780,7 @@ exports.statuschange = async (req, res) => {
     res.send(formatResponse([], "Purchase Status Changed successfully!"));
   } catch (error) {
     addLog("err: " + error.toString());
-    console.log(error);
+    compactLog(error);
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse("Purchase does not update due to some error"));
@@ -2768,7 +2796,7 @@ exports.statuschange = async (req, res) => {
 exports.view = async (req, res) => {
   try {
     let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-    console.log("purchase view --------------> req.params.id : ",req.params.id);
+    compactLog("purchase view --------------> req.params.id : ",req.params.id);
     let purchase = await PurchaseModel.findOne({
       where: { id: req.params.id /*, user_id: userID*/ },
       /* include: [
@@ -3086,13 +3114,13 @@ exports.update = async (req, res) => {
               );
               current_image = image_path.path;
             } catch (imgErr) {
-              console.log("Image upload error for product " + i + ": ", imgErr);
+              compactLog("Image upload error for product " + i + ": ", imgErr);
               current_image = null;
             }
           }
 
           let worker_id = thisItem.worker_id || null;
-          // console.log("----------------thisis purchases productv ",thisItem);
+          // compactLog("----------------thisis purchases productv ",thisItem);
 
           let thisObj = {
             current_image: current_image,
@@ -3875,7 +3903,7 @@ exports.returnProducts = async (req, res) => {
     });
   } catch (error) {
     addLog("err: " + error.toString());
-    console.log(error);
+    compactLog(error);
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse(errorCodes.defaultErrorMsg));
@@ -4928,8 +4956,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
         receive_metal += parseFloat(itm.weight);
       }
     });
-    console.log("fine_metals before : ", fine_metals);
-    console.log("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
+    compactLog("fine_metals before : ", fine_metals);
+    compactLog("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
     /* convert gold to 24k from 18k */
     if(purity18K && purity18K.value != null){
       fine_metals = (parseFloat(fine_metals)*parseFloat(purity18K.value))/100;
@@ -5714,7 +5742,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
       // Save PDF to file
       fs.writeFileSync(file_path, pdfBuffer);
-      console.log("PDF generated successfully!");
+      compactLog("PDF generated successfully!");
 
       res.send(
         formatResponse(
@@ -5737,8 +5765,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
 };
 
 const removeCurrencyAndDecimalFromPrice = (str) => {
-  //console.log("str : ", str);
-  //console.log("converted str : ", String(str).replace(/[Rs.|₹]/,"").replace(/[^.]\w*$/, "").replace(/\./, ""));
+  //compactLog("str : ", str);
+  //compactLog("converted str : ", String(str).replace(/[Rs.|₹]/,"").replace(/[^.]\w*$/, "").replace(/\./, ""));
   //return String(str).replace(/[Rs.|₹]/,"").replace(/[^.]\w*$/, "").replace(/\./, "");
   return parseFloat(String(str).replace("Rs.", "").replace("₹", "")).toFixed(0);
 };
@@ -6476,7 +6504,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
 
       // Save PDF to file
       fs.writeFileSync(file_path, pdfBuffer);
-      console.log("PDF generated successfully!");
+      compactLog("PDF generated successfully!");
 
         res.send(
           formatResponse(
@@ -8105,7 +8133,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
 
       // Save PDF to file
       fs.writeFileSync(file_path, pdfBuffer);
-      console.log("PDF generated successfully!");
+      compactLog("PDF generated successfully!");
 
       res.send(
         formatResponse(
@@ -8124,7 +8152,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
     doc.html(html, {
         callback: (pdf) => {
             pdf.save(file_path);
-            console.log('PDF generated successfully!');
+            compactLog('PDF generated successfully!');
 
             res.send(
               formatResponse(
