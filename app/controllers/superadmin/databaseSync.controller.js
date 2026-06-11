@@ -497,7 +497,7 @@ exports.syncProdToDevAndTest = async (req, res) => {
       ),
     );
   } catch (error) {
-    console.log(error);
+    compactLog(error);
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse(error.toString()));

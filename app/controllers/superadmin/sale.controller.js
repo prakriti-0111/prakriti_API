@@ -146,10 +146,7 @@ exports.index = async (req, res) => {
 
   /* check get the selected user legs ids */
   const userIds = await avlStockUserIdsNew(req);
-  console.log(
-    "sale_by userIds for sale list ::::::==================",
-    userIds,
-  );
+  compactLog("sale_by userIds for sale list:", userIds);
   if (userIds.length > 0 && is_approval) {
     conditions.sale_by = { [Op.in]: userIds };
   }
@@ -183,19 +180,13 @@ exports.index = async (req, res) => {
     delete conditions.user_id;
   }
 
-  console.log(
-    "this the sales data in the cales controller111 =====",
-    conditions,
-  );
+  compactLog("this the sales data in the sales controller111 =====", conditions);
   conditions = {
     ...conditions,
     ...getDateFromToWhere(date_from, date_to, "invoice_date"),
   };
 
-  console.log(
-    "this the sales data in the cales controller222 =====",
-    conditions,
-  );
+  compactLog("this the sales data in the sales controller222 =====", conditions);
 
   const paginatorOptions = getPaginationOptions(page, limit);
 
@@ -217,10 +208,7 @@ exports.index = async (req, res) => {
     distinct: true,
   })
     .then(async (data) => {
-      console.log(
-        "this the transfer 0 data in the cales controller =====",
-        data.count,
-      );
+      compactLog("this the transfer 0 data in the sales controller =====", data.count);
 
       let result = {
         items: await SaleListCollection(data.rows, userID),
@@ -375,13 +363,13 @@ exports.txnLedger = async (req, res) => {
       });
     });
 
-    //console.log("before tableData: ", tableData);
+    //compactLog("before tableData: ", tableData);
 
     tableData.sort((a, b) => new Date(b.index) - new Date(a.index));
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      /* console.log(
+      /* compactLog(
         "----------a.invoice_number,b.invoice_number----------",
         a.invoice_number.split("").pop(),
         b.invoice_number.split("").pop(),
@@ -400,7 +388,7 @@ exports.txnLedger = async (req, res) => {
       );
     }
 
-    //console.log("tableData: ", tableData);
+    //compactLog("tableData: ", tableData);
 
     let temp_invoice_no = "";
     let temp_invoice_index = -1;
@@ -422,16 +410,16 @@ exports.txnLedger = async (req, res) => {
       }
 
       if (tx.type.toLowerCase() == "payment" && tx.txn_type == "credit") {
-        //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
+        //compactLog(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
         temp_balance -= tx.txn_amount;
         temp_balance = temp_balance > 0 ? temp_balance : 0;
       } else if (tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
         temp_balance = tx.txn_amount;
       }
-      //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
+      //compactLog("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
     }
 
-    //console.log("after tableData: ", tableData);
+    //compactLog("after tableData: ", tableData);
 
     // Compute running balance (Due Amount)
     let runningBalance = 0;
@@ -475,7 +463,7 @@ exports.txnLedger = async (req, res) => {
       })
       .reverse();
 
-    console.log("----------passbook----------", passbook);
+    compactLog("passbook:", passbook);
 
     let result = {
       items: passbook,
@@ -637,7 +625,7 @@ exports.downloadTxnLedger = async (req, res) => {
     // Sort transactions by txn_date descending
     tableData.sort((a, b) => new Date(b.txn_date) - new Date(a.txn_date));
     tableData.sort((a, b) => {
-      /* console.log(
+      /* compactLog(
         "----------a.invoice_number,b.invoice_number----------",
         a.invoice_number.split("").pop(),
         b.invoice_number.split("").pop(),
@@ -656,7 +644,7 @@ exports.downloadTxnLedger = async (req, res) => {
       );
     }
 
-    console.log("tableData: ", tableData);
+    compactLog("tableData length:", Array.isArray(tableData) ? tableData.length : typeof tableData);
 
     let temp_invoice_no = "";
     let temp_invoice_index = -1;
@@ -678,16 +666,16 @@ exports.downloadTxnLedger = async (req, res) => {
       }
 
       if (tx.type.toLowerCase() == "payment" && tx.txn_type == "credit") {
-        //console.log(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
+        //compactLog(`temp_balance : ${temp_balance}, credited txn_amount : ${tx.txn_amount}, balance : ${temp_balance - tx.txn_amount}`)
         temp_balance -= tx.txn_amount;
         temp_balance = temp_balance > 0 ? temp_balance : 0;
       } else if (tx.type.toLowerCase() == "sale" && tx.is_approved != 2) {
         temp_balance = tx.txn_amount;
       }
-      //console.log("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
+      //compactLog("temp_invoice_no : ", temp_invoice_no, "temp_balance : ", temp_balance);
     }
 
-    //console.log("after tableData: ", tableData);
+    //compactLog("after tableData: ", tableData);
 
     // Compute running balance (Due Amount)
     let runningBalance = 0;
@@ -729,7 +717,7 @@ exports.downloadTxnLedger = async (req, res) => {
       })
       .reverse();
 
-    console.log("----------passbook----------", passbook);
+    compactLog("passbook length:", Array.isArray(passbook) ? passbook.length : typeof passbook);
 
     /* let result = {
       items: passbook,
@@ -1261,7 +1249,7 @@ exports.downloadTxnLedger = async (req, res) => {
 
         // Save PDF to file
         fs.writeFileSync(file_path, pdfBuffer);
-        console.log("PDF generated successfully!");
+        compactLog("PDF generated successfully!");
 
         res.send(
           formatResponse(
@@ -1294,7 +1282,7 @@ exports.downloadTxnLedger = async (req, res) => {
  */
 exports.store = async (req, res) => {
   let data = req.body;
-  console.log("sale store payload : ", data);
+  compactLog("sale store payload:", data && typeof data === 'object' ? Object.keys(data).length : typeof data);
   let reportCharge = await ReportChargeModel.findAll({
     order: [["amount", "ASC"]],
     where: {},
@@ -1436,7 +1424,7 @@ exports.store = async (req, res) => {
       status: status,
       image: image,
     };
-    console.log("sale create : ", saleObj);
+    compactLog("sale create:", saleObj && typeof saleObj === 'object' ? Object.keys(saleObj).length : typeof saleObj);
     let sale = await SaleModel.create(saleObj);
 
     let purchase = null;
@@ -1472,7 +1460,7 @@ exports.store = async (req, res) => {
         is_approval: data.on_approval,
         image: image,
       };
-      console.log("purchase create : ", purchaseObj);
+      compactLog("purchase create:", purchaseObj && typeof purchaseObj === 'object' ? Object.keys(purchaseObj).length : typeof purchaseObj);
       purchase = await PurchaseModel.create(purchaseObj);
     }
     //}
@@ -1514,7 +1502,7 @@ exports.store = async (req, res) => {
           ? thisItem.order_product_id
           : null,
       };
-      console.log("sale product create : ", thisObj);
+      compactLog("sale product create:", thisObj && typeof thisObj === 'object' ? Object.keys(thisObj).length : typeof thisObj);
       let saleProduct = await SaleProductModel.create(thisObj);
       let product = await ProductModel.findByPk(thisItem.product_id);
 
@@ -1552,7 +1540,7 @@ exports.store = async (req, res) => {
 
       let purchaseProduct = null;
       //if(!isSuperAdmin(req)){
-      // console.log("--------thisItem", data);
+      // compactLog("--------thisItem", data);
 
       if (purchase) {
         let query = {
@@ -1582,24 +1570,21 @@ exports.store = async (req, res) => {
           total: priceFormat(thisItem.total),
           total_discount: priceFormat(thisItem.total_discount),
         };
-        console.log("purchase product create : ", thisObj2);
+        compactLog("purchase product create:", thisObj2 && typeof thisObj2 === 'object' ? Object.keys(thisObj2).length : typeof thisObj2);
         purchaseProduct = await PurchaseProductModel.create(thisObj2);
         req_data_for_purchase.products[i].id = purchaseProduct.id;
       }
       //}
-      console.log("remove stock : ", thisItem.stock_id);
-      console.log("thisItem.certificate_no : ", thisItem.certificate_no);
-      console.log(
-        "!isEmpty(thisItem.certificate_no) : ",
-        !isEmpty(thisItem.certificate_no),
-      );
+      compactLog("remove stock id:", thisItem && thisItem.stock_id);
+      compactLog("thisItem.certificate_no:", thisItem && thisItem.certificate_no);
+      compactLog("has certificate_no:", !!(!isEmpty(thisItem.certificate_no)));
       //remove stock
       if (
         isEmpty(sale_product_id) &&
         product.type != "material" &&
         !isEmpty(thisItem.certificate_no)
       ) {
-        console.log("removed !");
+                compactLog("removed!");
         await StockModel.destroy({ where: { id: thisItem.stock_id } });
       }
 
@@ -1622,7 +1607,7 @@ exports.store = async (req, res) => {
           total_gram: thisItem.materials[x].total_gram,
           per_gram_price: thisItem.materials[x].per_gram_price,
         };
-        console.log("sale product material create : ", thisMObj);
+        compactLog("sale product material create : ", thisMObj);
         await SaleProductMaterialModel.create(thisMObj);
 
         //if(!isSuperAdmin(req)){
@@ -1639,7 +1624,7 @@ exports.store = async (req, res) => {
             amount: thisItem.materials[x].amount,
             discount_amount: thisItem.materials[x].discount_amount,
           };
-          console.log("purchase product material create : ", thisMObj2);
+          compactLog("purchase product material create : ", thisMObj2);
           await PurchaseProductMaterialModel.create(thisMObj2);
         }
         //}
@@ -1672,7 +1657,7 @@ exports.store = async (req, res) => {
                 },
                 { where: { id: stockMaterial.id } },
               );
-              console.log(
+              compactLog(
                 "stockMaterial.weight : ",
                 parseFloat(stockMaterial.weight),
                 " - thisItem.materials[x].weight = ",
@@ -1683,7 +1668,7 @@ exports.store = async (req, res) => {
                   parseFloat(thisItem.materials[x].weight) <=
                 0
               ) {
-                console.log("stock material delete : ", thisItem.stock_id);
+                compactLog("stock material delete : ", thisItem.stock_id);
                 await StockModel.destroy({ where: { id: thisItem.stock_id } });
               } else {
                 let stock = await StockModel.findOne({
@@ -1972,7 +1957,7 @@ exports.store = async (req, res) => {
       !isEmpty(data.on_approval_id) &&
       parseInt(data.on_approval_id) > 0
     ) {
-      console.log("restore into stock .................");
+      compactLog("restore into stock .................");
       let saleApproval = await SaleModel.findOne({
         where: { id: data.on_approval_id },
         include: [
@@ -2020,13 +2005,13 @@ exports.store = async (req, res) => {
           );
         }
 
-        console.log("saleOnApproval & purchaseOnApproval updated : ", {
+        compactLog("saleOnApproval & purchaseOnApproval updated : ", {
           is_approved: 4,
           accept_declined_at: moment().format("YYYY-MM-DD HH:mm:ss"),
         });
         let parentUserID = userID; //isSuperAdmin(req) ? null : req.userId;
-        console.log("parentUserId : ", parentUserID);
-        console.log("saleProductIds : ", saleProductIds);
+        compactLog("parentUserId : ", parentUserID);
+        compactLog("saleProductIds : ", saleProductIds);
         for (let i = 0; i < saleApproval.saleProducts.length; i++) {
           let thisItem = saleApproval.saleProducts[i];
           if (saleProductIds.includes(thisItem.id)) {
@@ -2075,7 +2060,7 @@ exports.store = async (req, res) => {
               user_id: parentUserID,
             });
           }
-          console.log("stock created : ", stock.id);
+          compactLog("stock created : ", stock.id);
           for (let x = 0; x < thisItem.saleMaterials.length; x++) {
             let saleMaterial = thisItem.saleMaterials[x];
             /**
@@ -2118,7 +2103,7 @@ exports.store = async (req, res) => {
                   },
                   { where: { id: stockMaterial.id } },
                 );
-                console.log("stock material updated : ", stockMaterial.id);
+                compactLog("stock material updated : ", stockMaterial.id);
               } else {
                 await StockMaterialModel.create({
                   stock_id: stock.id,
@@ -2130,7 +2115,7 @@ exports.store = async (req, res) => {
                   unit_id: saleMaterial.unit_id,
                   category_id: product.category_id,
                 });
-                console.log("stock material created : ", {
+                compactLog("stock material created : ", {
                   stock_id: stock.id,
                   material_id: saleMaterial.material_id,
                   weight: weightFormat(saleMaterial.weight),
@@ -2152,7 +2137,7 @@ exports.store = async (req, res) => {
                 unit_id: saleMaterial.unit_id,
                 category_id: product.category_id,
               });
-              console.log("stock material created for type product : ", {
+              compactLog("stock material created for type product : ", {
                 stock_id: stock.id,
                 material_id: saleMaterial.material_id,
                 weight: weightFormat(saleMaterial.weight),
@@ -2197,7 +2182,7 @@ exports.store = async (req, res) => {
 exports.statuschange = async (req, res) => {
   let data = req.body;
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  console.log("status change data =================: ", data);
+  compactLog("status change data =================: ", data);
   try {
     let sale = await SaleModel.findOne({
       where: { id: req.params.id, sale_by: userID },
@@ -2557,7 +2542,7 @@ exports.statuschange = async (req, res) => {
 
     res.send(formatResponse([], "Status Changed successfully!"));
   } catch (error) {
-    console.log("status change error: ", error);
+    compactLog("status change error: ", error);
     return res.status(errorCodes.default).send(formatErrorResponse(error));
   }
 };
@@ -2961,7 +2946,7 @@ exports.returnSale = async (req, res) => {
             );
             stock = result.item;
           } else {
-            // console.log("req =============== 1 ", );
+            // compactLog("req =============== 1 ", );
             stock = await StockModel.create(
               {
                 product_id: return_data.products[i].product_id,
@@ -2976,7 +2961,7 @@ exports.returnSale = async (req, res) => {
             );
           }
         } else {
-          // console.log("req =============== 2", return_data);
+          // compactLog("req =============== 2", return_data);
 
           // Try to get current_image from multiple sources (prioritize most recent/updated image)
           let current_image = null;
@@ -3373,7 +3358,7 @@ exports.returnSaleNew = async (req, res) => {
       .status(errorCodes.default)
       .send(formatErrorResponse("Sale not found"));
   }
-  console.log("---------------------- sale ----------------------");
+  compactLog("---------------------- sale ----------------------");
   /* get purchase details from sale id */
   let purchase = await PurchaseModel.findOne({
     where: { sale_id: sale.id },
@@ -3389,7 +3374,7 @@ exports.returnSaleNew = async (req, res) => {
       .status(errorCodes.default)
       .send(formatErrorResponse("Purchase not found"));
   }
-  console.log("---------------------- purchase ----------------------");
+  compactLog("---------------------- purchase ----------------------");
 
   /* posted data */
   let data = req.body;
@@ -3499,11 +3484,11 @@ exports.returnSaleNew = async (req, res) => {
               numMatched++;
             }
           }
-          console.log(
+          compactLog(
             "---------------------- num of materials Matched in stock for existing checking ----------------------",
           );
-          console.log(numMatched);
-          console.log(return_data.products[i].materials.length);
+          compactLog(numMatched);
+          compactLog(return_data.products[i].materials.length);
           if (numMatched !== return_data.products[i].materials.length) {
             return res
               .status(errorCodes.default)
@@ -3560,7 +3545,7 @@ exports.returnSaleNew = async (req, res) => {
   } else {
     return_status = "pending";
   }
-  console.log(
+  compactLog(
     "---------------------- return_status ----------------------",
     return_status,
   );
@@ -3587,7 +3572,7 @@ exports.returnSaleNew = async (req, res) => {
     }
   }
 
-  console.log("---------------------- returnSaleNew ----------------------");
+  compactLog("---------------------- returnSaleNew ----------------------");
   try {
     /* start transaction */
     const trans = await sequelize.transaction(async (t) => {
@@ -3622,7 +3607,7 @@ exports.returnSaleNew = async (req, res) => {
         },
         { transaction: t },
       );
-      console.log(
+      compactLog(
         "---------------------- ReturnModel create ----------------------",
       );
       /**
@@ -3644,7 +3629,7 @@ exports.returnSaleNew = async (req, res) => {
             },
           ],
         });
-        console.log(
+        compactLog(
           "---------------------- saleProduct fetch ----------------------",
           saleProduct.id,
         );
@@ -3662,21 +3647,21 @@ exports.returnSaleNew = async (req, res) => {
             },
           ],
         });
-        console.log(
+        compactLog(
           "---------------------- purchaseProduct fetch ----------------------",
           purchaseProduct.id,
         );
         /**
          * moved to stock
          */
-        console.log(
+        compactLog(
           "---------------------- preparing stock entry ----------------------",
         );
         let stock_type = "product";
         if (return_data.products[i].return_charge_percent > 0) {
           stock_type = "return";
         }
-        console.log(
+        compactLog(
           "---------------------- stock_type ----------------------",
           stock_type,
         );
@@ -3723,7 +3708,7 @@ exports.returnSaleNew = async (req, res) => {
             );
             stock = result.item;
           } else {
-            // console.log("req =============== 1 ", );
+            // compactLog("req =============== 1 ", );
             stock = await StockModel.create(
               {
                 product_id: return_data.products[i].product_id,
@@ -3738,7 +3723,7 @@ exports.returnSaleNew = async (req, res) => {
             );
           }
         } else {
-          // console.log("req =============== 2", return_data);
+          // compactLog("req =============== 2", return_data);
 
           // Try to get current_image from multiple sources (prioritize most recent/updated image)
           let current_image = null;
@@ -3804,7 +3789,7 @@ exports.returnSaleNew = async (req, res) => {
             { transaction: t },
           );
         }
-        console.log(
+        compactLog(
           "---------------------- StockModel create as return ----------------------",
         );
         //insert into return product table
@@ -3817,7 +3802,7 @@ exports.returnSaleNew = async (req, res) => {
           },
           { transaction: t },
         );
-        console.log(
+        compactLog(
           "---------------------- ReturnProductModel create ----------------------",
         );
         //insert into return product materials table
@@ -3844,7 +3829,7 @@ exports.returnSaleNew = async (req, res) => {
             },
             { transaction: t },
           );
-          console.log(
+          compactLog(
             "---------------------- ReturnProductMaterialModel create ----------------------",
           );
           /**
@@ -3913,7 +3898,7 @@ exports.returnSaleNew = async (req, res) => {
             );
           }
         }
-        console.log(
+        compactLog(
           "---------------------- StockMaterialModel create ----------------------",
         );
         /* if (
@@ -3922,7 +3907,7 @@ exports.returnSaleNew = async (req, res) => {
         ) { */
         //update sale product is return and return weight & qty into sale product material table
         if (return_data.products[i].product_type == "material") {
-          console.log(
+          compactLog(
             "update sale product is return and return weight & qty into sale & purchase product material table",
           );
           let total_return_weight =
@@ -3966,7 +3951,7 @@ exports.returnSaleNew = async (req, res) => {
               transaction: t,
             },
           );
-          console.log(
+          compactLog(
             "---------------------- Weight updated into Product Material for purchae and sale Model ----------------------",
           );
         } else {
@@ -3980,7 +3965,7 @@ exports.returnSaleNew = async (req, res) => {
             { where: { id: purchaseProduct.id }, transaction: t },
           );
         }
-        console.log(
+        compactLog(
           "---------------------- Weight updated into Product for purchae and sale Model ----------------------",
         );
         //}
@@ -3990,16 +3975,16 @@ exports.returnSaleNew = async (req, res) => {
          * START - Remove from stock table
          */
         //if (purchase.is_approved == 1) {
-        console.log(
+        compactLog(
           "---------------------- Removing from stock ----------------------",
         );
         stock = null;
         stockPurchse = null;
         if (return_data.products[i].product_type == "material") {
-          console.log("+++++++++++++++ material stock +++++++++++++++");
+          compactLog("+++++++++++++++ material stock +++++++++++++++");
           if (!isEmpty(return_data.products[i].product_id)) {
-            console.log("+++++++++++++++ product stock +++++++++++++++");
-            console.log({
+            compactLog("+++++++++++++++ product stock +++++++++++++++");
+            compactLog({
               product_id: return_data.products[i].product_id,
               user_id: req.userId,
             });
@@ -4009,8 +3994,8 @@ exports.returnSaleNew = async (req, res) => {
                 user_id: req.userId,
               },
             });
-            console.log("+++++++++++++++ purchase stock +++++++++++++++");
-            console.log({
+            compactLog("+++++++++++++++ purchase stock +++++++++++++++");
+            compactLog({
               product_id: return_data.products[i].product_id,
               user_id: sale.userId,
             });
@@ -4137,12 +4122,12 @@ exports.returnSaleNew = async (req, res) => {
                 transaction: t,
               });
             }
-            console.log("---------------------- stockM ----------------------");
-            console.log(stockM);
-            console.log(
+            compactLog("---------------------- stockM ----------------------");
+            compactLog(stockM);
+            compactLog(
               "---------------------- stockMPurchase ----------------------",
             );
-            console.log(stockMPurchase);
+            compactLog(stockMPurchase);
             weight += mItem.return_weight ? parseInt(mItem.return_weight) : 0;
             if (stockM) {
               /* await StockMaterialModel.update(
@@ -4170,7 +4155,7 @@ exports.returnSaleNew = async (req, res) => {
                 { transaction: t }
               ); */
             }
-            console.log(
+            compactLog(
               "---------------------- After stockM update ----------------------",
             );
             if (stockMPurchase) {
@@ -4187,7 +4172,7 @@ exports.returnSaleNew = async (req, res) => {
                 { where: { id: stockMPurchase?.id }, transaction: t },
               );
             }
-            console.log(
+            compactLog(
               "---------------------- After stockMPurchase update ----------------------",
             );
             unit_name = mItem.unit_name;
@@ -4212,7 +4197,7 @@ exports.returnSaleNew = async (req, res) => {
               { where: { id: stock?.id }, transaction: t }
             ); */
           }
-          console.log(
+          compactLog(
             "---------------------- stockPurchse update ----------------------",
           );
           if (stockPurchse) {
@@ -4238,11 +4223,11 @@ exports.returnSaleNew = async (req, res) => {
               );
             }
           }
-          console.log(
+          compactLog(
             "---------------------- End of stockPurchse update ----------------------",
           );
         } else {
-          console.log("+++++++++++++++ product stock +++++++++++++++");
+          compactLog("+++++++++++++++ product stock +++++++++++++++");
           stock = await StockModel.findOne({
             where: {
               product_id: return_data.products[i].product_id,
@@ -4262,10 +4247,10 @@ exports.returnSaleNew = async (req, res) => {
               },
             ],
           });
-          console.log(
+          compactLog(
             "---------------------- Stock to check for create ----------------------",
           );
-          console.log(stock);
+          compactLog(stock);
           /* if (!stock) {
             // Try to get current_image from multiple sources
             let current_image = null;
@@ -4323,8 +4308,8 @@ exports.returnSaleNew = async (req, res) => {
                 }
               }
             }
-            console.log("---------------------- current_image ----------------------");
-            console.log(current_image);
+            compactLog("---------------------- current_image ----------------------");
+            compactLog(current_image);
             stock = await StockModel.create(
               {
                 purchase_id: purchase.id,
@@ -4340,8 +4325,8 @@ exports.returnSaleNew = async (req, res) => {
               },
               { transaction: t }
             );
-            console.log("---------------------- Created Stock ----------------------");
-            console.log(stock);
+            compactLog("---------------------- Created Stock ----------------------");
+            compactLog(stock);
             for (let x = 0; x < return_data.products[i].materials.length; x++) {
               await StockMaterialModel.create(
                 {
@@ -4361,7 +4346,7 @@ exports.returnSaleNew = async (req, res) => {
                 { transaction: t }
               );
             }
-            console.log(
+            compactLog(
               "---------------------- Created Stock Materials ----------------------"
             );
           } */
@@ -4384,11 +4369,11 @@ exports.returnSaleNew = async (req, res) => {
               },
             ],
           });
-          console.log(
+          compactLog(
             "---------------------- Stock to check for delete ----------------------",
           );
-          console.log(stock);
-          console.log(stockPurchse);
+          compactLog(stock);
+          compactLog(stockPurchse);
 
           /* if (stock) {
             let numMatched = 0;
@@ -4411,9 +4396,9 @@ exports.returnSaleNew = async (req, res) => {
                 numMatched++;
               }
             }
-            console.log("---------------------- num of materials Matched in stock ----------------------");
-            console.log(numMatched);
-            console.log(return_data.products[i].materials.length);
+            compactLog("---------------------- num of materials Matched in stock ----------------------");
+            compactLog(numMatched);
+            compactLog(return_data.products[i].materials.length);
             if (numMatched == return_data.products[i].materials.length) {
               await StockMaterialModel.destroy({
                 where: { stock_id: stock.id }, transaction: t
@@ -4454,11 +4439,11 @@ exports.returnSaleNew = async (req, res) => {
                 numMatched++;
               }
             }
-            console.log(
+            compactLog(
               "---------------------- num of materials Matched in stock ----------------------",
             );
-            console.log(numMatched);
-            console.log(return_data.products[i].materials.length);
+            compactLog(numMatched);
+            compactLog(return_data.products[i].materials.length);
             if (numMatched == return_data.products[i].materials.length) {
               await StockMaterialModel.destroy({
                 where: { stock_id: stockPurchse?.id },
@@ -4494,7 +4479,7 @@ exports.returnSaleNew = async (req, res) => {
          * END - Remove from stock table
          */
       }
-      console.log(
+      compactLog(
         "---------------------- Delete StockModel, StockMaterialModel and cartModel,cartMaterialsModel  ----------------------",
       );
 
@@ -4543,12 +4528,12 @@ exports.returnSaleNew = async (req, res) => {
               can_accept: false,
               is_advance: false,
             });
-            console.log(
+            compactLog(
               "---------------------- PaymentModel create for sale refund ----------------------",
             );
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             await updateWalletRemainingBalance(userID, payment2.id);
-            console.log(
+            compactLog(
               "---------------------- updateWalletRemainingBalance for sale refund ----------------------",
             );
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
@@ -4570,12 +4555,12 @@ exports.returnSaleNew = async (req, res) => {
               can_accept: false,
               is_advance: false,
             });
-            console.log(
+            compactLog(
               "---------------------- PaymentModel create for return purchase ----------------------",
             );
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
             await updateWalletRemainingBalance(sale.user_id, payment3.id);
-            console.log(
+            compactLog(
               `---------------------- updateWalletRemainingBalance for return purchase ----------------------`,
             );
             await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
@@ -4608,7 +4593,7 @@ exports.returnSaleNew = async (req, res) => {
               can_accept: false,
               is_advance: true,
             });
-            console.log(
+            compactLog(
               "---------------------- PaymentModel create for return purchase ----------------------",
             );
             await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
@@ -4623,7 +4608,7 @@ exports.returnSaleNew = async (req, res) => {
             await new Promise((resolve) => setTimeout(resolve, 200)); // Add delay
           }
         }
-        console.log(
+        compactLog(
           "---------------------- update wallet balance ----------------------",
         );
         let total_return_amt = priceFormat(
@@ -4638,7 +4623,7 @@ exports.returnSaleNew = async (req, res) => {
           },
           { where: { id: req.params.id }, transaction: t },
         );
-        console.log(
+        compactLog(
           "---------------------- SaleModel update ----------------------",
         );
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -4650,7 +4635,7 @@ exports.returnSaleNew = async (req, res) => {
           },
           { where: { sale_id: sale.id }, transaction: t },
         );
-        console.log(
+        compactLog(
           "---------------------- PurchaseModel update ----------------------",
         );
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -4668,7 +4653,7 @@ exports.returnSaleNew = async (req, res) => {
             },
           );
         }
-        console.log(
+        compactLog(
           "---------------------- NoticationModel update ----------------------",
         );
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -4679,7 +4664,7 @@ exports.returnSaleNew = async (req, res) => {
           },
           { where: { id: saleReturnObj.id }, transaction: t },
         );
-        console.log(
+        compactLog(
           "---------------------- ReturnModel update ----------------------",
         );
         stock = await StockModel.findOne({
@@ -4688,7 +4673,7 @@ exports.returnSaleNew = async (req, res) => {
           },
           transaction: t,
         });
-        console.log(
+        compactLog(
           "---------------------- StockModel find for return_id ----------------------",
         );
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -4698,7 +4683,7 @@ exports.returnSaleNew = async (req, res) => {
             transaction: t,
           });
         } */
-        console.log(
+        compactLog(
           "---------------------- StockMaterialModel destroy for return_id ----------------------",
         );
         await new Promise((resolve) => setTimeout(resolve, 500)); // Add delay
@@ -4706,13 +4691,13 @@ exports.returnSaleNew = async (req, res) => {
           where: { return_id: saleReturnObj.id },
           transaction: t,
         }); */
-        console.log(
+        compactLog(
           "---------------------- make return as complete ----------------------",
         );
       }
     });
 
-    console.log(
+    compactLog(
       "---------------------- update status in sale and purchase ----------------------",
     );
 
@@ -4720,8 +4705,8 @@ exports.returnSaleNew = async (req, res) => {
       where: { sale_id: sale.id, is_return: true },
     });
     allReturnSale = allReturnSale ?? 0;
-    console.log(allReturnSale);
-    console.log(sale.saleProducts.length);
+    compactLog(allReturnSale);
+    compactLog(sale.saleProducts.length);
     if (allReturnSale == sale.saleProducts.length) {
       await SaleModel.update(
         {
@@ -4730,15 +4715,15 @@ exports.returnSaleNew = async (req, res) => {
         { where: { id: req.params.id } },
       );
     }
-    console.log(
+    compactLog(
       "---------------------- SaleModel Status Update ----------------------",
     );
     let allReturnPurchase = await PurchaseProductModel.count({
       where: { purchase_id: purchase.id, is_return: true },
     });
     allReturnPurchase = allReturnPurchase ?? 0;
-    console.log(allReturnPurchase);
-    console.log(purchase.purchaseProducts.length);
+    compactLog(allReturnPurchase);
+    compactLog(purchase.purchaseProducts.length);
     if (allReturnPurchase == purchase.purchaseProducts.length) {
       await PurchaseModel.update(
         {
@@ -4747,13 +4732,13 @@ exports.returnSaleNew = async (req, res) => {
         { where: { sale_id: sale.id } },
       );
     }
-    console.log(
+    compactLog(
       "---------------------- PurchaseModel Status Update ----------------------",
     );
 
     res.send(formatResponse([], "Returned successfully!"));
   } catch (error) {
-    console.log(error.toString());
+    compactLog(error.toString());
     addLog("err: " + error.toString());
     return res.status(errorCodes.default).send(formatErrorResponse());
   }
@@ -5170,7 +5155,7 @@ exports.saleProducts = async (req, res) => {
   //let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
   //let adminRoleId = getRoleId("admin");
   let superAdminRoleId = getRoleId("superadmin");
-  console.log("req ====> ", req.userId, req.role);
+  compactLog("req ====> ", req.userId, req.role);
   let saleProductsRes = await getOwnUserSaleProducts(req, req.query, req.role);
   res.send(formatResponse(saleProductsRes));
 };
@@ -6664,7 +6649,7 @@ exports.downloadInvoice = async (req, res) => {
 
       // Save PDF to file
       fs.writeFileSync(file_path, pdfBuffer);
-      console.log("PDF generated successfully!");
+      compactLog("PDF generated successfully!");
 
       res.send(
         formatResponse(
@@ -6683,7 +6668,7 @@ exports.downloadInvoice = async (req, res) => {
     doc.html(html, {
         callback: (pdf) => {
             pdf.save(file_path);
-            console.log('PDF generated successfully!');
+            compactLog('PDF generated successfully!');
 
             res.send(
               formatResponse(
@@ -6706,8 +6691,8 @@ exports.downloadInvoice = async (req, res) => {
 };
 
 const removeCurrencyAndDecimalFromPrice = (str) => {
-  //console.log("str : ", str);
-  //console.log("converted str : ", String(str).replace(/[Rs.|₹]/,"").replace(/[^.]\w*$/, "").replace(/\./, ""));
+  //compactLog("str : ", str);
+  //compactLog("converted str : ", String(str).replace(/[Rs.|₹]/,"").replace(/[^.]\w*$/, "").replace(/\./, ""));
   //return String(str).replace(/[Rs.|₹]/,"").replace(/[^.]\w*$/, "").replace(/\./, "");
   return parseFloat(String(str).replace("Rs.", "").replace("₹", "")).toFixed(0);
 };
@@ -6832,7 +6817,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
   purity18K = await PurityCollection(purity18K);
 
-  //console.log("payments : ",payments);
+  //compactLog("payments : ",payments);
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
   const logoUrl = `public/images/logo.png`;
@@ -7635,8 +7620,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
         receive_metal += parseFloat(itm.weight);
       }
     });
-    console.log("fine_metals before : ", fine_metals);
-    console.log(
+    compactLog("fine_metals before : ", fine_metals);
+    compactLog(
       "fine_metals 24k value : ",
       (parseFloat(fine_metals) * parseFloat(purity18K.value)) / 100,
     );
@@ -8142,7 +8127,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
       // Save PDF to file
       fs.writeFileSync(file_path, pdfBuffer);
-      console.log("PDF generated successfully!");
+      compactLog("PDF generated successfully!");
 
       res.send(
         formatResponse(
@@ -8883,7 +8868,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
 
       // Save PDF to file
       fs.writeFileSync(file_path, pdfBuffer);
-      console.log("PDF generated successfully!");
+      compactLog("PDF generated successfully!");
 
       res.send(
         formatResponse(
@@ -10468,7 +10453,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
 
       // Save PDF to file
       fs.writeFileSync(file_path, pdfBuffer);
-      console.log("PDF generated successfully!");
+      compactLog("PDF generated successfully!");
 
       res.send(
         formatResponse(
@@ -10488,7 +10473,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
     doc.html(html, {
         callback: (pdf) => {
             pdf.save(file_path);
-            console.log('PDF generated successfully!');
+            compactLog('PDF generated successfully!');
 
             res.send(
               formatResponse(

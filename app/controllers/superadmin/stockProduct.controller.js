@@ -141,7 +141,7 @@ exports.index = async (req, res) => {
         distinct: true,
         //...subQueryData
       }).then(async (data) => {
-        //console.log(data.rows[0].product);
+        //compactLog(data.rows[0].product);
         let result = {
           this: "all current stocks ",
           items: await StocksCollection(data.rows, userID),

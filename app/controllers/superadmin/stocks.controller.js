@@ -124,7 +124,7 @@ exports.index = async (req, res) => {
     });
 
     for (let i = 0; i < stocksAll.length; i++) {
-      // console.log("---------stocksAll----------",stocksAll[i])
+      // compactLog("---------stocksAll----------",stocksAll[i])
       let item = stocksAll[i];
       if (
         item.product.type == "material" &&
@@ -362,11 +362,11 @@ exports.index = async (req, res) => {
     let sCond = [];
     if (!isEmpty(search)/*  && isNaN(search) */) {
       let sArr = search.split(",");
-      /* console.log(sArr); */
+      /* compactLog(sArr); */
       for (let i = 0; i < sArr.length; i++) {
-        /* console.log("sArr : ", sArr[i]); */
+        /* compactLog("sArr : ", sArr[i]); */
         let s = sArr[i].trim().toLowerCase();
-        /* console.log("s : ", s); */
+        /* compactLog("s : ", s); */
         if (s.indexOf("gm") !== -1) {
           s = s.replace("gm", "").trim();
           sCond.push({ total_weight: { [Op.lte]: `${s}` } });
@@ -388,7 +388,7 @@ exports.index = async (req, res) => {
           sCond.push({ certificate_no: s });
         }
       }
-      /* console.log(sCond); */
+      /* compactLog(sCond); */
       conditions = { ...conditions, [Op.or]: sCond };
     } 
     /* if(search.length>=8) {
@@ -435,7 +435,7 @@ exports.index = async (req, res) => {
     if (!isEmpty(size)) {
       sizeConditions.id = size;
     }*/
-    console.log("STOCK LIST conditions =====: ", conditions);
+    compactLog("STOCK LIST conditions:", conditions);
     const paginatorOptions = getPaginationOptions(page, limit);
     let limit_offset = {
       offset: paginatorOptions.offset,
@@ -527,8 +527,8 @@ exports.index = async (req, res) => {
         ],
       });
     }
-    console.log(_include);
-    console.log(conditions);
+    compactLog("_include length:", Array.isArray(_include) ? _include.length : typeof _include);
+    compactLog("conditions keys:", conditions && typeof conditions === 'object' ? Object.keys(conditions).length : typeof conditions);
     /* list should not show sale on approval stocks */
     
     /* get all sale on approval sale ids by user */
@@ -541,7 +541,7 @@ exports.index = async (req, res) => {
     //   }
     // });
     // let saleIds = arrayColumn(sales, "id");
-    // console.log("saleIds : =======================================>", saleIds);
+    // compactLog("saleIds : =======================================>", saleIds);
     // /* get all sale on approval sale products certificates by user */
     // const saleProducts = await SaleProductModel.findAll({
     //   attributes: ["certificate_no"],
@@ -550,7 +550,7 @@ exports.index = async (req, res) => {
     //   },
     // });
     // let certidicates = arrayColumn(saleProducts, "certificate_no");
-    // console.log("certidicates : ====================================>", certidicates);
+    // compactLog("certidicates : ====================================>", certidicates);
     stocksModel
       .findAndCountAll({
         order: [["id", "DESC"]],
@@ -565,7 +565,7 @@ exports.index = async (req, res) => {
       })
       .then(async (data) => {
         //
-        console.log("-------this is actual value ",data.rows.length);
+        compactLog("stocks result rows:", Array.isArray(data.rows) ? data.rows.length : typeof data.rows);
         //return false;
         let result = {
           items:
@@ -574,20 +574,20 @@ exports.index = async (req, res) => {
               : await StocksMaterialCollection(data.rows, userID),
           total: data.count,
         };
-        /* console.log("result : ", result);
-        console.log("search : ", search); */
+        /* compactLog("result : ", result);
+        compactLog("search : ", search); */
         //if(!isNaN(search) && search != ""){
         let sArr = search.split(",");
         for (let i = 0; i < sArr.length; i++) {
           let s = sArr[i].trim().toLowerCase();
           /* price search */
           if (!isNaN(s) && s != "") {
-            /* console.log("price search ..."); */
+            /* compactLog("price search ..."); */
             search = parseFloat(s.trim());
-            /* console.log("search : ", s); */
-            //console.log(result.items);
+            /* compactLog("search : ", s); */
+            //compactLog(result.items);
             let fItems = result.items.filter((itm) => {
-              /* console.log(itm.mrp); */
+              /* compactLog(itm.mrp); */
               return itm.mrp <= s;
             });
 
@@ -597,13 +597,13 @@ exports.index = async (req, res) => {
         }
         //}
 
-        // console.log(result)
-        // console.log("--------------------",result,"---------------------")
+        // compactLog(result)
+        // compactLog("--------------------",result,"---------------------")
         res.send(formatResponse(result, "stocks super_admin"));
       })
       .catch((err) => {
         addLog("catch error: " + err.toString());
-        console.log(err);
+        console.error('stocks.find error:', err && err.message ? err.message : err);
         res.status(errorCodes.default).send(formatErrorResponse(err));
       });
   } catch (error) {
@@ -853,7 +853,7 @@ exports.getStockPriceByCategory = async (req, res) => {
     total_avl_stock,
     manager,
   } = req.query;
-  console.log("by_specific : ", by_specific);
+  compactLog("by_specific : ", by_specific);
   type = isEmpty(type) ? "product" : type;
   let userID = null;
   if (!isEmpty(user_id)) {
