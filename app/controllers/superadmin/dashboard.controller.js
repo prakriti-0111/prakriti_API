@@ -138,7 +138,7 @@ exports.index = async (req, res) => {
       });
       //totalsales_executive = await UserModel.count({where: {role_id: sales_executiveRoleId}});
       totalStock = await getTotalStockByUser(userID);
-      console.log("userId", userID, "totalStock : ", totalStock);
+      compactLog("userId", userID, "totalStock : ", totalStock);
 
       totalStockPrice = await getTotalStockPriceByUser(null, userID);
       materialTotalStock = await getTotalStockByUser(userID, "material");
@@ -234,7 +234,7 @@ exports.index = async (req, res) => {
       /* totalsales_executive += await UserModel.count({
         where: { role_id: sales_executiveRoleId, parent_id: superAdminId },
       }); */
-      //console.log("totalsales_executive1 :", totalsales_executive);
+      //compactLog("totalsales_executive1 :", totalsales_executive);
 
       let se_parent_ids = [];
       // all own admin
@@ -246,7 +246,7 @@ exports.index = async (req, res) => {
       /* totalsales_executive += await UserModel.count({
         where: { role_id: sales_executiveRoleId, parent_id: { [Op.in]: ownAdminIds } },
       }); */
-      //console.log("totalsales_executive2 :", totalsales_executive);
+      //compactLog("totalsales_executive2 :", totalsales_executive);
       // all own distributors
       let ownDistributorsOfAdmins = await UserModel.findAll({
         attributes: ["id"],
@@ -267,7 +267,7 @@ exports.index = async (req, res) => {
           parent_id: { [Op.in]: ownDistributorOfAdminsIds },
         },
       });
-      //console.log("totalsales_executive3 :", totalsales_executive);
+      //compactLog("totalsales_executive3 :", totalsales_executive);
       let ownDistributors = await UserModel.findAll({
         attributes: ["id"],
         where: {
@@ -278,7 +278,7 @@ exports.index = async (req, res) => {
       });
       let ownDistributorsIds = arrayColumn(ownDistributors, "id");
       se_parent_ids = se_parent_ids.concat(ownDistributorsIds);
-      //console.log("ownDistributorsIds :", ownDistributorsIds);
+      //compactLog("ownDistributorsIds :", ownDistributorsIds);
       totalsales_executive += await UserModel.count({
         where: {
           role_id: sales_executiveRoleId,
@@ -296,13 +296,13 @@ exports.index = async (req, res) => {
       });
       let seIds = arrayColumn(se, "id");
 
-      //console.log("totalsales_executive4 :", totalsales_executive);
-      //console.log("superAdminId : ", superAdminId);
-      //console.log("ownDistributorsIds :", ownDistributorsIds);
+      //compactLog("totalsales_executive4 :", totalsales_executive);
+      //compactLog("superAdminId : ", superAdminId);
+      //compactLog("ownDistributorsIds :", ownDistributorsIds);
       //ownDistributorOfAdminsIds.concat(ownDistributorsIds);
-      //console.log("ownDistributorOfAdminsIds : ", ownDistributorOfAdminsIds);
+      //compactLog("ownDistributorOfAdminsIds : ", ownDistributorOfAdminsIds);
 
-      //console.log("totalsales_executive3 :", totalsales_executive);
+      //compactLog("totalsales_executive3 :", totalsales_executive);
 
       totalSeStock = await getTotalStockByUser(seIds);
       totalSeStockPrice = await getTotalStockPriceByUser(null, seIds);
@@ -322,7 +322,7 @@ exports.index = async (req, res) => {
         superAdminRoleId
       );
 
-      // console.log("req in the das/gboard.conroller : ",await getOwnUserSaleProducts(req, "", superAdminRoleId).length);
+      // compactLog("req in the das/gboard.conroller : ",await getOwnUserSaleProducts(req, "", superAdminRoleId).length);
 
       //totalOwnUsersSale = await saleModel.sum('bill_amount', { where: { sale_by: {[Op.in]: ownUserIds}, is_approved: {[Op.ne]: 2 }, is_assigned: false, is_approval: false } });
       totalOwnUsersSale = ownSaleResult.total_amount;
@@ -343,14 +343,14 @@ exports.index = async (req, res) => {
       avl_stockUser_ids = await avlStockUserIdsNew(null, superAdminRoleId);
       let stockUserIds = avl_stockUser_ids;
 
-      console.log("stockUserIds in super admin :--=====", stockUserIds);
+      compactLog("stockUserIds in super admin :--=====", stockUserIds);
 
       //stockUserIds.push(userID);
       totalAvlStock = superAdminTotalAvlStock = await getTotalStockByUser(
         stockUserIds
       );
 
-      // console.log("getTotalStockByUser :--=====",await getTotalStockByUser(stockUserIds));
+      // compactLog("getTotalStockByUser :--=====",await getTotalStockByUser(stockUserIds));
 
       totalAvlStockPrice = superAdminTotalAvlStockPrice =
         await getTotalStockPriceByUser(null, stockUserIds);
@@ -589,12 +589,12 @@ exports.index = async (req, res) => {
       avl_stockUser_ids = await avlStockUserIdsNew(req, adminRoleId);
       let stockUserIds = avl_stockUser_ids;
       //stockUserIds.push(userID);
-      console.log("stockUserIds in admin :--=====", stockUserIds);
+      compactLog("stockUserIds in admin :--=====", stockUserIds);
       totalAvlStock = await getTotalStockByUser(stockUserIds);
       totalAvlStockPrice = await getTotalStockPriceByUser(null, stockUserIds);
 
       // let get all transfer pending stocks
-      console.log("stockIds in admin :--=====", totalAvlStock);
+      compactLog("stockIds in admin :--=====", totalAvlStock);
       
       let transferStockData = await getTransferSale(userID);
       totalAvlTransferStock = superAdminTotalTransferStock =
@@ -745,8 +745,8 @@ exports.index = async (req, res) => {
       /* totalRetailer += await UserModel.count({
         where: { role_id: retailerRoleId, parent_id: distributor_id },
       }); */
-      console.log("distributor_id", distributor_id);
-      console.log("distributorRole", distributorRole);
+      compactLog("distributor_id", distributor_id);
+      compactLog("distributorRole", distributorRole);
       let admin_id = null;
       /* check if admin own SE or not */
       if(distributorRole == adminRoleId){
@@ -754,7 +754,7 @@ exports.index = async (req, res) => {
       } else {
         admin_id = await getUserColumnValue(distributor_id, "parent_id");
       }
-      console.log("admin_id", admin_id);
+      compactLog("admin_id", admin_id);
       // admin own created Retailer
       totalRetailer += await UserModel.count({
         where: { role_id: retailerRoleId, parent_id: admin_id },
@@ -782,7 +782,7 @@ exports.index = async (req, res) => {
         where: _cond_se_in_chain,
       });
       let allSEIds = arrayColumn(allSE, "id");
-      console.log("==================== _cond_se_in_chain :", _cond_se_in_chain);
+      compactLog("==================== _cond_se_in_chain :", _cond_se_in_chain);
       totalRetailer += await UserModel.count({
         where: { role_id: retailerRoleId, parent_id: { [Op.in]: allSEIds } },
       });
@@ -836,7 +836,7 @@ exports.index = async (req, res) => {
       //stockUserIds.push(userID);
       totalAvlStock = await getTotalStockByUser(stockUserIds);
       totalAvlStockPrice = await getTotalStockPriceByUser(null, stockUserIds);
-      console.log("stockIds in SE :--=====", totalAvlStock);
+      compactLog("stockIds in SE :--=====", totalAvlStock);
       // total avaliable stocks
       total_avl_stockUser_ids = await avlStockUserIdsNew(
         null,
@@ -1074,7 +1074,7 @@ exports.index = async (req, res) => {
       raw: true,
       order: Op.literal('total_amount DESC')
     });
-    console.log({bestAdmin});*/
+    compactLog({bestAdmin});*/
     let result = {
       total_admin: totalAdmin,
       total_other_admin: totalOtherAdmin,
@@ -1145,7 +1145,7 @@ exports.index = async (req, res) => {
 
     res.send(formatResponse(result, "Dashboard"));
   } catch (error) {
-    console.log(error);
+    compactLog(error);
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse(error.toString()));
@@ -1799,7 +1799,7 @@ exports.indexNew = async (req, res) => {
       raw: true,
       order: Op.literal('total_amount DESC')
     });
-    console.log({bestAdmin});*/
+    compactLog({bestAdmin});*/
     let result = {
       total_admin: totalAdmin,
       total_admin_stock: totalAdminStock,
@@ -1878,7 +1878,7 @@ exports.indexNew = async (req, res) => {
 
     res.send(formatResponse(result, "Dashboard"));
   } catch (error) {
-    console.log(error);
+    compactLog(error);
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse(error.toString()));
@@ -1919,7 +1919,7 @@ exports.autoNotifications = async (req, res) => {
   for (let i = 0; i < sales.length; i++) {
     //due date
     if (moment(sales[i].due_date).isSame(moment(), "day")) {
-      // console.log(sales[i].id);
+      // compactLog(sales[i].id);
       let haveSent = await NoticationModel.findOne({
         where: {
           type: "sale_due",

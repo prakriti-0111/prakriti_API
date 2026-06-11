@@ -50,7 +50,7 @@ exports.homepagesettings = async (req, res) => {
         where: {is_active: true},
         order:[['order', 'ASC']]
     }).then((data) => {
-        console.log(data);
+        compactLog('homepagesettings count:', Array.isArray(data) ? data.length : typeof data);
         let result = {
             items: HomepageSettingCollection(data),
             total: data.length
@@ -160,7 +160,7 @@ exports.festive_offers = async (req, res) => {
             }
         ]
     }).then(async (data) => {
-        //console.log(data);
+        //compactLog(data);
         let result = {
             items: FestiveOfferCollection(data),
             total: data.length
@@ -194,7 +194,7 @@ exports.stock_products_slider = async (req, res) => {
             }
         ]
     }).then(async (data) => {
-        //console.log(data);
+        //compactLog(data);
         let result = {
             items: StockProductSliderCollection(data),
             total: data.length
@@ -223,7 +223,7 @@ exports.bestRetailers = async (req, res) => {
         query += ` AND users.city LIKE '%${city}%'`;
     }
     query += " GROUP BY users.id ORDER BY total_amount DESC LIMIT 5";
-    console.log("bestRetailers query ===========:> ", query);
+    compactLog("bestRetailers query ===========:> ", query);
     const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
     let retailers = [];
     for(let item of users){
@@ -261,7 +261,7 @@ exports.bestRetailerStates = async (req, res) => {
         query += ` AND states.name LIKE '%${state}%'`;
     } */
     query += " GROUP BY states.id ORDER BY states.name ASC";
-    console.log("bestRetailer states query ===========:> ", query);
+    compactLog("bestRetailer states query ===========:> ", query);
     const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
     let retailers = [];
     for(let item of users){
@@ -280,7 +280,7 @@ exports.bestRetailerCities = async (req, res) => {
         query += ` AND users.state_id='${state}'`;
     }
     query += " GROUP BY users.city ORDER BY users.city ASC";
-    console.log("bestRetailer cities query ===========:> ", query);
+    compactLog("bestRetailer cities query ===========:> ", query);
     const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
     let retailers = [];
     let c = 0;
@@ -302,7 +302,7 @@ exports.bestRetailerView = async (req, res) => {
         query += ` AND users.id = '${id}'`;
     }
     query += "";
-    console.log("bestRetailer view query ===========:> ", query);
+    compactLog("bestRetailer view query ===========:> ", query);
     const users = await dbSequelize.query(query, { type: QueryTypes.SELECT });
     let retailers = [];
     for(let item of users){

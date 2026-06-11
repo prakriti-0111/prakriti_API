@@ -206,7 +206,7 @@ exports.index = async (req, res) => {
   query.order = [['id', 'ASC']];
   query.offset = paginatorOptions.offset;
   query.limit =  paginatorOptions.limit;
-  console.log(query)
+  compactLog(query)
   ProductModel.findAndCountAll(query).then(async (data) => {
     let result = {
       items: ProductCollection(data.rows),
@@ -217,7 +217,7 @@ exports.index = async (req, res) => {
   })
   .catch(err => {
     res.status(errorCodes.default).send(formatErrorResponse(err));
-    console.log('err',err)
+    compactLog('err',err)
   });*/
 };
 

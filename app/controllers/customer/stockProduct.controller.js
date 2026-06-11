@@ -211,7 +211,7 @@ exports.index = async (req, res) => {
       })
   
   .then(async (data) => {
-    console.log(data.rows);
+    compactLog('stock.find count:', data && (data.count || (Array.isArray(data.rows) ? data.rows.length : 0)));
     let result = {
       //items: await ProductListCollection(data.rows, req),
       items: await NewProductListCollection(data.rows, req),
@@ -220,7 +220,7 @@ exports.index = async (req, res) => {
     res.send(formatResponse(result, 'Products list'));
   })
   .catch(err => {
-    console.log(err)
+    console.error('stock.find error:', err && err.message ? err.message : err);
     res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
   });
 
@@ -360,7 +360,7 @@ exports.viewNew = async (req, res) => {
       }
     ],
   });
-  console.log("slug : ", slug);
+  compactLog("slug : ", slug);
   const stock = await StockModel
     .findOne({
       where: { certificate_no: slug },
@@ -370,7 +370,7 @@ exports.viewNew = async (req, res) => {
   if (!stock) {
     return res.status(errorCodes.default).send(formatErrorResponse('Product not found'));
   }
-  console.log("stock : ", stock.get({ plain: true}));
+  compactLog("stock id:", stock && stock.id);
   res.send(formatResponse(await NewProductDetailsCollection(stock, req), "Product details"));
 };
 

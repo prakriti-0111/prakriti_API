@@ -1995,7 +1995,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
   purity18K = await PurityCollection(purity18K);
 
-  //console.log("payments : ",payments);
+  //compactLog("payments : ",payments);
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
   const logoUrl = `public/images/logo.png`;
@@ -2804,8 +2804,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
       }
     });
 
-    console.log("fine_metals before : ", fine_metals);
-    console.log("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
+    compactLog("fine_metals before : ", fine_metals);
+    compactLog("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
     /* convert gold to 24k from 18k */
     if(purity18K && purity18K.value != null){
       fine_metals = (parseFloat(fine_metals)*parseFloat(purity18K.value))/100;
@@ -3299,7 +3299,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
       // Save PDF to file
       fs.writeFileSync(file_path, pdfBuffer);
-      console.log("PDF generated successfully!");
+      compactLog("PDF generated successfully!");
 
       res.send(
         formatResponse(
@@ -4778,7 +4778,7 @@ exports.downloadInvoiceItems = async (req, res) => {
         
         // Save PDF to file
         fs.writeFileSync(file_path, pdfBuffer);
-        console.log('PDF generated successfully!');
+        compactLog('PDF generated successfully!');
 
         res.send(
           formatResponse(
@@ -4798,7 +4798,7 @@ exports.downloadInvoiceItems = async (req, res) => {
     doc.html(html, {
         callback: (pdf) => {
             pdf.save(file_path);
-            console.log('PDF generated successfully!');
+            compactLog('PDF generated successfully!');
 
             res.send(
               formatResponse(

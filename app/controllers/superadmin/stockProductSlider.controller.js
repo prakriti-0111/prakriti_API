@@ -161,7 +161,7 @@ exports.update = async (req, res) => {
   if (!isEmpty(data.banner)) {
     removeFile(stockproduct.banner);
     let result2 = await base64FileUpload(data.banner, "banners");
-    console.log("result2 : ", result2);
+    compactLog("result2 : ", result2);
     if (result2) {
       postData.banner = result2.path;
     }

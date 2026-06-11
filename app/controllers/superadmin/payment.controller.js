@@ -92,7 +92,7 @@ exports.index = async (req, res) => {
  */
 exports.store = async (req, res) => {
   let data = req.body;
-  console.log("======DATA=====", data); //return false;
+  compactLog("payment.store payload keys:", data && typeof data === 'object' ? Object.keys(data).length : typeof data); //return false;
   /*if('payment_type' in data && data.payment_type == "advance"){
     return res.status(errorCodes.default).send("Advance payment is currently disabled.");
   }*/
@@ -220,7 +220,7 @@ exports.store = async (req, res) => {
           }
         } else {
           if (data.table_type == "sale") {
-            console.log("======sale=====");
+            compactLog("processing sale payments");
             let tableData = await SaleModel.findAll({
               order: [["id", "ASC"]],
               where: { ...conditions, sale_by: currentUserID },
@@ -245,11 +245,7 @@ exports.store = async (req, res) => {
                 amount = 0;
               }
 
-              console.log("======AMOUNT=====", amount);
-              console.log("======DUE AMOUNT=====", due_amount);
-              console.log("======PAID AMOUNT=====", paid_amount);
-              console.log("======STATUS=====", status);
-              console.log("======PAYMENT AMOUNT=====", payment_amount);
+              compactLog("AMOUNT:", amount, "DUE:", due_amount, "PAID:", paid_amount, "STATUS:", status, "PAYMENT:", payment_amount);
               if (
                 data.payment_mode != "cheque" &&
                 data.payment_mode != "cash"
@@ -657,7 +653,7 @@ exports.store = async (req, res) => {
             }
           }
         } else {
-          console.log("======HERE=====");
+          compactLog("======HERE=====");
           if (data.table_type == "sale") {
             let tableData = await SaleModel.findAll({
               order: [["id", "ASC"]],
@@ -806,7 +802,7 @@ exports.store = async (req, res) => {
               }
             }
           } else if (data.table_type == "purchase") {
-            console.log("======purchase=====");
+            compactLog("======purchase=====");
             let tableData = await PurchaseModel.findAll({
               order: [["id", "ASC"]],
               where: { ...conditions, user_id: currentUserID },
@@ -816,7 +812,7 @@ exports.store = async (req, res) => {
             if (user && isSuperAdmin(user.role_id)) {
               isPaymentToSuperAdmin = true;
             }
-            console.log(
+            compactLog(
               data.due_date ? moment(data.due_date).format("YYYY-MM-DD") : null,
             );
             for (let i = 0; i < tableData.length; i++) {
@@ -837,15 +833,15 @@ exports.store = async (req, res) => {
                 payment_amount = amount;
                 amount = 0;
               }
-              console.log(
+              compactLog(
                 "======isPaymentToSuperAdmin=====",
                 isPaymentToSuperAdmin,
               );
-              console.log("======AMOUNT=====", amount);
-              console.log("======DUE AMOUNT=====", due_amount);
-              console.log("======PAID AMOUNT=====", paid_amount);
-              console.log("======STATUS=====", status);
-              console.log("======PAYMENT AMOUNT=====", payment_amount);
+              compactLog("======AMOUNT=====", amount);
+              compactLog("======DUE AMOUNT=====", due_amount);
+              compactLog("======PAID AMOUNT=====", paid_amount);
+              compactLog("======STATUS=====", status);
+              compactLog("======PAYMENT AMOUNT=====", payment_amount);
               //return false;
               //if ((!isPaymentToSuperAdmin && data.payment_mode != "cheque") || data.payment_mode == "metal") {
               if (!isPaymentToSuperAdmin && data.payment_mode != "cheque") {
@@ -1398,7 +1394,7 @@ exports.store = async (req, res) => {
                 },
               ],
             });
-            console.log(
+            compactLog(
               "=====USER ROLE=====",
               user && user.role ? user.role.name : null,
             );
@@ -1621,7 +1617,7 @@ exports.store = async (req, res) => {
 
     res.send(formatResponse("", "Payment successfully!"));
   } catch (error) {
-    console.log(error);
+    compactLog(error);
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse(error.toString()));
@@ -1687,7 +1683,7 @@ exports.recalculateRemainingBalance = async (req, res) => {
       ),
     );
   } catch (error) {
-    console.log(error);
+    compactLog(error);
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse(error.toString()));
@@ -1904,7 +1900,7 @@ exports.updateStatus = async (req, res) => {
 
     res.send(formatResponse("", "Updated successfully!"));
   } catch (error) {
-    console.log(error);
+    compactLog(error);
     return res
       .status(errorCodes.default)
       .send(formatErrorResponse(error.toString()));

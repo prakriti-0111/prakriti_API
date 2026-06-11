@@ -230,7 +230,7 @@ exports.sendpassword = async (req, res) => {
       role_id: {[Op.in]: [customerRoleId, sales_executiveRoleId, retailerRoleId]}
     }
   });
-  console.log("user.email : ", user.email);
+  compactLog("sendpassword for user id:", user && user.id);
   if (! user) {
     return res.send(formatErrorResponse(config.validationMessages.usernameNotFound));
   }
@@ -240,9 +240,8 @@ exports.sendpassword = async (req, res) => {
   let data = {
     password: bcrypt.hashSync(new_password+"", 8)
   }
-  console.log("update data : ", data);
   UserModel.update(data, { where: { id: user.id } }).then(async (result) => {
-    console.log("result : ", result);
+    compactLog("update result:", Array.isArray(result) ? result[0] : result);
     //res.send(formatResponse("", 'Password changed successfully!'));
     let message = `
       <h2>New Password:</h2>
@@ -252,12 +251,12 @@ exports.sendpassword = async (req, res) => {
     `;
     try {
         let emailResult = await sendEmail({to: user.email, subject: 'New Password', message: message});
-        console.log("emailResult : ", emailResult);
+        compactLog("emailResult success:", !!emailResult);
         if(!emailResult){
             return res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
         }
     } catch (error) {
-      console.log("error : ", error);
+      console.error("email send error:", error && error.message ? error.message : error);
         return res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
     }
 

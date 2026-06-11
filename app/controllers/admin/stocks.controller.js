@@ -79,7 +79,7 @@ exports.index = async (req, res) => {
       items: await StocksCollection(data.rows, req.userId),
       total: data.count,
     }
-    console.log(result)
+    compactLog(result)
     res.send(formatResponse(result, 'stocks admin'));
   })
   .catch(err => {
