@@ -127,7 +127,7 @@ exports.store = async (req, res) => {
     res.send(formatResponse([], "Loan created successfully!"));
     //});
   } catch (error) {
-    console.log(error)
+    compactLog(error)
     return res.status(errorCodes.default).send(formatErrorResponse('Loan does not created due to some error'));
   }
 

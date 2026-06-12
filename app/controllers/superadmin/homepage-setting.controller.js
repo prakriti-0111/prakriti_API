@@ -75,7 +75,7 @@ exports.fetch = async (req, res) => {
  */
 exports.update = async (req, res) => {
   let data = req.body;
-  console.log("data", data);
+  compactLog("data", data);
   let settings = await HomepageSettingModel.findAll({ order: [["order", "ASC"]] });
   if (!settings) {
     return res
@@ -89,9 +89,9 @@ exports.update = async (req, res) => {
     let postItem = data[i];
     postItem.order = parseInt(postItem.order);
     postItem.is_active = postItem.is_active == true ? 1 : 0;  
-    console.log("postItem", postItem);
-    console.log({ order: postItem.order, is_active: postItem.is_active == true ? 1 : 0 });
-    console.log({ where: { id: setting.id } });
+    compactLog("postItem", postItem);
+    compactLog({ order: postItem.order, is_active: postItem.is_active == true ? 1 : 0 });
+    compactLog({ where: { id: setting.id } });
     await HomepageSettingModel.update(
       { order: postItem.order, is_active: postItem.is_active },
       { where: { id: setting.id } }

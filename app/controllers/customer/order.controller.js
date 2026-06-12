@@ -149,12 +149,12 @@ exports.index = async (req, res) => {
 exports.placeOrder = async (req, res) => {
   let data = req.body;
 
-  console.warn("this is the order id ", data);
+  console.warn("placing order payload keys:", data && typeof data === 'object' ? Object.keys(data).length : typeof data);
 
   const t = await sequelize.transaction();
   try {
     let carts = await getCart(req.userId, req.role);
-    console.log("this is ths userTd,", carts);
+    compactLog("carts count:", Array.isArray(carts) ? carts.length : typeof carts);
     if (carts.length == 0) {
       return res
         .status(errorCodes.default)
@@ -403,7 +403,7 @@ exports.placeOrder = async (req, res) => {
       formatResponse({ order_id: order.id }, "Order placed successfully!")
     );
   } catch (error) {
-    console.log(error);
+    compactLog(error);
     await t.rollback();
     return res
       .status(errorCodes.default)

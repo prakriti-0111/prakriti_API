@@ -89,7 +89,7 @@ exports.index = async (req, res) => {
     res.send(formatResponse(result));
   })
     .catch(err => {
-      console.log(err)
+      compactLog(err)
       res.status(errorCodes.default).send(formatErrorResponse(err));
     });
 };

@@ -2327,8 +2327,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
         receive_metal += parseFloat(itm.weight);
       }
     });
-    console.log("fine_metals before : ", fine_metals);
-    console.log("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
+    compactLog("fine_metals before : ", fine_metals);
+    compactLog("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
     /* convert gold to 24k from 18k */
     if(purity18K && purity18K.value != null){
       fine_metals = (parseFloat(fine_metals)*parseFloat(purity18K.value))/100;
@@ -3114,7 +3114,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
       // Save PDF to file
       fs.writeFileSync(file_path, pdfBuffer);
-      console.log("PDF generated successfully!");
+      compactLog("PDF generated successfully!");
 
       res.send(
         formatResponse(
@@ -4887,7 +4887,7 @@ html += `<div>
         
         // Save PDF to file
         fs.writeFileSync(file_path, pdfBuffer);
-        console.log('PDF generated successfully!');
+        compactLog('PDF generated successfully!');
 
         res.send(
           formatResponse(
@@ -4906,7 +4906,7 @@ html += `<div>
     doc.html(html, {
         callback: (pdf) => {
             pdf.save(file_path);
-            console.log('PDF generated successfully!');
+            compactLog('PDF generated successfully!');
 
             res.send(
               formatResponse(

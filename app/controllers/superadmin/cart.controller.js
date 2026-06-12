@@ -116,7 +116,7 @@ exports.store = async (req, res) => {
     return res.status(errorCodes.default).send(formatErrorResponse('Product not found.'));
   }
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  console.log("cart store data ===============: ", data);
+  compactLog("cart store data:", data && data.product_id ? `product_id=${data.product_id}` : (data && typeof data === 'object' ? `keys=${Object.keys(data).length}` : typeof data));
   let stock = await stockModel.findOne({where: {id: data.stock_id, user_id: userID}});
   if(product.type == "material" || isEmpty(stock.certificate_no)){
     

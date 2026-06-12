@@ -184,7 +184,7 @@ exports.index = async (req, res) => {
             });
             const adminSEIds = arrayColumn(adminSE, "id");
             adminSaleByIds = adminSaleByIds.concat(adminSEIds);
-            console.log("adminSaleByIds : ", adminSaleByIds);
+            compactLog("adminSaleByIds : ", adminSaleByIds);
             conditions.sale_by = { [Op.in]: adminSaleByIds };
           } else {
             conditions.sale_by = req.userId;
@@ -222,16 +222,16 @@ exports.index = async (req, res) => {
           where: conditions,
           include: includes /*, group: ['user_id']*/,
         };
-        //console.log("userWhere : ", userWhere);
-        console.log("whereObj : ", JSON.stringify(whereObj));
+        //compactLog("userWhere : ", userWhere);
+        compactLog("whereObj keys:", Object.keys(whereObj || {}).length);
         let total_sale = await SaleModel.sum("bill_amount", whereObj);
         let total_sale_due = await SaleModel.sum("sales.due_amount", whereObj);
         let total_sale_paid = await SaleModel.sum("paid_amount", whereObj);
         let total_sale_return = await SaleModel.sum("return_amount", whereObj);
 
-        // console.log("-------data req.rol ", req.role);
-        // console.log("-------data userID ", req.userid);
-        // console.log("-------data admin_sales_by_userIDs ", adminSaleByIds);
+        // compactLog("-------data req.rol ", req.role);
+        // compactLog("-------data userID ", req.userid);
+        // compactLog("-------data admin_sales_by_userIDs ", adminSaleByIds);
         let result = {
           items: await RetailerCollection(data.rows, {
             role: req.role,
@@ -253,7 +253,7 @@ exports.index = async (req, res) => {
         );
       })
       .catch((err) => {
-        console.log(err);
+        compactLog(err);
         res
           .status(errorCodes.default)
           .send(formatErrorResponse(errorCodes.defaultErrorMsg));
