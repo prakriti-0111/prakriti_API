@@ -1301,6 +1301,7 @@ exports.pre_purchase_delete = async (req, res) => {
 exports.store = async (req, res) => {
   // compactLog("------------this data is purchases",req)
   let data = req.body;
+  const dateFormats = [moment.ISO_8601, "YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY"];
   compactLog("purchase store payload :", _compact(data));
   //return false;
   if (!isEmpty(data.invoice_number)) {
@@ -1377,6 +1378,20 @@ compactLog("is_certificate_exist : ", is_certificate_exist);
         .send(formatErrorResponse(`One of the product has certificate no. ${is_certificate_exist} which does exists in stocks or on approval state.`));
   }
 
+  const invoiceDate = moment(data.invoice_date, dateFormats, true);
+  if (!invoiceDate.isValid()) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Invalid invoice date. Please send a valid date."));
+  }
+
+  const dueDate = isEmpty(data.due_date) ? null : moment(data.due_date, dateFormats, true);
+  if (!isEmpty(data.due_date) && !dueDate.isValid()) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Invalid due date. Please send a valid date."));
+  }
+
   try {
     //const trans = await sequelize.transaction(async (t) => {
 
@@ -1420,7 +1435,7 @@ compactLog("is_certificate_exist : ", is_certificate_exist);
       user_id: userID,
       added_by: addedBy,
       invoice_number: invoice_number,
-      invoice_date: moment(data.invoice_date).format("YYYY-MM-DD"), //, "MM/DD/YYYY"
+      invoice_date: invoiceDate.format("YYYY-MM-DD"),
       notes: data.notes,
       payment_mode: data.payment_mode,
       transaction_no: data.transaction_no,
@@ -1432,7 +1447,7 @@ compactLog("is_certificate_exist : ", is_certificate_exist);
       bill_amount: priceFormat(data.total_payable),
       total_payable: priceFormat(data.total_payable),
       due_amount: due_amount,
-      due_date: moment(data.due_date).format("YYYY-MM-DD"),
+      due_date: dueDate ? dueDate.format("YYYY-MM-DD") : null,
       status: status,
       is_approved: data.on_approval ? 3 : 0,
       is_approval: data.on_approval,

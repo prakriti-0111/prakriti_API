@@ -100,6 +100,21 @@ exports.index = async (req, res) => {
  */
 exports.store = async (req, res) => {
   let data = req.body;
+  const dateFormats = [moment.ISO_8601, 'YYYY-MM-DD', 'DD/MM/YYYY', 'MM/DD/YYYY'];
+
+  const invoiceDate = moment(data.invoice_date, dateFormats, true);
+  if (!invoiceDate.isValid()) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse('Invalid invoice date. Please send a valid date.'));
+  }
+
+  const dueDate = isEmpty(data.due_date) ? null : moment(data.due_date, dateFormats, true);
+  if (!isEmpty(data.due_date) && !dueDate.isValid()) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse('Invalid due date. Please send a valid date.'));
+  }
 
   if(!isEmpty(data.invoice_number)){
     let purchaseData = await PurchaseModel.findOne({where: {invoice_number: data.invoice_number}});
@@ -141,7 +156,7 @@ exports.store = async (req, res) => {
         supplier_id: data.supplier_id,
         user_id: req.userId,
         invoice_number: invoice_number,
-        invoice_date: moment(data.invoice_date).format('YYYY-MM-DD'),
+        invoice_date: invoiceDate.format('YYYY-MM-DD'),
         notes: data.notes,
         payment_mode: data.payment_mode,
         transaction_no: data.transaction_no,
@@ -153,7 +168,7 @@ exports.store = async (req, res) => {
         bill_amount: priceFormat(data.total_payable),
         total_payable: priceFormat(data.total_payable),
         due_amount: due_amount,
-        due_date: moment(data.due_date).format('YYYY-MM-DD'),
+        due_date: dueDate ? dueDate.format('YYYY-MM-DD') : null,
         status: status,
         is_approved: 0,
         //req_data: req_data
