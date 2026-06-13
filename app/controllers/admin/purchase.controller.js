@@ -1,13 +1,40 @@
 const config = require("@config/auth.config");
-const { errorCodes, formatErrorResponse, formatResponse } = require("@utils/response.config");
+const {
+  errorCodes,
+  formatErrorResponse,
+  formatResponse,
+} = require("@utils/response.config");
 const db = require("@models");
-const moment = require('moment');
-const {isEmpty, getDateFromToWhere, priceFormat, formatDateTime, weightFormat, addLog, convertUnitToGram, encodeForStorage, decodeFromStorage, cleanInput} = require("@helpers/helper");
-const {updateOrCreate, removeMaterialFromStock, getWalletBalance, getSuperAdminId, getWorkingUserID} = require("@library/common");
-const { getPaginationOptions } = require('@helpers/paginator')
-const {PurchaseListCollection} = require("@resources/superadmin/PurchaseListCollection");
-const {PurchaseEditCollection} = require("@resources/superadmin/PurchaseEditCollection");
-const {PurchaseViewCollection} = require("@resources/superadmin/PurchaseViewCollection");
+const moment = require("moment");
+const {
+  isEmpty,
+  getDateFromToWhere,
+  priceFormat,
+  formatDateTime,
+  weightFormat,
+  addLog,
+  convertUnitToGram,
+  encodeForStorage,
+  decodeFromStorage,
+  cleanInput,
+} = require("@helpers/helper");
+const {
+  updateOrCreate,
+  removeMaterialFromStock,
+  getWalletBalance,
+  getSuperAdminId,
+  getWorkingUserID,
+} = require("@library/common");
+const { getPaginationOptions } = require("@helpers/paginator");
+const {
+  PurchaseListCollection,
+} = require("@resources/superadmin/PurchaseListCollection");
+const {
+  PurchaseEditCollection,
+} = require("@resources/superadmin/PurchaseEditCollection");
+const {
+  PurchaseViewCollection,
+} = require("@resources/superadmin/PurchaseViewCollection");
 const { PurityCollection } = require("@resources/superadmin/PurityCollection");
 const { Op } = require("sequelize");
 const sequelize = db.sequelize;
@@ -34,76 +61,113 @@ const ReturnProductMaterialModel = db.return_product_materials;
 
 /**
  * Retrieve all purchase
- * 
+ *
  * @param req
  * @param res
  */
 exports.index = async (req, res) => {
-  let { page, limit, supplier_id, load_payments, search, date_from, date_to, status } = req.query;
-  let conditions = {user_id: req.userId};
-  if(status !== undefined && status != ""){
+  let {
+    page,
+    limit,
+    supplier_id,
+    load_payments,
+    search,
+    date_from,
+    date_to,
+    status,
+  } = req.query;
+  let conditions = { user_id: req.userId };
+  if (status !== undefined && status != "") {
     conditions.is_approved = status;
   }
-  if(!isEmpty(supplier_id)){
+  if (!isEmpty(supplier_id)) {
     conditions.supplier_id = supplier_id;
   }
-  if(!isEmpty(search)){
-    conditions.invoice_number = {[Op.like]: `%${search}%` };
+  if (!isEmpty(search)) {
+    conditions.invoice_number = { [Op.like]: `%${search}%` };
   }
-  conditions = {...conditions, ...getDateFromToWhere(date_from, date_to, 'invoice_date')}
+  conditions = {
+    ...conditions,
+    ...getDateFromToWhere(date_from, date_to, "invoice_date"),
+  };
 
   const paginatorOptions = getPaginationOptions(page, limit);
-  PurchaseModel.findAndCountAll({ 
-    order:[['id', 'DESC']],
+  PurchaseModel.findAndCountAll({
+    order: [["id", "DESC"]],
     offset: paginatorOptions.offset,
     limit: paginatorOptions.limit,
     where: conditions,
     include: [
       {
         model: PurchaseProductModel,
-        as: 'purchaseProducts',
+        as: "purchaseProducts",
         include: [
           {
             model: ProductModel,
-            as: 'product',
+            as: "product",
           },
           {
             model: PurchaseProductMaterialModel,
-            as: 'purchaseMaterials',
-          }
-        ]
+            as: "purchaseMaterials",
+          },
+        ],
       },
       {
         model: UserModel,
-        as: 'supplier',
-      }
-    ]
-  }).then(async (data) => {
-    let result = {
-      items: await PurchaseListCollection(data.rows, load_payments),
-      total: data.count,
-    }
-    res.send(formatResponse(result, 'Purchase List'));
+        as: "supplier",
+      },
+    ],
   })
-  .catch(err => {
-    res.status(errorCodes.default).send(formatErrorResponse(err));
-  });
+    .then(async (data) => {
+      let result = {
+        items: await PurchaseListCollection(data.rows, load_payments),
+        total: data.count,
+      };
+      res.send(formatResponse(result, "Purchase List"));
+    })
+    .catch((err) => {
+      res.status(errorCodes.default).send(formatErrorResponse(err));
+    });
 };
-
-
 
 /**
  * Store purchase
- * 
- * @param {*} req 
- * @param {*} res 
+ *
+ * @param {*} req
+ * @param {*} res
  */
 exports.store = async (req, res) => {
   let data = req.body;
+  const dateFormats = [
+    moment.ISO_8601,
+    "YYYY-MM-DD",
+    "DD/MM/YYYY",
+    "MM/DD/YYYY",
+  ];
 
-  if(!isEmpty(data.invoice_number)){
-    let purchaseData = await PurchaseModel.findOne({where: {invoice_number: data.invoice_number}});
-    if(purchaseData){
+  const invoiceDate = moment(data.invoice_date, dateFormats, true);
+  if (!invoiceDate.isValid()) {
+    return res
+      .status(errorCodes.default)
+      .send(
+        formatErrorResponse("Invalid invoice date. Please send a valid date."),
+      );
+  }
+
+  const dueDate = isEmpty(data.due_date)
+    ? null
+    : moment(data.due_date, dateFormats, true);
+  if (!isEmpty(data.due_date) && !dueDate.isValid()) {
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Invalid due date. Please send a valid date."));
+  }
+
+  if (!isEmpty(data.invoice_number)) {
+    let purchaseData = await PurchaseModel.findOne({
+      where: { invoice_number: data.invoice_number },
+    });
+    if (purchaseData) {
       //return res.status(errorCodes.default).send(formatErrorResponse('Invoice number is exists.'));
 
       /* create new invoice nummber */
@@ -115,33 +179,39 @@ exports.store = async (req, res) => {
     }
   }
 
-  if(priceFormat(data.paid_amount) > 0){
+  if (priceFormat(data.paid_amount) > 0) {
     let wallet_balance = await getWalletBalance(req.userId, data.payment_mode);
-    if(priceFormat(data.paid_amount) > wallet_balance){
-      return res.status(errorCodes.default).send(formatErrorResponse('Insufficient wallet balance.'));
+    if (priceFormat(data.paid_amount) > wallet_balance) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Insufficient wallet balance."));
     }
   }
 
   try {
     const trans = await sequelize.transaction(async (t) => {
-
       //insert into purchase table
       let invoice_number = data.invoice_number || null;
       let req_data = data; //JSON.stringify(data);
       //req_data = new Buffer.from(req_data).toString("base64");
-      let status = "due", paid_amount = 0, due_amount = 0;
-      if(data.payment_mode != "cheque"){
-        status = (priceFormat(data.paid_amount) >= priceFormat(data.total_payable)) ? 'paid' : 'due';
+      let status = "due",
+        paid_amount = 0,
+        due_amount = 0;
+      if (data.payment_mode != "cheque") {
+        status =
+          priceFormat(data.paid_amount) >= priceFormat(data.total_payable)
+            ? "paid"
+            : "due";
         paid_amount = data.paid_amount ? priceFormat(data.paid_amount) : 0;
         due_amount = priceFormat(data.due_amount);
-      }else{
+      } else {
         due_amount = priceFormat(data.total_payable);
       }
       let purchaseObj = {
         supplier_id: data.supplier_id,
         user_id: req.userId,
         invoice_number: invoice_number,
-        invoice_date: moment(data.invoice_date).format('YYYY-MM-DD'),
+        invoice_date: invoiceDate.format("YYYY-MM-DD"),
         notes: data.notes,
         payment_mode: data.payment_mode,
         transaction_no: data.transaction_no,
@@ -153,16 +223,18 @@ exports.store = async (req, res) => {
         bill_amount: priceFormat(data.total_payable),
         total_payable: priceFormat(data.total_payable),
         due_amount: due_amount,
-        due_date: moment(data.due_date).format('YYYY-MM-DD'),
+        due_date: dueDate ? dueDate.format("YYYY-MM-DD") : null,
         status: status,
         is_approved: 0,
         //req_data: req_data
       };
 
-      let purchase = await PurchaseModel.create(purchaseObj, { transaction: t });
+      let purchase = await PurchaseModel.create(purchaseObj, {
+        transaction: t,
+      });
 
       //insert into purchase product table
-      for(let i = 0; i < data.products.length; i++){
+      for (let i = 0; i < data.products.length; i++) {
         let thisItem = data.products[i];
         let worker_id = thisItem.worker_id || null;
         let thisObj = {
@@ -177,8 +249,10 @@ exports.store = async (req, res) => {
           rep: priceFormat(thisItem.rep),
           tax: priceFormat(thisItem.tax),
           total: priceFormat(thisItem.total),
-        }
-        let purchaseProduct = await PurchaseProductModel.create(thisObj, { transaction: t });
+        };
+        let purchaseProduct = await PurchaseProductModel.create(thisObj, {
+          transaction: t,
+        });
         req_data.products[i].id = purchaseProduct.id;
 
         /**
@@ -213,7 +287,7 @@ exports.store = async (req, res) => {
 
         //insert into purchase product materials
         let batch_id = null;
-        for(let x = 0; x < thisItem.materials.length; x++){
+        for (let x = 0; x < thisItem.materials.length; x++) {
           let thisMObj = {
             purchase_id: purchase.id,
             purchase_product_id: purchaseProduct.id,
@@ -223,9 +297,11 @@ exports.store = async (req, res) => {
             purity_id: thisItem.materials[x].purity_id,
             unit_id: thisItem.materials[x].unit_id,
             rate: thisItem.materials[x].rate,
-            amount: thisItem.materials[x].amount
-          }
-          await PurchaseProductMaterialModel.create(thisMObj, { transaction: t });
+            amount: thisItem.materials[x].amount,
+          };
+          await PurchaseProductMaterialModel.create(thisMObj, {
+            transaction: t,
+          });
 
           /*if(!isEmpty(worker_id)){
             let stockH = await stockHistoryModel.create({
@@ -286,7 +362,6 @@ exports.store = async (req, res) => {
               category_id: product.category_id
             }, { transaction: t });
           }*/
-
         }
 
         /**
@@ -295,468 +370,540 @@ exports.store = async (req, res) => {
       }
 
       //update invoice no if not sent
-      if(isEmpty(invoice_number)){
-        invoice_number = 'RV-P-' + purchase.id;
+      if (isEmpty(invoice_number)) {
+        invoice_number = "RV-P-" + purchase.id;
       }
 
       //req_data = JSON.stringify(req_data);
       //req_data = new Buffer.from(req_data).toString("base64");
       req_data = encodeForStorage(req_data);
-      await PurchaseModel.update({
-        invoice_number: invoice_number,
-        req_data: req_data
-      },{where: {id: purchase.id}, transaction: t});
-      
+      await PurchaseModel.update(
+        {
+          invoice_number: invoice_number,
+          req_data: req_data,
+        },
+        { where: { id: purchase.id }, transaction: t },
+      );
 
       //insert into payment table
-      if(priceFormat(data.paid_amount) > 0){
+      if (priceFormat(data.paid_amount) > 0) {
         await paymentModel.create({
           payment_mode: data.payment_mode,
           amount: priceFormat(data.paid_amount),
           user_id: data.supplier_id,
           payment_by: req.userId,
-          payment_date: moment().format('YYYY-MM-DD'),
+          payment_date: moment().format("YYYY-MM-DD"),
           txn_id: data.transaction_no,
           cheque_no: data.cheque_no,
-          status: 'success',
-          type: 'purchase',
-          table_type: 'purchase',
+          status: "success",
+          type: "purchase",
+          table_type: "purchase",
           table_id: purchase.id,
           payment_belongs: req.userId,
-          purpose: 'purchase'
+          purpose: "purchase",
         });
       }
-      
 
       res.send(formatResponse([], "Purchase successfully!"));
     });
   } catch (error) {
-    addLog('err: ' + error.toString());
-    return res.status(errorCodes.default).send(formatErrorResponse('Purchase does not success due to some error'));
+    addLog("err: " + error.toString());
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Purchase does not success due to some error"));
   }
-
 };
 
 /**
  * Purchase on Approval List
- * @param {*} req 
- * @param {*} res 
- * @returns 
+ * @param {*} req
+ * @param {*} res
+ * @returns
  */
 exports.onapprove_index = async (req, res) => {
-  let { page, limit, supplier_id, load_payments, search, date_from, date_to } = req.query;
+  let { page, limit, supplier_id, load_payments, search, date_from, date_to } =
+    req.query;
   let conditions = {};
-  if(!isEmpty(supplier_id)){
+  if (!isEmpty(supplier_id)) {
     conditions.supplier_id = supplier_id;
   }
-  if(!isEmpty(search)){
-    conditions.invoice_number = {[Op.like]: `%${search}%` };
+  if (!isEmpty(search)) {
+    conditions.invoice_number = { [Op.like]: `%${search}%` };
   }
-  conditions.is_approved = {[Op.eq]: 0};
+  conditions.is_approved = { [Op.eq]: 0 };
 
-  conditions = {...conditions, ...getDateFromToWhere(date_from, date_to, 'invoice_date')}
+  conditions = {
+    ...conditions,
+    ...getDateFromToWhere(date_from, date_to, "invoice_date"),
+  };
 
   const paginatorOptions = getPaginationOptions(page, limit);
-  PurchaseModel.findAndCountAll({ 
-    order:[['id', 'DESC']],
+  PurchaseModel.findAndCountAll({
+    order: [["id", "DESC"]],
     offset: paginatorOptions.offset,
     limit: paginatorOptions.limit,
     where: conditions,
     include: [
       {
         model: PurchaseProductModel,
-        as: 'purchaseProducts',
+        as: "purchaseProducts",
         include: [
           {
             model: ProductModel,
-            as: 'product',
+            as: "product",
           },
           {
             model: PurchaseProductMaterialModel,
-            as: 'purchaseMaterials',
-          }
-        ]
+            as: "purchaseMaterials",
+          },
+        ],
       },
       {
         model: UserModel,
-        as: 'supplier',
-      }
-    ]
-  }).then(async (data) => {
-    let result = {
-      items: await PurchaseListCollection(data.rows, load_payments),
-      total: data.count,
-    }
-    res.send(formatResponse(result, 'Purchase List'));
+        as: "supplier",
+      },
+    ],
   })
-  .catch(err => {
-    res.status(errorCodes.default).send(formatErrorResponse(err));
-  });
+    .then(async (data) => {
+      let result = {
+        items: await PurchaseListCollection(data.rows, load_payments),
+        total: data.count,
+      };
+      res.send(formatResponse(result, "Purchase List"));
+    })
+    .catch((err) => {
+      res.status(errorCodes.default).send(formatErrorResponse(err));
+    });
 };
 
 /**
  * View Purchase on Approval
- * 
- * @param {*} req 
- * @param {*} res 
+ *
+ * @param {*} req
+ * @param {*} res
  */
 exports.onapprove_view = async (req, res) => {
-  let purchase = await PurchaseModel.findOne({ where: { id: req.params.id },
+  let purchase = await PurchaseModel.findOne({
+    where: { id: req.params.id },
     include: [
       {
         model: PurchaseProductModel,
-        as: 'purchaseProducts',
+        as: "purchaseProducts",
         include: [
           {
             model: ProductModel,
-            as: 'product',
+            as: "product",
             include: [
               {
                 model: CategoryModel,
-                as: 'category'
-              }
-            ]
+                as: "category",
+              },
+            ],
           },
           {
             model: SizeModel,
-            as: 'size',
+            as: "size",
           },
           {
             model: PurchaseProductMaterialModel,
-            as: 'purchaseMaterials',
+            as: "purchaseMaterials",
             include: [
               {
                 model: MaterialModel,
-                as: 'material',
+                as: "material",
               },
               {
                 model: PurityModel,
-                as: 'purity'
+                as: "purity",
               },
               {
                 model: UnitModel,
-                as: 'unit'
-              }
-            ]
-          }
-        ]
+                as: "unit",
+              },
+            ],
+          },
+        ],
       },
       {
         model: UserModel,
-        as: 'supplier',
-      }
-    ]
+        as: "supplier",
+      },
+    ],
   });
   if (!purchase) {
-    return res.status(errorCodes.default).send(formatErrorResponse('Purchase not found'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Purchase not found"));
   }
-  res.send(formatResponse(PurchaseViewCollection(purchase), "Purchase details"));
+  res.send(
+    formatResponse(PurchaseViewCollection(purchase), "Purchase details"),
+  );
 };
 
 /**
  * Status Change
- * 
- * @param {*} req 
- * @param {*} res 
+ *
+ * @param {*} req
+ * @param {*} res
  */
 exports.statuschange = async (req, res) => {
   let data = req.body;
-  let purchase = await PurchaseModel.findOne({ where: { id: req.params.id },
+  let purchase = await PurchaseModel.findOne({
+    where: { id: req.params.id },
     include: [
       {
         model: PurchaseProductModel,
-        as: 'purchaseProducts',
+        as: "purchaseProducts",
         include: [
           {
             model: ProductModel,
-            as: 'product',
+            as: "product",
             include: [
               {
                 model: CategoryModel,
-                as: 'category'
-              }
-            ]
+                as: "category",
+              },
+            ],
           },
           {
             model: SizeModel,
-            as: 'size',
+            as: "size",
           },
           {
             model: PurchaseProductMaterialModel,
-            as: 'purchaseMaterials',
+            as: "purchaseMaterials",
             include: [
               {
                 model: MaterialModel,
-                as: 'material',
+                as: "material",
               },
               {
                 model: PurityModel,
-                as: 'purity'
+                as: "purity",
               },
               {
                 model: UnitModel,
-                as: 'unit'
-              }
-            ]
-          }
-        ]
+                as: "unit",
+              },
+            ],
+          },
+        ],
       },
       {
         model: UserModel,
-        as: 'supplier',
-      }
-    ]
+        as: "supplier",
+      },
+    ],
   });
   if (!purchase) {
-    return res.status(errorCodes.default).send(formatErrorResponse('Purchase not found'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Purchase not found"));
   }
-  
-  try{
+
+  try {
     const trans = await sequelize.transaction(async (t) => {
       let purchaseObj = {
-        is_approved: data.approve_status
+        is_approved: data.approve_status,
       };
-      await PurchaseModel.update(purchaseObj,{where: {id: purchase.id}, transaction: t});
+      await PurchaseModel.update(purchaseObj, {
+        where: { id: purchase.id },
+        transaction: t,
+      });
 
       /**
        * START - add to super admin stock
        */
-      if(data.approve_status == 1){
+      if (data.approve_status == 1) {
         let req_data = purchase.req_data;
-        if(!isEmpty(req_data)){
+        if (!isEmpty(req_data)) {
           //req_data = new Buffer.from(req_data, "base64").toString('ascii');
           //req_data = JSON.parse(req_data);
           req_data = decodeFromStorage(req_data);
-          for(let i = 0; i < req_data.products.length; i++){
+          for (let i = 0; i < req_data.products.length; i++) {
             let thisItem = req_data.products[i];
             let worker_id = thisItem.worker_id || null;
 
             let product = await ProductModel.findByPk(thisItem.product_id);
             let stock = null;
-            if(product.type == "material"){
+            if (product.type == "material") {
               let quantity = 0;
-              for(let x = 0; x < thisItem.materials.length; x++){
-                quantity += thisItem.materials[x].quantity ? parseInt(thisItem.materials[x].quantity) : 0;
+              for (let x = 0; x < thisItem.materials.length; x++) {
+                quantity += thisItem.materials[x].quantity
+                  ? parseInt(thisItem.materials[x].quantity)
+                  : 0;
               }
-              let result = await updateOrCreate(StockModel, {
-                product_id: thisItem.product_id, 
-                user_id: req.userId
-              }, {
-                product_id: thisItem.product_id, 
-                quantity: quantity,
-                total_weight: thisItem.total_weight
-              }, t, ['quantity', 'total_weight']);
+              let result = await updateOrCreate(
+                StockModel,
+                {
+                  product_id: thisItem.product_id,
+                  user_id: req.userId,
+                },
+                {
+                  product_id: thisItem.product_id,
+                  quantity: quantity,
+                  total_weight: thisItem.total_weight,
+                },
+                t,
+                ["quantity", "total_weight"],
+              );
               stock = result.item;
-            }else{
-              stock = await StockModel.create({
-                user_id: req.userId,
-                purchase_id: purchase.id,
-                purchase_product_id: thisItem.id,
-                product_id: thisItem.product_id,
-                size_id: thisItem.size_id || null,
-                certificate_no: cleanInput(thisItem.certificate_no),
-                quantity: 1,
-                total_weight: thisItem.total_weight
-              }, { transaction: t });
+            } else {
+              stock = await StockModel.create(
+                {
+                  user_id: req.userId,
+                  purchase_id: purchase.id,
+                  purchase_product_id: thisItem.id,
+                  product_id: thisItem.product_id,
+                  size_id: thisItem.size_id || null,
+                  certificate_no: cleanInput(thisItem.certificate_no),
+                  quantity: 1,
+                  total_weight: thisItem.total_weight,
+                },
+                { transaction: t },
+              );
             }
 
             let batch_id = null;
-            for(let x = 0; x < thisItem.materials.length; x++){
-              if(!isEmpty(worker_id)){
-                let stockH = await stockHistoryModel.create({
-                  from_user_id: worker_id,
-                  to_user_id: req.userId,
-                  material_id: thisItem.materials[x].material_id,
-                  weight: weightFormat(thisItem.materials[x].weight),
-                  unit_id: thisItem.materials[x].unit_id,
-                  quantity: thisItem.materials[x].quantity || 1,
-                  date: moment().format('YYYY-MM-DD'),
-                  type: 'debit',
-                  batch_id: batch_id,
-                  purchase_id: purchase.id
-                }, { transaction: t });
-                if(batch_id == null){
+            for (let x = 0; x < thisItem.materials.length; x++) {
+              if (!isEmpty(worker_id)) {
+                let stockH = await stockHistoryModel.create(
+                  {
+                    from_user_id: worker_id,
+                    to_user_id: req.userId,
+                    material_id: thisItem.materials[x].material_id,
+                    weight: weightFormat(thisItem.materials[x].weight),
+                    unit_id: thisItem.materials[x].unit_id,
+                    quantity: thisItem.materials[x].quantity || 1,
+                    date: moment().format("YYYY-MM-DD"),
+                    type: "debit",
+                    batch_id: batch_id,
+                    purchase_id: purchase.id,
+                  },
+                  { transaction: t },
+                );
+                if (batch_id == null) {
                   batch_id = stockH.id;
-                  await stockHistoryModel.update({
-                    batch_id: batch_id
-                  },{where: {id: stockH.id}, transaction: t});
+                  await stockHistoryModel.update(
+                    {
+                      batch_id: batch_id,
+                    },
+                    { where: { id: stockH.id }, transaction: t },
+                  );
                 }
               }
 
               /**
                * add to stock materials
                */
-              if(product.type == "material"){
-                let stockMaterial = await StockMaterialModel.findOne({where: {stock_id: stock.id, material_id: thisItem.materials[x].material_id}});
-                if(stockMaterial){
-                  let thisquantity = thisItem.materials[x].quantity ? (stockMaterial.quantity + thisItem.materials[x].quantity) : stockMaterial.quantity;
-                  await StockMaterialModel.update({
-                    weight: weightFormat(parseFloat(stockMaterial.weight) + weightFormat(thisItem.materials[x].weight)),
-                    weight_in_gram: weightFormat(parseFloat(stockMaterial.weight_in_gram) + weightFormat(thisItem.materials[x].weight_in_gram)),
-                    quantity: thisquantity,
-                    purity_id: thisItem.materials[x].purity_id,
-                    unit_id: thisItem.materials[x].unit_id,
-                    category_id: product.category_id
-                  },{where: {id: stockMaterial.id}, transaction: t});
-                }else{
-                  await StockMaterialModel.create({
-                    stock_id: stock.id, 
+              if (product.type == "material") {
+                let stockMaterial = await StockMaterialModel.findOne({
+                  where: {
+                    stock_id: stock.id,
+                    material_id: thisItem.materials[x].material_id,
+                  },
+                });
+                if (stockMaterial) {
+                  let thisquantity = thisItem.materials[x].quantity
+                    ? stockMaterial.quantity + thisItem.materials[x].quantity
+                    : stockMaterial.quantity;
+                  await StockMaterialModel.update(
+                    {
+                      weight: weightFormat(
+                        parseFloat(stockMaterial.weight) +
+                          weightFormat(thisItem.materials[x].weight),
+                      ),
+                      weight_in_gram: weightFormat(
+                        parseFloat(stockMaterial.weight_in_gram) +
+                          weightFormat(thisItem.materials[x].weight_in_gram),
+                      ),
+                      quantity: thisquantity,
+                      purity_id: thisItem.materials[x].purity_id,
+                      unit_id: thisItem.materials[x].unit_id,
+                      category_id: product.category_id,
+                    },
+                    { where: { id: stockMaterial.id }, transaction: t },
+                  );
+                } else {
+                  await StockMaterialModel.create(
+                    {
+                      stock_id: stock.id,
+                      material_id: thisItem.materials[x].material_id,
+                      weight: weightFormat(thisItem.materials[x].weight),
+                      weight_in_gram: weightFormat(
+                        thisItem.materials[x].weight_in_gram,
+                      ),
+                      quantity: thisItem.materials[x].quantity || 0,
+                      purity_id: thisItem.materials[x].purity_id,
+                      unit_id: thisItem.materials[x].unit_id,
+                      category_id: product.category_id,
+                    },
+                    { transaction: t },
+                  );
+                }
+              } else {
+                await StockMaterialModel.create(
+                  {
+                    stock_id: stock.id,
                     material_id: thisItem.materials[x].material_id,
                     weight: weightFormat(thisItem.materials[x].weight),
-                    weight_in_gram: weightFormat(thisItem.materials[x].weight_in_gram),
+                    weight_in_gram: weightFormat(
+                      thisItem.materials[x].weight_in_gram,
+                    ),
                     quantity: thisItem.materials[x].quantity || 0,
                     purity_id: thisItem.materials[x].purity_id,
                     unit_id: thisItem.materials[x].unit_id,
-                    category_id: product.category_id
-                  }, { transaction: t });
-                }
-              }else{
-                await StockMaterialModel.create({
-                  stock_id: stock.id, 
-                  material_id: thisItem.materials[x].material_id,
-                  weight: weightFormat(thisItem.materials[x].weight),
-                  weight_in_gram: weightFormat(thisItem.materials[x].weight_in_gram),
-                  quantity: thisItem.materials[x].quantity || 0,
-                  purity_id: thisItem.materials[x].purity_id,
-                  unit_id: thisItem.materials[x].unit_id,
-                  category_id: product.category_id
-                }, { transaction: t });
+                    category_id: product.category_id,
+                  },
+                  { transaction: t },
+                );
               }
             }
           }
 
           //delete all payment
-          await paymentModel.destroy({ where: {
-            table_type: 'purchase',
-            table_id: purchase.id
-          }, transaction: t});
+          await paymentModel.destroy({
+            where: {
+              table_type: "purchase",
+              table_id: purchase.id,
+            },
+            transaction: t,
+          });
 
-          if(!isEmpty(purchase.paid_amount)){
-            await PurchaseModel.update({
-              paid_amount: 0,
-              due_amount: purchase.total_payable,
-              status: 'due'
-            },{where: {id: purchase.id}, transaction: t});
+          if (!isEmpty(purchase.paid_amount)) {
+            await PurchaseModel.update(
+              {
+                paid_amount: 0,
+                due_amount: purchase.total_payable,
+                status: "due",
+              },
+              { where: { id: purchase.id }, transaction: t },
+            );
           }
- 
         }
       }
 
       res.send(formatResponse([], "Purchase Status Changed successfully!"));
     });
-
   } catch (error) {
-    addLog('err: ' + error.toString())
-    return res.status(errorCodes.default).send(formatErrorResponse('Purchase does not update due to some error'));
+    addLog("err: " + error.toString());
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Purchase does not update due to some error"));
   }
 };
 
 /**
  * View Purchase
- * 
- * @param {*} req 
- * @param {*} res 
+ *
+ * @param {*} req
+ * @param {*} res
  */
 exports.view = async (req, res) => {
-  let purchase = await PurchaseModel.findOne({ where: { id: req.params.id },
+  let purchase = await PurchaseModel.findOne({
+    where: { id: req.params.id },
     include: [
       {
         model: PurchaseProductModel,
-        as: 'purchaseProducts',
+        as: "purchaseProducts",
         include: [
           {
             model: ProductModel,
-            as: 'product',
+            as: "product",
             include: [
               {
                 model: CategoryModel,
-                as: 'category'
-              }
-            ]
+                as: "category",
+              },
+            ],
           },
           {
             model: SizeModel,
-            as: 'size',
+            as: "size",
           },
           {
             model: PurchaseProductMaterialModel,
-            as: 'purchaseMaterials',
+            as: "purchaseMaterials",
             include: [
               {
                 model: MaterialModel,
-                as: 'material',
+                as: "material",
               },
               {
                 model: PurityModel,
-                as: 'purity'
+                as: "purity",
               },
               {
                 model: UnitModel,
-                as: 'unit'
-              }
-            ]
-          }
-        ]
+                as: "unit",
+              },
+            ],
+          },
+        ],
       },
       {
         model: UserModel,
-        as: 'supplier',
-      }
-    ]
+        as: "supplier",
+      },
+    ],
   });
   if (!purchase) {
-    return res.status(errorCodes.default).send(formatErrorResponse('Purchase not found'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Purchase not found"));
   }
-  res.send(formatResponse(PurchaseViewCollection(purchase), "Purchase details"));
+  res.send(
+    formatResponse(PurchaseViewCollection(purchase), "Purchase details"),
+  );
 };
-
 
 /**
  * edit data for Purchase
- * 
- * @param {*} req 
- * @param {*} res 
+ *
+ * @param {*} req
+ * @param {*} res
  */
 exports.edit = async (req, res) => {
-  let purchase = await PurchaseModel.findOne({ where: { id: req.params.id },
+  let purchase = await PurchaseModel.findOne({
+    where: { id: req.params.id },
     include: [
       {
         model: PurchaseProductModel,
-        as: 'purchaseProducts',
+        as: "purchaseProducts",
         include: [
           {
             model: ProductModel,
-            as: 'product',
+            as: "product",
           },
           {
             model: SizeModel,
-            as: 'size',
+            as: "size",
           },
           {
             model: PurchaseProductMaterialModel,
-            as: 'purchaseMaterials',
+            as: "purchaseMaterials",
             include: [
               {
                 model: MaterialModel,
-                as: 'material',
+                as: "material",
                 include: [
                   {
                     model: PurityModel,
-                    as: 'purities'
-                  }
-                ]
+                    as: "purities",
+                  },
+                ],
               },
               {
                 model: UnitModel,
-                as: 'unit'
+                as: "unit",
               },
               {
                 model: PurityModel,
-                as: 'purity'
-              }
-            ]
-          }
-        ]
+                as: "purity",
+              },
+            ],
+          },
+        ],
       },
       {
         model: UserModel,
@@ -770,62 +917,69 @@ exports.edit = async (req, res) => {
         model: SaleModel,
         as: "sale",
       },
-    ]
+    ],
   });
   if (!purchase) {
-    return res.status(errorCodes.default).send(formatErrorResponse('Purchase not found'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Purchase not found"));
   }
-  res.send(formatResponse(PurchaseEditCollection(purchase), "Purchase edit details"));
+  res.send(
+    formatResponse(PurchaseEditCollection(purchase), "Purchase edit details"),
+  );
 };
-
-
-
 
 /**
  * Update Product
- * 
- * @param {*} req 
- * @param {*} res 
+ *
+ * @param {*} req
+ * @param {*} res
  */
 exports.update = async (req, res) => {
-  let purchase = await PurchaseModel.findOne({ 
+  let purchase = await PurchaseModel.findOne({
     where: { id: req.params.id },
     include: [
       {
         model: PurchaseProductModel,
-        as: 'purchaseProducts',
+        as: "purchaseProducts",
         include: [
           {
             model: ProductModel,
-            as: 'product',
+            as: "product",
           },
           {
             model: PurchaseProductMaterialModel,
-            as: 'purchaseMaterials',
-          }
-        ]
-      }
-    ]
+            as: "purchaseMaterials",
+          },
+        ],
+      },
+    ],
   });
 
   if (!purchase) {
-    return res.status(errorCodes.default).send(formatErrorResponse('Data not found'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Data not found"));
   }
 
   let data = req.body;
   try {
-
     const trans = await sequelize.transaction(async (t) => {
-
       //remove from stock history
-      await stockHistoryModel.destroy({ where: { purchase_id: purchase.id}, transaction: t});
+      await stockHistoryModel.destroy({
+        where: { purchase_id: purchase.id },
+        transaction: t,
+      });
 
       //update purchase table
       let invoice_number = data.invoice_number || null;
       let purchaseObj = {
         supplier_id: data.supplier_id,
         invoice_number: invoice_number,
-        invoice_date: (formatDateTime(purchase.invoice_date, 9) == data.invoice_date) ? moment(purchase.invoice_date).format('YYYY-MM-DD') : moment(data.invoice_date).format('YYYY-MM-DD'),
+        invoice_date:
+          formatDateTime(purchase.invoice_date, 9) == data.invoice_date
+            ? moment(purchase.invoice_date).format("YYYY-MM-DD")
+            : moment(data.invoice_date).format("YYYY-MM-DD"),
         notes: data.notes,
         payment_mode: data.payment_mode,
         transaction_no: data.transaction_no,
@@ -836,17 +990,24 @@ exports.update = async (req, res) => {
         taxable_amount: priceFormat(data.taxable_amount),
         total_payable: priceFormat(data.total_payable),
         due_amount: priceFormat(data.due_amount),
-        due_date: (formatDateTime(purchase.due_date, 9) == data.due_date) ? moment(purchase.due_date).format('YYYY-MM-DD') : moment(data.due_date).format('YYYY-MM-DD'),
+        due_date:
+          formatDateTime(purchase.due_date, 9) == data.due_date
+            ? moment(purchase.due_date).format("YYYY-MM-DD")
+            : moment(data.due_date).format("YYYY-MM-DD"),
       };
-      await PurchaseModel.update(purchaseObj,{where: {id: purchase.id}, transaction: t});
+      await PurchaseModel.update(purchaseObj, {
+        where: { id: purchase.id },
+        transaction: t,
+      });
 
       //remove old product & materials from stock
       let userID = await getWorkingUserID(req);
       await removeMaterialFromStock(purchase, t, userID);
 
       //update purchase product table
-      let ppIds = [], pmIds = [];
-      for(let i = 0; i < data.products.length; i++){
+      let ppIds = [],
+        pmIds = [];
+      for (let i = 0; i < data.products.length; i++) {
         let thisItem = data.products[i];
         let worker_id = thisItem.worker_id || null;
         let thisObj = {
@@ -861,17 +1022,24 @@ exports.update = async (req, res) => {
           rep: priceFormat(thisItem.rep),
           tax: priceFormat(thisItem.tax),
           total: priceFormat(thisItem.total),
-        }
+        };
         let purchaseProduct = null;
-        if(thisItem.id == 0){
+        if (thisItem.id == 0) {
           let quantity = 0;
-          for(let x = 0; x < thisItem.materials.length; x++){
-            quantity += thisItem.materials[x].quantity ? parseInt(thisItem.materials[x].quantity) : 0;
+          for (let x = 0; x < thisItem.materials.length; x++) {
+            quantity += thisItem.materials[x].quantity
+              ? parseInt(thisItem.materials[x].quantity)
+              : 0;
           }
 
-          purchaseProduct = await PurchaseProductModel.create(thisObj, { transaction: t });
-        }else{
-          purchaseProduct = await PurchaseProductModel.update(thisObj,{where: {id: thisItem.id}, transaction: t});
+          purchaseProduct = await PurchaseProductModel.create(thisObj, {
+            transaction: t,
+          });
+        } else {
+          purchaseProduct = await PurchaseProductModel.update(thisObj, {
+            where: { id: thisItem.id },
+            transaction: t,
+          });
         }
         ppIds.push(purchaseProduct.id);
 
@@ -880,29 +1048,46 @@ exports.update = async (req, res) => {
          */
         let product = await ProductModel.findByPk(thisItem.product_id);
         let stock = null;
-        if(product.type == "material"){
+        if (product.type == "material") {
           let quantity = 0;
-          for(let x = 0; x < thisItem.materials.length; x++){
-            quantity += thisItem.materials[x].quantity ? parseInt(thisItem.materials[x].quantity) : 0;
+          for (let x = 0; x < thisItem.materials.length; x++) {
+            quantity += thisItem.materials[x].quantity
+              ? parseInt(thisItem.materials[x].quantity)
+              : 0;
           }
-          let result = await updateOrCreate(StockModel, {product_id: thisItem.product_id, user_id: req.userId}, {product_id: thisItem.product_id, quantity: quantity, total_weight: thisItem.total_weight}, t, ['quantity', 'total_weight']);
+          let result = await updateOrCreate(
+            StockModel,
+            { product_id: thisItem.product_id, user_id: req.userId },
+            {
+              product_id: thisItem.product_id,
+              quantity: quantity,
+              total_weight: thisItem.total_weight,
+            },
+            t,
+            ["quantity", "total_weight"],
+          );
           stock = result.item;
-        }else{
-          let result = await updateOrCreate(StockModel, {purchase_id: purchase.id, user_id: req.userId}, {
-            user_id: req.userId,
-            purchase_id: purchase.id,
-            product_id: thisItem.product_id,
-            size_id: thisItem.size_id,
-            certificate_no: cleanInput(thisItem.certificate_no),
-            quantity: 1,
-            total_weight: thisItem.total_weight
-          }, t);
+        } else {
+          let result = await updateOrCreate(
+            StockModel,
+            { purchase_id: purchase.id, user_id: req.userId },
+            {
+              user_id: req.userId,
+              purchase_id: purchase.id,
+              product_id: thisItem.product_id,
+              size_id: thisItem.size_id,
+              certificate_no: cleanInput(thisItem.certificate_no),
+              quantity: 1,
+              total_weight: thisItem.total_weight,
+            },
+            t,
+          );
           stock = result.item;
         }
 
         //update purchase product materials
         let batch_id = null;
-        for(let x = 0; x < thisItem.materials.length; x++){
+        for (let x = 0; x < thisItem.materials.length; x++) {
           let thisMObj = {
             purchase_id: purchase.id,
             purchase_product_id: purchaseProduct.id,
@@ -912,122 +1097,157 @@ exports.update = async (req, res) => {
             purity_id: thisItem.materials[x].purity_id,
             unit_id: thisItem.materials[x].unit_id,
             rate: thisItem.materials[x].rate,
-            amount: thisItem.materials[x].amount
-          }
-          let purchaseProductM = null
-          if(thisItem.materials[x].id == 0){
-            purchaseProductM = await PurchaseProductMaterialModel.create(thisMObj, { transaction: t });
-          }else{
-            purchaseProductM = await PurchaseProductMaterialModel.update(thisMObj, {where: {id: thisItem.materials[x].id}, transaction: t});
+            amount: thisItem.materials[x].amount,
+          };
+          let purchaseProductM = null;
+          if (thisItem.materials[x].id == 0) {
+            purchaseProductM = await PurchaseProductMaterialModel.create(
+              thisMObj,
+              { transaction: t },
+            );
+          } else {
+            purchaseProductM = await PurchaseProductMaterialModel.update(
+              thisMObj,
+              { where: { id: thisItem.materials[x].id }, transaction: t },
+            );
           }
 
-          if(!isEmpty(worker_id)){
-            let stockH = await stockHistoryModel.create({
-              from_user_id: worker_id,
-              to_user_id: req.userId,
-              material_id: thisItem.materials[x].material_id,
-              weight: priceFormat(thisItem.materials[x].weight),
-              unit_id: thisItem.materials[x].unit_id,
-              quantity: thisItem.materials[x].quantity,
-              date: moment().format('YYYY-MM-DD'),
-              type: 'debit',
-              batch_id: batch_id,
-              purchase_id: purchase.id
-            }, { transaction: t });
-            if(batch_id == null){
+          if (!isEmpty(worker_id)) {
+            let stockH = await stockHistoryModel.create(
+              {
+                from_user_id: worker_id,
+                to_user_id: req.userId,
+                material_id: thisItem.materials[x].material_id,
+                weight: priceFormat(thisItem.materials[x].weight),
+                unit_id: thisItem.materials[x].unit_id,
+                quantity: thisItem.materials[x].quantity,
+                date: moment().format("YYYY-MM-DD"),
+                type: "debit",
+                batch_id: batch_id,
+                purchase_id: purchase.id,
+              },
+              { transaction: t },
+            );
+            if (batch_id == null) {
               batch_id = stockH.id;
-              await stockHistoryModel.update({
-                batch_id: batch_id
-              },{where: {id: stockH.id}, transaction: t});
+              await stockHistoryModel.update(
+                {
+                  batch_id: batch_id,
+                },
+                { where: { id: stockH.id }, transaction: t },
+              );
             }
           }
 
           /**
            * add to stock materials
            */
-           if(product.type == "material"){
-            let stockMaterial = await StockMaterialModel.findOne({where: {stock_id: stock.id, material_id: thisItem.materials[x].material_id}});
-            if(stockMaterial){
-              await StockMaterialModel.update({
-                weight: priceFormat(stockMaterial.weight + priceFormat(thisItem.materials[x].weight)),
-                quantity: (stockMaterial.quantity + thisItem.materials[x].quantity),
-                purity_id: thisItem.materials[x].purity_id,
-                unit_id: thisItem.materials[x].unit_id
-              },{where: {id: stockMaterial.id}, transaction: t});
-            }else{
-              await StockMaterialModel.create({
-                stock_id: stock.id, 
+          if (product.type == "material") {
+            let stockMaterial = await StockMaterialModel.findOne({
+              where: {
+                stock_id: stock.id,
+                material_id: thisItem.materials[x].material_id,
+              },
+            });
+            if (stockMaterial) {
+              await StockMaterialModel.update(
+                {
+                  weight: priceFormat(
+                    stockMaterial.weight +
+                      priceFormat(thisItem.materials[x].weight),
+                  ),
+                  quantity:
+                    stockMaterial.quantity + thisItem.materials[x].quantity,
+                  purity_id: thisItem.materials[x].purity_id,
+                  unit_id: thisItem.materials[x].unit_id,
+                },
+                { where: { id: stockMaterial.id }, transaction: t },
+              );
+            } else {
+              await StockMaterialModel.create(
+                {
+                  stock_id: stock.id,
+                  material_id: thisItem.materials[x].material_id,
+                  weight: priceFormat(thisItem.materials[x].weight),
+                  quantity: thisItem.materials[x].quantity,
+                  purity_id: thisItem.materials[x].purity_id,
+                  unit_id: thisItem.materials[x].unit_id,
+                },
+                { transaction: t },
+              );
+            }
+          } else {
+            let result = await updateOrCreate(
+              StockMaterialModel,
+              {
+                stock_id: stock.id,
+                material_id: thisItem.materials[x].material_id,
+              },
+              {
+                stock_id: stock.id,
                 material_id: thisItem.materials[x].material_id,
                 weight: priceFormat(thisItem.materials[x].weight),
                 quantity: thisItem.materials[x].quantity,
                 purity_id: thisItem.materials[x].purity_id,
-                unit_id: thisItem.materials[x].unit_id
-              }, { transaction: t });
-            }
-          }else{
-            let result = await updateOrCreate(StockMaterialModel, {
-              stock_id: stock.id, 
-              material_id: thisItem.materials[x].material_id
-            }, {
-              stock_id: stock.id, 
-              material_id: thisItem.materials[x].material_id,
-              weight: priceFormat(thisItem.materials[x].weight),
-              quantity: thisItem.materials[x].quantity,
-              purity_id: thisItem.materials[x].purity_id,
-              unit_id: thisItem.materials[x].unit_id
-            }, t);
+                unit_id: thisItem.materials[x].unit_id,
+              },
+              t,
+            );
           }
-
         }
-
       }
 
       //update invoice no if not sent
-      if(isEmpty(invoice_number)){
-        invoice_number = 'RVINV' + purchase.id;
-        await PurchaseModel.update({
-          invoice_number: invoice_number
-        },{where: {id: purchase.id}, transaction: t});
+      if (isEmpty(invoice_number)) {
+        invoice_number = "RVINV" + purchase.id;
+        await PurchaseModel.update(
+          {
+            invoice_number: invoice_number,
+          },
+          { where: { id: purchase.id }, transaction: t },
+        );
       }
 
       res.send(formatResponse([], "Purchase updated successfully!"));
     });
   } catch (error) {
-    return res.status(errorCodes.default).send(formatErrorResponse('Purchase does not update due to some error'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Purchase does not update due to some error"));
   }
 };
 
-  
 /**
  * delete Purchase
- * 
+ *
  * @param {*} req
- * @param {*} res 
+ * @param {*} res
  */
 exports.delete = async (req, res) => {
-  let purchase = await PurchaseModel.findOne({ 
+  let purchase = await PurchaseModel.findOne({
     where: { id: req.params.id },
     include: [
       {
         model: PurchaseProductModel,
-        as: 'purchaseProducts',
+        as: "purchaseProducts",
         include: [
           {
             model: ProductModel,
-            as: 'product',
+            as: "product",
           },
           {
             model: PurchaseProductMaterialModel,
-            as: 'purchaseMaterials',
-          }
-        ]
-      }
-    ]
+            as: "purchaseMaterials",
+          },
+        ],
+      },
+    ],
   });
   if (!purchase) {
-    return res.status(errorCodes.default).send(formatErrorResponse('Data not found'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Data not found"));
   }
-
 
   try {
     let purchase_id = req.params.id;
@@ -1036,44 +1256,56 @@ exports.delete = async (req, res) => {
       let userID = await getWorkingUserID(req);
       await removeMaterialFromStock(purchase, t, userID);
 
-      await PurchaseProductModel.destroy({ where: { purchase_id: purchase_id}, transaction: t});
-      await PurchaseProductMaterialModel.destroy({ where: { purchase_id: purchase_id}, transaction: t});
-      await PurchaseModel.destroy({ where: { id: purchase_id}, transaction: t});
+      await PurchaseProductModel.destroy({
+        where: { purchase_id: purchase_id },
+        transaction: t,
+      });
+      await PurchaseProductMaterialModel.destroy({
+        where: { purchase_id: purchase_id },
+        transaction: t,
+      });
+      await PurchaseModel.destroy({
+        where: { id: purchase_id },
+        transaction: t,
+      });
 
       res.send(formatResponse([], "Purchase deleted successfully!"));
     });
   } catch (error) {
-    return res.status(errorCodes.default).send(formatErrorResponse('Purchase does not delete due to some error'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Purchase does not delete due to some error"));
   }
 };
 
-
 /**
  * get new purchase invoice number
- * 
+ *
  * @param {*} req
- * @param {*} res 
+ * @param {*} res
  */
 exports.newInvoiceNumber = async (req, res) => {
-  let purchase = await PurchaseModel.findOne({order:[['id', 'DESC']]});
-  let next_invoice = 'RV-P-' + (purchase ? (purchase.id + 1) : 1);
+  let purchase = await PurchaseModel.findOne({ order: [["id", "DESC"]] });
+  let next_invoice = "RV-P-" + (purchase ? purchase.id + 1 : 1);
 
-  res.send(formatResponse({next_invoice: next_invoice}));
-}
+  res.send(formatResponse({ next_invoice: next_invoice }));
+};
 
 /**
  * Return Products
- * 
+ *
  * @param {*} req
- * @param {*} res 
+ * @param {*} res
  */
 exports.returnProducts = async (req, res) => {
   let data = req.body;
   let return_data = data.return_data;
   let return_products = data.return_products;
-  let purchase = await PurchaseModel.findOne({ where: { id: req.params.id }});
+  let purchase = await PurchaseModel.findOne({ where: { id: req.params.id } });
   if (!purchase) {
-    return res.status(errorCodes.default).send(formatErrorResponse('Purchase not found'));
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse("Purchase not found"));
   }
 
   /* check if stock left with the user */
@@ -1137,141 +1369,202 @@ exports.returnProducts = async (req, res) => {
     }
   }*/
 
-  try{
+  try {
     const trans = await sequelize.transaction(async (t) => {
-
       //insert into return table
-      const returnObj = await ReturnModel.create({
-        user_id: req.userId,
-        table_id: purchase.id,
-        table_type: 'purchases',
-        notes: data.notes,
-        payment_mode: data.payment_mode,
-        txn_id: data.transaction_no,
-        cheque_no: data.cheque_no,
-        status: "success",
-        total_amount: data.return_amount,
-        accepted_at: moment().format('YYYY-MM-DD'),
-        return_date: data.return_date ? moment(data.return_date).format('YYYY-MM-DD') : moment().format('YYYY-MM-DD')
-      }, { transaction: t });
+      const returnObj = await ReturnModel.create(
+        {
+          user_id: req.userId,
+          table_id: purchase.id,
+          table_type: "purchases",
+          notes: data.notes,
+          payment_mode: data.payment_mode,
+          txn_id: data.transaction_no,
+          cheque_no: data.cheque_no,
+          status: "success",
+          total_amount: data.return_amount,
+          accepted_at: moment().format("YYYY-MM-DD"),
+          return_date: data.return_date
+            ? moment(data.return_date).format("YYYY-MM-DD")
+            : moment().format("YYYY-MM-DD"),
+        },
+        { transaction: t },
+      );
 
-      for(let i = 0; i < return_products.length; i++){
-        if(!return_products[i].is_return){
+      for (let i = 0; i < return_products.length; i++) {
+        if (!return_products[i].is_return) {
           continue;
         }
 
         //fetch purchase product by id
         let purchaseProduct = await PurchaseProductModel.findOne({
-          where: {id: return_products[i].id},
+          where: { id: return_products[i].id },
           include: [
             {
               model: ProductModel,
-              as: 'product',
+              as: "product",
               include: [
                 {
                   model: CategoryModel,
-                  as: 'category'
-                }
-              ]
+                  as: "category",
+                },
+              ],
             },
             {
               model: SizeModel,
-              as: 'size',
+              as: "size",
             },
             {
               model: PurchaseProductMaterialModel,
-              as: 'purchaseMaterials',
+              as: "purchaseMaterials",
               include: [
                 {
                   model: MaterialModel,
-                  as: 'material',
+                  as: "material",
                 },
                 {
                   model: PurityModel,
-                  as: 'purity'
+                  as: "purity",
                 },
                 {
                   model: UnitModel,
-                  as: 'unit'
-                }
-              ]
-            }
-          ]
+                  as: "unit",
+                },
+              ],
+            },
+          ],
         });
 
         //insert into return product table
-        let returnProduct = await ReturnProductModel.create({
-          return_id: returnObj.id,
-          table_id: purchaseProduct.id,
-          table_type: 'purchase_products',
-          sub_total: return_data.products[i].return_amount
-        }, { transaction: t });
+        let returnProduct = await ReturnProductModel.create(
+          {
+            return_id: returnObj.id,
+            table_id: purchaseProduct.id,
+            table_type: "purchase_products",
+            sub_total: return_data.products[i].return_amount,
+          },
+          { transaction: t },
+        );
 
         //insert into return product materials table
-        for(let x = 0; x < return_data.products[i].materials.length; x++){
-          let thisQty = (return_data.products[i].product_type == 'material') ? parseFloat(return_data.products[i].materials[x].return_qty) : return_data.products[i].materials[x].quantity;
-          let thisWeight = (return_data.products[i].product_type == 'material') ? parseFloat(return_data.products[i].materials[x].return_weight) : return_data.products[i].materials[x].weight;
-          await ReturnProductMaterialModel.create({
-            return_id: returnObj.id,
-            return_product_id: returnProduct.id,
-            material_id: return_data.products[i].materials[x].material_id,
-            weight: thisWeight,
-            quantity: thisQty,
-            purity_id: return_data.products[i].materials[x].purity_id,
-            unit_id: return_data.products[i].materials[x].unit_id,
-          }, { transaction: t });
+        for (let x = 0; x < return_data.products[i].materials.length; x++) {
+          let thisQty =
+            return_data.products[i].product_type == "material"
+              ? parseFloat(return_data.products[i].materials[x].return_qty)
+              : return_data.products[i].materials[x].quantity;
+          let thisWeight =
+            return_data.products[i].product_type == "material"
+              ? parseFloat(return_data.products[i].materials[x].return_weight)
+              : return_data.products[i].materials[x].weight;
+          await ReturnProductMaterialModel.create(
+            {
+              return_id: returnObj.id,
+              return_product_id: returnProduct.id,
+              material_id: return_data.products[i].materials[x].material_id,
+              weight: thisWeight,
+              quantity: thisQty,
+              purity_id: return_data.products[i].materials[x].purity_id,
+              unit_id: return_data.products[i].materials[x].unit_id,
+            },
+            { transaction: t },
+          );
         }
 
         //update purchase product is return and return weight & qty into purchase product material table
-        if(return_data.products[i].product_type == 'material'){
-          let total_return_weight = parseFloat(purchaseProduct.purchaseMaterials[0].return_weight) + parseFloat(return_data.products[i].materials[0].return_weight);
-          let total_return_qty = parseInt(purchaseProduct.purchaseMaterials[0].return_qty) + parseInt(return_data.products[i].materials[0].return_qty);
-          let is_return = (total_return_qty >= parseInt(purchaseProduct.purchaseMaterials[0].quantity) || total_return_weight >= parseFloat(purchaseProduct.purchaseMaterials[0].weight)) ? true : false;
+        if (return_data.products[i].product_type == "material") {
+          let total_return_weight =
+            parseFloat(purchaseProduct.purchaseMaterials[0].return_weight) +
+            parseFloat(return_data.products[i].materials[0].return_weight);
+          let total_return_qty =
+            parseInt(purchaseProduct.purchaseMaterials[0].return_qty) +
+            parseInt(return_data.products[i].materials[0].return_qty);
+          let is_return =
+            total_return_qty >=
+              parseInt(purchaseProduct.purchaseMaterials[0].quantity) ||
+            total_return_weight >=
+              parseFloat(purchaseProduct.purchaseMaterials[0].weight)
+              ? true
+              : false;
 
-          await PurchaseProductModel.update({is_return: is_return}, {where: {id: purchaseProduct.id}, transaction: t});
-          await PurchaseProductMaterialModel.update({
-            return_qty: total_return_qty,
-            return_weight: total_return_weight
-          }, {where: {id: purchaseProduct.purchaseMaterials[0].id}, transaction: t});
-
-        }else{
-          await PurchaseProductModel.update({is_return: true}, {where: {id: purchaseProduct.id}, transaction: t});
+          await PurchaseProductModel.update(
+            { is_return: is_return },
+            { where: { id: purchaseProduct.id }, transaction: t },
+          );
+          await PurchaseProductMaterialModel.update(
+            {
+              return_qty: total_return_qty,
+              return_weight: total_return_weight,
+            },
+            {
+              where: { id: purchaseProduct.purchaseMaterials[0].id },
+              transaction: t,
+            },
+          );
+        } else {
+          await PurchaseProductModel.update(
+            { is_return: true },
+            { where: { id: purchaseProduct.id }, transaction: t },
+          );
         }
 
         /**
          * START - Remove from stock table
          */
-        if(purchase.is_approved == 1){
+        if (purchase.is_approved == 1) {
           let stock = null;
-          if(return_data.products[i].product_type == "material"){
-            stock = await StockModel.findOne({where: {product_id: return_data.products[i].product_id, user_id: req.userId}});
-            let quantity = 0, unit_name = '';
-            for(let mItem of return_data.products[i].materials){
-              let stockM = await StockMaterialModel.findOne({where: {stock_id: stock.id, material_id: mItem.material_id}});
-              if(stockM){
-                await StockMaterialModel.update({
-                weight: weightFormat(parseFloat(stockM.weight) - parseFloat(mItem.return_weight)),
-                quantity: (parseInt(stockM.quantity) - parseInt(mItem.return_qty))
-                },{where: {id: stockM.id}});
+          if (return_data.products[i].product_type == "material") {
+            stock = await StockModel.findOne({
+              where: {
+                product_id: return_data.products[i].product_id,
+                user_id: req.userId,
+              },
+            });
+            let quantity = 0,
+              unit_name = "";
+            for (let mItem of return_data.products[i].materials) {
+              let stockM = await StockMaterialModel.findOne({
+                where: { stock_id: stock.id, material_id: mItem.material_id },
+              });
+              if (stockM) {
+                await StockMaterialModel.update(
+                  {
+                    weight: weightFormat(
+                      parseFloat(stockM.weight) -
+                        parseFloat(mItem.return_weight),
+                    ),
+                    quantity:
+                      parseInt(stockM.quantity) - parseInt(mItem.return_qty),
+                  },
+                  { where: { id: stockM.id } },
+                );
                 quantity += mItem.return_qty ? parseInt(mItem.return_qty) : 0;
               }
               unit_name = mItem.unit_name;
             }
-            if(stock.quantity <= quantity){
-              await StockModel.destroy({ where: { id: stock.id}});
-            }else{
-              let return_weight_in_gram = convertUnitToGram(unit_name, return_data.products[i].materials[0].return_weight);
-              await StockModel.update({
-                quantity: (stock.quantity - quantity),
-                total_weight: (stock.total_weight - return_weight_in_gram)
-              },{where: {id: stock.id}});
+            if (stock.quantity <= quantity) {
+              await StockModel.destroy({ where: { id: stock.id } });
+            } else {
+              let return_weight_in_gram = convertUnitToGram(
+                unit_name,
+                return_data.products[i].materials[0].return_weight,
+              );
+              await StockModel.update(
+                {
+                  quantity: stock.quantity - quantity,
+                  total_weight: stock.total_weight - return_weight_in_gram,
+                },
+                { where: { id: stock.id } },
+              );
             }
-              
-          }else{
-            let stock = await StockModel.findOne({where: {purchase_product_id: purchaseProduct.id}})
-            if(stock){
-              await StockModel.destroy({ where: { id: stock.id}});
-              await StockMaterialModel.destroy({ where: { stock_id: stock.id}});
+          } else {
+            let stock = await StockModel.findOne({
+              where: { purchase_product_id: purchaseProduct.id },
+            });
+            if (stock) {
+              await StockModel.destroy({ where: { id: stock.id } });
+              await StockMaterialModel.destroy({
+                where: { stock_id: stock.id },
+              });
             }
           }
         }
@@ -1287,30 +1580,32 @@ exports.returnProducts = async (req, res) => {
         let due_amount = priceFormat(total_payable - paid_amount, true);
         let advance_amount = due_amount < 0 ? priceFormat(0 - due_amount) : 0;
         due_amount = due_amount < 0 ? 0 : due_amount;
-        if(advance_amount > 0){
+        if (advance_amount > 0) {
           // let supplier = await UserModel.findByPk(purchase.supplier_id);
           // if(supplier){
           //   advance_amount = priceFormat(advance_amount + supplier.advance_amount);
           //   await UserModel.update({advance_amount: advance_amount}, {where: {id: purchase.supplier_id}, transaction: t});
           // }
         }
-  
-        await PurchaseModel.update({
-          return_amount: return_amount,
-          total_payable: total_payable,
-          due_amount: due_amount
-        }, {where: {id: req.params.id}, transaction: t});
 
+        await PurchaseModel.update(
+          {
+            return_amount: return_amount,
+            total_payable: total_payable,
+            due_amount: due_amount,
+          },
+          { where: { id: req.params.id }, transaction: t },
+        );
       }
       res.send(formatResponse([], "Returned successfully!"));
     });
-
   } catch (error) {
-    addLog('err: ' + error.toString())
-    return res.status(errorCodes.default).send(formatErrorResponse(errorCodes.defaultErrorMsg));
+    addLog("err: " + error.toString());
+    return res
+      .status(errorCodes.default)
+      .send(formatErrorResponse(errorCodes.defaultErrorMsg));
   }
-
-}
+};
 
 /**
  * Download Invoice
@@ -1453,14 +1748,14 @@ exports.downloadInvoiceInfo = async (req, res) => {
   });
   payments = await PaymentCollection(payments);
   /* 18k gold purity value */
-  let purity18K = await PurityModel.findOne({  
+  let purity18K = await PurityModel.findOne({
     where: {
       id: 1, //18K
-    },  
+    },
   });
 
   purity18K = await PurityCollection(purity18K);
-  
+
   const cwd = process.cwd();
   // const logoUrl = `file://${cwd}/public/images/logo.png`;
   const logoUrl = `public/images/logo.png`;
@@ -1921,8 +2216,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         ${
                                           purchaseData.products[i].product_name
                                         } - ${
-        purchaseData.products[i].product_code
-      }
+                                          purchaseData.products[i].product_code
+                                        }
                                     </td>
                                     <td style="text-align: left;
                                         font-size: 11px;
@@ -2007,10 +2302,13 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                           purchaseData.products[
                                                             i
                                                           ].materials[x]
-                                                            .discount_percent
+                                                            .discount_percent,
                                                         )}% ${
-            purchaseData.products[i].materials[x].discount_amount_display
-          }</span> 
+                                                          purchaseData.products[
+                                                            i
+                                                          ].materials[x]
+                                                            .discount_amount_display
+                                                        }</span> 
                                                                     <!--<span
                                                         style="text-align:
                                                         left; font-size:
@@ -2046,14 +2344,18 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                   purchaseData.products[i]
                                                     .making_charge
                                                 }@${
-        purchaseData.products[i].making_charge_discount
-          ? purchaseData.products[i].making_charge_discount
-          : ""
-      }% = ${
-        purchaseData.products[i].total_making_charge_discount
-          ? purchaseData.products[i].total_making_charge_discount
-          : ""
-      }
+                                                  purchaseData.products[i]
+                                                    .making_charge_discount
+                                                    ? purchaseData.products[i]
+                                                        .making_charge_discount
+                                                    : ""
+                                                }% = ${
+                                                  purchaseData.products[i]
+                                                    .total_making_charge_discount
+                                                    ? purchaseData.products[i]
+                                                        .total_making_charge_discount
+                                                    : ""
+                                                }
                                             </td>
 
                                             <td style="text-align:
@@ -2225,14 +2527,13 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                           </tr>
                                       </thead>
                                       <tbody>`;
-    let fine_metals = 0;                      
+    let fine_metals = 0;
     for (let i = 0; i < purchaseData.subCatItems.length; i++) {
-      purchaseData.subCatItems[i].material
-        .map((itm) => {
-          if(itm.id == 1){
-            fine_metals += parseFloat(itm.weight);
-          } 
-        });
+      purchaseData.subCatItems[i].material.map((itm) => {
+        if (itm.id == 1) {
+          fine_metals += parseFloat(itm.weight);
+        }
+      });
 
       let materialNames = purchaseData.subCatItems[i].material
         .map((itm) => itm.name)
@@ -2322,26 +2623,35 @@ exports.downloadInvoiceInfo = async (req, res) => {
     let receive_metal = 0;
     let metalExists = true;
     payments.map((itm) => {
-      if(itm.payment_mode.toLowerCase() == "metal" && itm.weight != null){
+      if (itm.payment_mode.toLowerCase() == "metal" && itm.weight != null) {
         metalExists = true;
         receive_metal += parseFloat(itm.weight);
       }
     });
     compactLog("fine_metals before : ", fine_metals);
-    compactLog("fine_metals 24k value : ", ((parseFloat(fine_metals)*parseFloat(purity18K.value))/100));
+    compactLog(
+      "fine_metals 24k value : ",
+      (parseFloat(fine_metals) * parseFloat(purity18K.value)) / 100,
+    );
     /* convert gold to 24k from 18k */
-    if(purity18K && purity18K.value != null){
-      fine_metals = (parseFloat(fine_metals)*parseFloat(purity18K.value))/100;
+    if (purity18K && purity18K.value != null) {
+      fine_metals =
+        (parseFloat(fine_metals) * parseFloat(purity18K.value)) / 100;
     }
 
     let rest_metal = fine_metals - receive_metal;
-    
+
     let totalReportCharge = 0;
     let taxOnReportCharge = 0;
     let afterTaxTotalReportCharge = 0;
-    if(purchaseData.sale){ 
-      totalReportCharge = parseInt(purchaseData.sale.report_qty)*parseFloat(purchaseData.sale.report_charge);
-      taxOnReportCharge = (totalReportCharge*parseFloat(purchaseData.sale.report_tax_percentage))/100;
+    if (purchaseData.sale) {
+      totalReportCharge =
+        parseInt(purchaseData.sale.report_qty) *
+        parseFloat(purchaseData.sale.report_charge);
+      taxOnReportCharge =
+        (totalReportCharge *
+          parseFloat(purchaseData.sale.report_tax_percentage)) /
+        100;
       afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
     }
 
@@ -2353,8 +2663,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
                                       </td>
                                   </tr>`;
-                                  if(purchaseData.sale && purchaseData.sale.report_qty > 0){
-                                    html += `<tr style="
+    if (purchaseData.sale && purchaseData.sale.report_qty > 0) {
+      html += `<tr style="
                                         vertical-align: top;
                                         background-color: #0A8AB8;
                                         font-size: 12px; 
@@ -2369,7 +2679,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         <td colspan="2">Total</td>
                                         
                                     </tr>`;
-                                    html += `<tr style="
+      html += `<tr style="
                                         vertical-align: top;
                                         font-size: 14px; 
                                         font-weight:400;
@@ -2382,8 +2692,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                         <td colspan="2" style="background-color: #C1BDBD;">${afterTaxTotalReportCharge.toFixed(2)}</td>
                                         
                                     </tr>`;
-                                  }
-                                  html += `<tr style="
+    }
+    html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="6"
                                           style="
@@ -2391,33 +2701,32 @@ exports.downloadInvoiceInfo = async (req, res) => {
 
                                       </td>
                                   </tr>`;
-                          if(metalExists){
-                            html += `<tr style="
+    if (metalExists) {
+      html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Fine Metals : </td>
                                       <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${fine_metals.toFixed(2)} GM</td>
                                       <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
-                          }
-                          if(metalExists){
-                            html += `<tr style="
+    }
+    if (metalExists) {
+      html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Receive Fine Metal : </td>
                                       <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${receive_metal.toFixed(2)} GM</td>
                                       <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
-                          }
-                          if(metalExists){
-                            html += `<tr style="
+    }
+    if (metalExists) {
+      html += `<tr style="
                                       vertical-align: top;">
                                       <td colspan="2" style="background-color: #0A8AB8; border-bottom: 1px solid #fff; font-size: 12px; font-weight:400; color:#ffffff;">Rest : </td>
                                       <td colspan="2" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;">${rest_metal.toFixed(2)} GM</td>
                                       <td colspan="8" style="background-color: #C1BDBD; border-bottom: 1px solid #fff; font-size: 14px; font-weight:400;"></td>
                                   </tr>`;
-                          }
- 
-                                                  
-                          html += `   </tbody>
+    }
+
+    html += `   </tbody>
                                           </table>`;
   }
   html += `
@@ -2433,16 +2742,16 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                 payments.length == 0
                                                   ? 240
                                                   : payments.length == 1
-                                                  ? 200
-                                                  : payments.length == 2
-                                                  ? 200
-                                                  : payments.length == 3
-                                                  ? 200
-                                                  : payments.length == 4
-                                                  ? 200
-                                                  : payments.length == 5
-                                                  ? 200
-                                                  : 200
+                                                    ? 200
+                                                    : payments.length == 2
+                                                      ? 200
+                                                      : payments.length == 3
+                                                        ? 200
+                                                        : payments.length == 4
+                                                          ? 200
+                                                          : payments.length == 5
+                                                            ? 200
+                                                            : 200
                                               }px">
                                               <div style="display:
                                                   table-cell; width:
@@ -2457,16 +2766,20 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                         payments.length == 0
                                                           ? 100
                                                           : payments.length == 1
-                                                          ? 130
-                                                          : payments.length == 2
-                                                          ? 120
-                                                          : payments.length == 3
-                                                          ? 110
-                                                          : payments.length == 4
-                                                          ? 95
-                                                          : payments.length == 5
-                                                          ? 80
-                                                          : 180
+                                                            ? 130
+                                                            : payments.length ==
+                                                                2
+                                                              ? 120
+                                                              : payments.length ==
+                                                                  3
+                                                                ? 110
+                                                                : payments.length ==
+                                                                    4
+                                                                  ? 95
+                                                                  : payments.length ==
+                                                                      5
+                                                                    ? 80
+                                                                    : 180
                                                       }px;
                                                   ">
                                                       <!--<div>
@@ -2543,7 +2856,19 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                               <td
                                                                   style="border-right:
                                                                   none; font-size: 12px;">${
-                                                                    payments[i].payment_mode.toLowerCase() == "metal" && payments[i].weight != null?payments[i].weight:payments[i].amount
+                                                                    payments[
+                                                                      i
+                                                                    ].payment_mode.toLowerCase() ==
+                                                                      "metal" &&
+                                                                    payments[i]
+                                                                      .weight !=
+                                                                      null
+                                                                      ? payments[
+                                                                          i
+                                                                        ].weight
+                                                                      : payments[
+                                                                          i
+                                                                        ].amount
                                                                   }</td>
                                                              
                                                           </tr>`;
@@ -3125,8 +3450,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
             purchaseData,
             payments,
           },
-          "Invoice pdf"
-        )
+          "Invoice pdf",
+        ),
       );
     })();
   } catch (error) {
@@ -3207,7 +3532,7 @@ exports.downloadInvoiceItems = async (req, res) => {
               {
                 model: taxSlabModel,
                 as: "tax",
-              }
+              },
             ],
           },
           {
@@ -3251,9 +3576,7 @@ exports.downloadInvoiceItems = async (req, res) => {
       .send(formatErrorResponse("Purchase not found"));
   }
 
-
   let purchaseData = PurchaseViewCollection(purchase);
-  
 
   let payments = await PaymentModel.findAll({
     where: {
@@ -3446,18 +3769,17 @@ exports.downloadInvoiceItems = async (req, res) => {
             </div>
           `;
 
+  let totalSave = 0.0;
+  let totalTagPrice = 0.0;
+  for (let i = 0; i < purchaseData.products.length; i++) {
+    totalSave += purchaseData.products[i].total_discount;
+    totalTagPrice += purchaseData.products[i].subtotal_price;
+  }
 
-let totalSave = 0.00;
-let totalTagPrice = 0.00;
-for (let i = 0; i < purchaseData.products.length; i++) {
-  totalSave += purchaseData.products[i].total_discount;
-  totalTagPrice += purchaseData.products[i].subtotal_price;
-}
+  let totalSaveDisplay = displayAmount(totalSave);
+  let totalTagPriceDisplay = displayAmount(totalTagPrice);
 
-let totalSaveDisplay = displayAmount(totalSave);
-let totalTagPriceDisplay = displayAmount(totalTagPrice);
-
-let html = `<!DOCTYPE html>
+  let html = `<!DOCTYPE html>
 <html lang="en">
     <head>
         <meta charset="UTF-8">
@@ -3678,8 +4000,8 @@ let html = `<!DOCTYPE html>
                                         </tr>
                                     </tbody>
                                 </table>`;
-                          if(purchaseData.subCatItems.length == 0){
-                        html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+  if (purchaseData.subCatItems.length == 0) {
+    html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
                           border="0"
                           align="center" width="100%">
                           <thead style="background-color: #1E2757;">
@@ -3722,9 +4044,9 @@ let html = `<!DOCTYPE html>
                               </tr>
                           </thead>
                           <tbody>`;
-                      for (let i = 0; i < purchaseData.products.length; i++) {
-                        let bgTrColor = i%2==0?"#C1BDBD":"#C4BEED";
-                        html += `<tr style="background-color: ${bgTrColor}">
+    for (let i = 0; i < purchaseData.products.length; i++) {
+      let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
+      html += `<tr style="background-color: ${bgTrColor}">
                                   <td style="text-align: left;
                                       font-size: 11px;
                                       font-weight: 400;">
@@ -3734,25 +4056,18 @@ let html = `<!DOCTYPE html>
                                       font-size: 11px;
                                       font-weight: 400;font-size: 10px;">
                                       ${
-                                        purchaseData.products[i]
-                                          .product_name
+                                        purchaseData.products[i].product_name
                                       } - ${purchaseData.products[i].product_code}
                                   </td>
                                   <td style="text-align: left;
                                       font-size: 11px;
                                       font-weight: 400;">
-                                      ${
-                                        purchaseData.products[i]
-                                          .size_name
-                                      }
+                                      ${purchaseData.products[i].size_name}
                                   </td>
                                   <td colspan="8" style="text-align:
                                       left; font-size: 11px;
                                       font-weight: 400;">
-                                      ${
-                                        purchaseData.products[i]
-                                          .certificate_no
-                                      }
+                                      ${purchaseData.products[i].certificate_no}
                                   </td>
 
                               </tr>
@@ -3762,10 +4077,10 @@ let html = `<!DOCTYPE html>
                                       style="border-bottom: 1px solid
                                       #1E2757; width: 300px; text-align: left;">
                                       <div style="max-width: 300px; text-align: left;">`;
-                              for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
-                              purchaseData.products[i].materials[x].amount == "₹0.00"
-                              ? null
-                              : (html += `<div style="display: flex;
+      for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
+        purchaseData.products[i].materials[x].amount == "₹0.00"
+          ? null
+          : (html += `<div style="display: flex;
                                               flex-wrap: wrap;
                                               justify-content: center;
                                               margin: 0 -5px; text-align: left;">
@@ -3800,72 +4115,66 @@ let html = `<!DOCTYPE html>
                                               </div>
 
                                           </div>`);
-                                      }
+      }
 
-                                      html += `</div>
+      html += `</div>
 
 
                                           </td>
                                           <td style="border-bottom:
                                               1px solid #1E2757;">`;
-                                          for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
-                                          html += `<div>`;
-                                          if (isEmpty(purchaseData.products[i].materials[x].discount_amount)) {
-                                          purchaseData.products[i].materials[x].amount == "₹0.00"
-                                          ? null
-                                          : (html += `-`);
-                                          } else {
-                                          html += `<span
+      for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
+        html += `<div>`;
+        if (isEmpty(purchaseData.products[i].materials[x].discount_amount)) {
+          purchaseData.products[i].materials[x].amount == "₹0.00"
+            ? null
+            : (html += `-`);
+        } else {
+          html += `<span
                                                       style="text-align:
                                                       left; font-size:
                                                       10px;
                                                       font-weight:
                                                       400;">@${removeBlankZero(
-                                                        purchaseData
-                                                          .products[
-                                                          i
-                                                        ].materials[
-                                                          x
-                                                        ]
-                                                          .discount_percent
+                                                        purchaseData.products[i]
+                                                          .materials[x]
+                                                          .discount_percent,
                                                       )}% ${
-                                            purchaseData.products[i].materials[x].discount_amount_display
-                                            }</span> 
+                                                        purchaseData.products[i]
+                                                          .materials[x]
+                                                          .discount_amount_display
+                                                      }</span> 
                                                                   <!--<span
                                                       style="text-align:
                                                       left; font-size:
                                                       10px;
                                                       font-weight:
                                                       400;">${
-                                                        purchaseData
-                                                          .products[
-                                                          i
-                                                        ].materials[
-                                                          x
-                                                        ]
+                                                        purchaseData.products[i]
+                                                          .materials[x]
                                                           .discount_amount_display
                                                       }</span>-->`;
-                                      }
-                                      html += `</div>`;
-                                      }
-                                      html += `</td>
+        }
+        html += `</div>`;
+      }
+      html += `</td>
                                           <td style="text-align: left;
                                               font-size: 10px;
                                               font-weight: 400;
                                               border-bottom: 1px solid
                                               #1E2757;">`;
-                                      for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
-                                      purchaseData.products[i].materials[x].amount == "₹0.00"
-                                      ? null
-                                      : (html += `<div>${purchaseData.products[i].materials[x].material_cost}</div>`);
-                                      }
-                                      html += `</td>
+      for (let x = 0; x < purchaseData.products[i].materials.length; x++) {
+        purchaseData.products[i].materials[x].amount == "₹0.00"
+          ? null
+          : (html += `<div>${purchaseData.products[i].materials[x].material_cost}</div>`);
+      }
+      html += `</td>
                                           <td style="text-align: left;
                                               font-size: 10px;
                                               font-weight: 400;
                                               border-bottom: 1px solid
                                               #1E2757;">
-                                              ${purchaseData.products[i].making_charge}@${purchaseData.products[i].making_charge_discount?purchaseData.products[i].making_charge_discount:''}% = ${purchaseData.products[i].total_making_charge_discount?purchaseData.products[i].total_making_charge_discount:''}
+                                              ${purchaseData.products[i].making_charge}@${purchaseData.products[i].making_charge_discount ? purchaseData.products[i].making_charge_discount : ""}% = ${purchaseData.products[i].total_making_charge_discount ? purchaseData.products[i].total_making_charge_discount : ""}
                                           </td>
 
                                           <td style="text-align:
@@ -3905,8 +4214,8 @@ let html = `<!DOCTYPE html>
                                           </td>
 
                                       </tr>`;
-                                    }
-                                    html += `<tr style="
+    }
+    html += `<tr style="
                                           vertical-align: top;">
                                           <td colspan="6"
                                               style="
@@ -3985,8 +4294,8 @@ let html = `<!DOCTYPE html>
                                       </tr> -->
                                   </tbody>
                               </table>`;
-                            } else {
-                              html +=  `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
+  } else {
+    html += `<table cellspacing="0" cellpadding="5"  style="margin-top:10px"
                                     border="0"
                                     align="center" width="100%">
                                     <thead style="background-color: #1E2757;">
@@ -4025,14 +4334,22 @@ let html = `<!DOCTYPE html>
                                         </tr>
                                     </thead>
                                     <tbody>`;
-                                for (let i = 0; i < purchaseData.subCatItems.length; i++) {
-                                  let materialNames = purchaseData.subCatItems[i].material.map((itm) => itm.name).join("<br/ >");
-                                  let materialWts = purchaseData.subCatItems[i].material.map((itm) => itm.weight.toFixed(2)).join("<br/ >");
-                                  let materialUnits = purchaseData.subCatItems[i].material.map((itm) => itm.unit).join("<br/ >");
-                                  let materialRates = purchaseData.subCatItems[i].material.map((itm) => itm.rate.toFixed(2)).join("<br/ >");
-                                  let bgTrColor = i%2==0?"#C1BDBD":"#C4BEED";
+    for (let i = 0; i < purchaseData.subCatItems.length; i++) {
+      let materialNames = purchaseData.subCatItems[i].material
+        .map((itm) => itm.name)
+        .join("<br/ >");
+      let materialWts = purchaseData.subCatItems[i].material
+        .map((itm) => itm.weight.toFixed(2))
+        .join("<br/ >");
+      let materialUnits = purchaseData.subCatItems[i].material
+        .map((itm) => itm.unit)
+        .join("<br/ >");
+      let materialRates = purchaseData.subCatItems[i].material
+        .map((itm) => itm.rate.toFixed(2))
+        .join("<br/ >");
+      let bgTrColor = i % 2 == 0 ? "#C1BDBD" : "#C4BEED";
 
-                                  html += `<tr style="background-color: ${bgTrColor}">
+      html += `<tr style="background-color: ${bgTrColor}">
                                             <td style="text-align: left;
                                                 font-size: 14px;
                                                 font-weight: 400;">
@@ -4059,37 +4376,32 @@ let html = `<!DOCTYPE html>
                                                 font-weight: 400;">
                                                 ${
                                                   purchaseData.subCatItems[i]
-                                                    .hsn?purchaseData.subCatItems[i]
-                                                    .hsn:""
+                                                    .hsn
+                                                    ? purchaseData.subCatItems[
+                                                        i
+                                                      ].hsn
+                                                    : ""
                                                 }
                                             </td>
                                             <td style="text-align:
                                                 left; font-size: 14px;
                                                 font-weight: 400;">
-                                                ${
-                                                  materialNames
-                                                }
+                                                ${materialNames}
                                             </td>
                                             <td style="text-align:
                                                 left; font-size: 14px;
                                                 font-weight: 400;">
-                                                ${
-                                                  materialWts
-                                                }
+                                                ${materialWts}
                                             </td>
                                             <td style="text-align:
                                                 left; font-size: 14px;
                                                 font-weight: 400;">
-                                                ${
-                                                  materialUnits
-                                                }
+                                                ${materialUnits}
                                             </td>
                                             <td style="text-align:
                                                 left; font-size: 14px;
                                                 font-weight: 400;">
-                                                ${
-                                                  materialRates
-                                                }
+                                                ${materialRates}
                                             </td>
                                             <td style="text-align:
                                                 left; font-size: 14px;
@@ -4102,16 +4414,14 @@ let html = `<!DOCTYPE html>
                                             <td style="text-align:
                                                 left; font-size: 14px;
                                                 font-weight: 400;">
-                                                ${
-                                                  purchaseData.subCatItems[i]
-                                                    .taxableAmount.toFixed(2)
-                                                }
+                                                ${purchaseData.subCatItems[
+                                                  i
+                                                ].taxableAmount.toFixed(2)}
                                             </td>
 
                                         </tr>`;
-                                        
-}
-html += `<tr style="
+    }
+    html += `<tr style="
                                                     vertical-align: top;">
                                                     <td colspan="6"
                                                         style="
@@ -4190,8 +4500,8 @@ html += `<tr style="
                                                 </tr> -->
                                             </tbody>
                                         </table>`;
-                                      }
-                                      html +=  `
+  }
+  html += `
                                         <div class="table-footer-area" style="display: table; width:
                                           100%; position:absolute ; bottom: 390px">
                                           <hr/>
@@ -4204,16 +4514,16 @@ html += `<tr style="
                                               payments.length == 0
                                                 ? 240
                                                 : payments.length == 1
-                                                ? 200
-                                                : payments.length == 2
-                                                ? 200
-                                                : payments.length == 3
-                                                ? 200
-                                                : payments.length == 4
-                                                ? 200
-                                                : payments.length == 5
-                                                ? 200
-                                                : 200
+                                                  ? 200
+                                                  : payments.length == 2
+                                                    ? 200
+                                                    : payments.length == 3
+                                                      ? 200
+                                                      : payments.length == 4
+                                                        ? 200
+                                                        : payments.length == 5
+                                                          ? 200
+                                                          : 200
                                             }px">
                                             <div style="display:
                                                 table-cell; width:
@@ -4228,16 +4538,19 @@ html += `<tr style="
                                                       payments.length == 0
                                                         ? 100
                                                         : payments.length == 1
-                                                        ? 130
-                                                        : payments.length == 2
-                                                        ? 120
-                                                        : payments.length == 3
-                                                        ? 110
-                                                        : payments.length == 4
-                                                        ? 95
-                                                        : payments.length == 5
-                                                        ? 80
-                                                        : 180
+                                                          ? 130
+                                                          : payments.length == 2
+                                                            ? 120
+                                                            : payments.length ==
+                                                                3
+                                                              ? 110
+                                                              : payments.length ==
+                                                                  4
+                                                                ? 95
+                                                                : payments.length ==
+                                                                    5
+                                                                  ? 80
+                                                                  : 180
                                                     }px;
                                                 ">
                                                     <!--<div>
@@ -4257,8 +4570,8 @@ html += `<tr style="
                                                         </h4>
                                                     </div>-->`;
 
-if (payments.length) {
-  html += `<table cellspacing="0"
+  if (payments.length) {
+    html += `<table cellspacing="0"
                                                         cellpadding="3"
                                                        rules="rows"
                                                         align="left"
@@ -4284,8 +4597,8 @@ if (payments.length) {
                                                                 style="font-weight:
                                                                 400; font-size: 12px; text-align: left;">Amount</th>
                                                             `;
-  for (let i = 0; i < payments.length; i++) {
-    html += `<tr
+    for (let i = 0; i < payments.length; i++) {
+      html += `<tr
                                                             style=" ">
                                                             <td
                                                                 style="border-right:
@@ -4319,10 +4632,10 @@ if (payments.length) {
                                                                 }</td>
                                                            
                                                         </tr>`;
+    }
+    html += `</table>`;
   }
-  html += `</table>`;
-}
-html += `</div>
+  html += `</div>
                                             </div>
                                             
                                             <div style="display:
@@ -4351,8 +4664,8 @@ html += `</div>
                                                                     style="max-width:
                                                                     80px;font-Weight:600"></span></h4>
                                                     </div>`;
-if (purchaseData.is_same_state_trnx) {
-                                                  html += `<div>
+  if (purchaseData.is_same_state_trnx) {
+    html += `<div>
                                                         <h4 style="margin:
                                                             0;
                                                             text-align:
@@ -4370,7 +4683,7 @@ if (purchaseData.is_same_state_trnx) {
                                                                     style="max-width:
                                                                     80px;"></span></h4>
                                                     </div>`;
-                                                  html += `<div>
+    html += `<div>
                                                         <h4 style="margin:
                                                             0;
                                                             text-align:
@@ -4388,8 +4701,8 @@ if (purchaseData.is_same_state_trnx) {
                                                                     style="max-width:
                                                                     80px;"></span></h4>
                                                     </div>`;
-} else {
-                                                  html += `<div>
+  } else {
+    html += `<div>
                                                         <h4 style="margin:
                                                             0;
                                                             text-align:
@@ -4407,9 +4720,9 @@ if (purchaseData.is_same_state_trnx) {
                                                                     style="max-width:
                                                                     80px;"></span></h4>
                                                     </div>`;
-}
+  }
 
-html += `<div>
+  html += `<div>
                                                         
                                                     </div>
                                                     <div>
@@ -4527,8 +4840,8 @@ html += `<div>
                                                                     style="max-width:
                                                                     80px;"></span></h4>
                                                     </div>`;
-if (purchaseData.return_amount) {
-  html += `<div>
+  if (purchaseData.return_amount) {
+    html += `<div>
                                                         <h4 style="margin:
                                                             0;
                                                             text-align:
@@ -4546,9 +4859,9 @@ if (purchaseData.return_amount) {
                                                                     style="max-width:
                                                                     80px;"></span></h4>
                                                     </div>`;
-}
+  }
 
-html += `<div>
+  html += `<div>
                                                         <h4 style="margin:
                                                             0;
                                                             text-align:
@@ -4783,8 +5096,6 @@ html += `<div>
                       </div></body>
                       </html>`;*/
 
-    
-
   /*var options = {
     format: "A4",
     orientation: "portrait",
@@ -4873,35 +5184,36 @@ html += `<div>
 
     // Close the browser instance
     await browser.close();*/
-    /* -------------- commented by Soumalya Nandy ------------ */
+  /* -------------- commented by Soumalya Nandy ------------ */
 
-  try{
-    let file_path = "public/invoices/" + purchaseData.invoice_number + "_lists.pdf";
-    const options = { format: 'A4' };
+  try {
+    let file_path =
+      "public/invoices/" + purchaseData.invoice_number + "_lists.pdf";
+    const options = { format: "A4" };
 
     (async () => {
-        const file = { content: html };
-    
-        // Generate PDF
-        const pdfBuffer = await html_to_pdf.generatePdf(file, options);
-        
-        // Save PDF to file
-        fs.writeFileSync(file_path, pdfBuffer);
-        compactLog('PDF generated successfully!');
+      const file = { content: html };
 
-        res.send(
-          formatResponse(
-            {
-              file_name: purchaseData.invoice_number + "_lists.pdf",
-              url: getFileAbsulatePathPDF(file_path),
-              purchaseData,
-              payments,
-            },
-            "Invoice pdf"
-          )
-        );
+      // Generate PDF
+      const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+
+      // Save PDF to file
+      fs.writeFileSync(file_path, pdfBuffer);
+      compactLog("PDF generated successfully!");
+
+      res.send(
+        formatResponse(
+          {
+            file_name: purchaseData.invoice_number + "_lists.pdf",
+            url: getFileAbsulatePathPDF(file_path),
+            purchaseData,
+            payments,
+          },
+          "Invoice pdf",
+        ),
+      );
     })();
-    
+
     /*const doc = new jsPDF();
     doc.html(html, {
         callback: (pdf) => {
@@ -4921,8 +5233,6 @@ html += `<div>
             );
         },
     });*/
-
-    
   } catch (error) {
     return res
       .status(errorCodes.default)
