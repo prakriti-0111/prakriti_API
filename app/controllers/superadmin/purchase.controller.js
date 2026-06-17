@@ -1358,19 +1358,20 @@ exports.store = async (req, res) => {
       is_certificate_exist = stock ? thisItem.certificate_no : false;
       let purchaseProduct = await PurchaseProductModel.findOne({
         where: { certificate_no: thisItem.certificate_no },
-        // include: [
-        //   {
-        //     model: PurchaseModel,
-        //     as: "purchase",
-        //     required: true,
-        //     where: { is_approved: { [Op.ne]: 2 } },
-        //   },
-        // ],
+        include: [
+          {
+            model: PurchaseModel,
+            as: "purchase",
+            required: true,
+            where: { is_approved: { [Op.ne]: 2 } },
+          },
+        ],
       });
       is_certificate_exist = purchaseProduct ? thisItem.certificate_no : is_certificate_exist;
     }
   }
-compactLog("is_certificate_exist : ", is_certificate_exist);
+  compactLog("is_certificate_exist : ", is_certificate_exist);
+
   if(is_certificate_exist){
     return res
         .status(errorCodes.default)
