@@ -1218,6 +1218,172 @@ const calculateProductPriceCart = async (
   };
 };
 
+const calculateProductPriceReport = async (
+  materials,
+  sub_category,
+  isMaterial,
+  price_by_role,
+  tax_info,
+  fromCart
+) => {
+  let price_type = "",
+    discount_type = "",
+    making_dis_type = "";
+  if (price_by_role == "distributor") {
+    price_type = "distributor_price";
+    discount_type = "distributor_discount";
+    making_dis_type = "distributor_discount";
+  } else if (price_by_role == "admin") {
+    price_type = "admin_price";
+    discount_type = "admin_discount";
+    making_dis_type = "admin_discount";
+  } else if (price_by_role == "retailer") {
+    price_type = "retailer_max_price";
+    discount_type = "retailer_max_discount";
+    making_dis_type = "retailer_discount";
+  } else if (price_by_role == "customer") {
+    price_type = "customer_price";
+    discount_type = "customer_discount";
+    making_dis_type = "customer_discount";
+  }
+
+  let materialsNew = [],
+    total_weight = 0,
+    total_quantity = 0,
+    total_price = 0,
+    total_mrp = 0,
+    total_discount = 0,
+    total_material_discount = 0,
+    total_mrp_price = 0,
+    total_sale_price = 0;
+  console.log("materials : ", materials);
+  for (let i = 0; i < materials.length; i++) {
+    let materialPriceObj = await MaterialPriceModel.findOne({
+      where: { material_id: materials[i].material_id },
+      include: [
+        {
+          model: MaterialPricePurityModel,
+          as: "materialPricePurities",
+          where: { purity_id: materials[i].purity_id },
+          separate: true,
+        },
+      ],
+    });
+    let price = 0,
+      mrp = 0,
+      unit_based_mrp = 0,
+      discount_percent = 0,
+      discount_amount = 0,
+      total_gram = 0,
+      unit_name =
+        "unit" in materials[i] && materials[i].unit
+          ? materials[i].unit.name
+          : "";
+    if (materialPriceObj && materialPriceObj.materialPricePurities.length) {
+      let materialPrice = materialPriceObj.materialPricePurities[0];
+      //mrp = parseFloat(materialPrice.per_gram_price);
+      mrp = parseFloat(materialPrice[price_type]);
+      unit_based_mrp = convertPerGramPriceToPerUnit(
+        mrp,
+        unit_name
+      );
+      discount_percent = parseFloat(materialPrice[discount_type]);
+      total_gram = convertUnitToGram(unit_name, materials[i].weight);
+      if (!fromCart) {
+        if (isMaterial) {
+          let perWeight =
+            parseFloat(materials[i].weight) / parseInt(materials[i].quantity);
+          total_gram = convertUnitToGram(unit_name, 1);
+          //console.log(total_gram)
+        }
+        //total_gram = isMaterial ? weightFormat(total_gram / parseInt(materials[i].quantity)) : total_gram;
+      }
+
+      total_weight += parseFloat(total_gram);
+      total_quantity += parseInt(materials[i].quantity);
+      price =
+        mrp -
+        (mrp * discount_percent) / 100;
+      price = priceFormat(price * parseFloat(total_gram));
+      total_price += price;
+      total_mrp += priceFormat(
+        parseFloat(mrp) * parseFloat(total_gram)
+      );
+      discount_amount = priceFormat(
+        mrp * parseFloat(total_gram) - price
+      );
+      priceFormat((mrp * discount_percent) / 100);
+      total_material_discount += discount_amount;
+      total_discount += discount_amount;
+
+      total_mrp_price += priceFormat(
+        parseFloat(mrp) * parseFloat(total_gram)
+      );
+      total_sale_price += price;
+    }
+    materialsNew.push({
+      material_id: materials[i].material_id,
+      mrp: mrp,
+      unit_based_mrp: unit_based_mrp,
+      price: price,
+      discount_percent: discount_percent,
+      discount_amount: discount_amount,
+      total_gram: weightFormat(total_gram),
+    });
+  }
+  console.log("total_mrp_price : ", total_mrp_price);
+  let total_making_charge = 0;
+  let making_charge_type = sub_category ? sub_category.making_charge_type : "";
+  let making_charge = sub_category ? sub_category.making_charge : 0;
+  let making_charge_discount_percent = sub_category
+    ? sub_category[making_dis_type]
+    : 0;
+  if (making_charge_type == "per_piece") {
+    //total_making_charge = isMaterial ? parseFloat(making_charge) : priceFormat(total_quantity * parseFloat(making_charge));
+    total_making_charge = priceFormat(parseFloat(making_charge));
+  } else if (making_charge_type == "per_gram") {
+    total_making_charge = priceFormat(total_weight * parseFloat(making_charge));
+  }
+  let discount_amount = priceFormat(
+    (total_making_charge * making_charge_discount_percent) / 100
+  );
+  total_mrp_price += total_making_charge;
+  console.log("total_mrp_price after making charge : ", total_mrp_price);
+  total_making_charge = priceFormat(total_making_charge - discount_amount);
+  total_discount += discount_amount;
+  total_sale_price += total_making_charge;
+
+  let total_tax = 0;
+  if (tax_info) {
+    let igst = 0;
+    let cgst = !isEmpty(tax_info.cgst)
+      ? priceFormat((total_mrp_price * parseFloat(tax_info.cgst)) / 100, true)
+      : 0;
+    let sgst = !isEmpty(tax_info.sgst)
+      ? priceFormat((total_mrp_price * parseFloat(tax_info.sgst)) / 100, true)
+      : 0;
+    total_mrp_price += igst + cgst + sgst;
+    console.log("total_mrp_price after tax : ", total_mrp_price);
+    total_tax = igst + cgst + sgst;
+    total_sale_price += priceFormat(igst + cgst + sgst);
+  }
+
+  return {
+    price: total_price,
+    making_charge: total_making_charge,
+    making_charge_discount_percent: making_charge_discount_percent || 0,
+    making_charge_discount_amount: discount_amount,
+    total_material_discount: total_material_discount,
+    total_discount: total_discount,
+    materials: materialsNew,
+    total_weight: parseFloat(weightFormat(total_weight)).toFixed(3),
+    mrp: total_mrp,
+    total_mrp_price: priceFormat(total_mrp_price),
+    total_sale_price: priceFormat(total_sale_price),
+    total_tax: priceFormat(total_tax),
+  };
+};
+
 const calculateProductPriceByPurity = async (
   materials,
   making_charge,
@@ -4359,4 +4525,5 @@ module.exports = {
   avlStockUserIds,
   avlStockUserIdsNew,
   getOwnUserSaleProducts,
+  calculateProductPriceReport
 };
