@@ -92,6 +92,7 @@ app.use('/public/purchases', express.static('public/purchases'));
 app.use('/public/sales', express.static('public/sales'));
 app.use('/public/images', express.static('public/images'));
 app.use('/public/salaries', express.static('public/salaries'));
+app.use('/public/reports', express.static('public/reports'));
 
 const swaggeroptions = {
   definition: {

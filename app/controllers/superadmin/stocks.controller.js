@@ -16,11 +16,14 @@ const {
 const stocksModel = db.stocks;
 const {
   isEmpty,
+  weightFormat,
   priceFormat,
   convertUnitToGram,
   addLog,
   arrayColumn,
+  displayAmount,
 } = require("@helpers/helper");
+const { getFileAbsulatePathPDF } = require("@helpers/helper");
 const { base64FileUpload, removeFile } = require("@helpers/upload");
 const {
   getTotalStockPriceByUser,
@@ -37,6 +40,7 @@ const {
 } = require("@library/common");
 const { isDistributor, isSalesExecutive } = require("../../library/common");
 const { convertToSlug } = require("../../helpers/helper");
+const Role = db.roles;
 const productsModel = db.products;
 const sizesModel = db.sizes;
 const stock_materialsModel = db.stock_materials;
@@ -52,6 +56,298 @@ const PurchaseModel = db.purchases;
 const UserModel = db.users;
 const SaleModel = db.sales;
 const SaleProductModel = db.sale_products;
+const fs = require("fs");
+
+/**
+ * Generate sub-category wise current stock PDF report
+ */
+exports.currentStockReportPdf = async (req, res) => {
+  try {
+    // allow only superadmin or admin
+    if (!isSuperAdmin(req) && !isAdmin(req)) {
+      return res.status(errorCodes.auth).send(formatErrorResponse("Unauthorized"));
+    }
+    let { category_id, sub_category_id, type } = req.query;
+    type = type === undefined ? "product" : type;
+
+    // Determine user scope for stocks
+    let userID = await getStockUserID(req);
+
+    let role = await Role.findByPk(req.userId);
+    let roleName = role ? role.name : "user";
+
+    let conditions = { type };
+    if (!isEmpty(category_id)) {
+      // apply at product/material include level later
+      // keep productConditions to apply to include
+    }
+
+    // reuse include structure from index
+    let stockMaterialConditions = {};
+    let productConditions = {};
+    if (!isEmpty(category_id)) productConditions.category_id = category_id;
+    if (!isEmpty(sub_category_id)) productConditions.sub_category_id = sub_category_id;
+
+    let _include = [
+      {
+        model: stock_materialsModel,
+        as: "stockMaterials",
+        required: true,
+        where: stockMaterialConditions,
+        include: [
+          { model: materialModel, as: "material" },
+          { model: UnitModel, as: "unit" },
+          { model: PurityModel, as: "purity" },
+        ],
+      },
+      { model: UserModel, as: "user" },
+      { model: PurityModel, as: "spurity", required: false },
+    ];
+
+    if (type == "product" || type == "return") {
+      _include.push({ model: sizesModel, as: "size", required: false });
+      _include.push({
+        model: productsModel,
+        as: "product",
+        required: true,
+        where: productConditions,
+        include: [
+          { model: CategoryModel, as: "category" },
+          { model: SubCategoryModel, as: "sub_category" },
+          { model: CertificateModel, as: "certificates" },
+          { model: TaxSlabModel, as: "tax" },
+        ],
+      });
+    } else {
+      _include.push({
+        model: materialModel,
+        as: "material",
+        required: true,
+        where: productConditions,
+        include: [{ model: CategoryModel, as: "category" }, { model: PurityModel, as: "purities" }],
+      });
+    }
+
+    // scope user_id to available stock user ids
+    conditions.user_id = await getStockUserID(req, req.userId);
+
+    const rows = await stocksModel.findAll({ where: conditions, include: _include, order: [["id", "DESC"]] });
+
+    const items =
+      type == "product" || type == "return"
+        ? await StocksCollection(rows, req.userId, roleName)
+        : await StocksMaterialCollection(rows, req.userId, roleName);
+
+    // group by sub category
+    let groups = {};
+    // accumulate material-wise totals across the whole report
+    let materialTotals = {};
+    // overall totals across all products
+    let overallTotals = { total_qty: 0, total_weight: 0, total_value: 0 };
+    for (let it of items) {
+      let key = it.sub_category || it.category || "Others";
+      if (!groups[key]) groups[key] = { items: [], total_qty: 0, total_weight: 0, total_value: 0 };
+      groups[key].items.push(it);
+      groups[key].total_qty += Number(it.quantity || 0);
+      groups[key].total_weight += Number(it.total_weight || 0);
+      groups[key].total_value += Number(it.mrp || 0);
+      // accumulate overall totals
+      overallTotals.total_qty += Number(it.quantity || 0);
+      overallTotals.total_weight += Number(it.total_weight || 0);
+      overallTotals.total_value += Number(it.mrp || 0);
+    }
+
+    console.log("group stocks : ", groups);
+
+    // Build HTML using purchase invoice design for consistent printable layout
+    const cwd = process.cwd();
+    const logoUrl = `public/images/logo.png`;
+    let logo = "";
+    try {
+      const bitmap = fs.readFileSync(logoUrl);
+      logo = bitmap.toString("base64");
+    } catch (e) {
+      // ignore if logo not found
+      logo = "";
+    }
+
+    let html = `<!DOCTYPE html>
+    <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta http-equiv="X-UA-Compatible" content="IE=edge">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Current Stock Report</title>
+            <style>html{-webkit-print-color-adjust:exact;} body{box-sizing:border-box;padding:0;margin:0;font-family:'Poppins',sans-serif;} .invoice{max-width:1000px;margin:auto;padding:15px;background-color:#f9f9f9;} table{width:100%;border-collapse:collapse;} th,td{font-size:11px} thead th{background:#1E2757;color:#fff;padding:6px}</style>
+        </head>
+        <body>
+            <div class="invoice">
+                <table><tr><td>
+                    <div style="display:table;width:100%;">
+                        <div style="width:65%;display:table-cell;vertical-align:bottom;">
+                            ${logo?`<img src="data:image/png;base64,${logo}" style="width:220px;margin-left:10px;">`:""}
+                            <h3 style="margin:0;font-weight:400;font-size:12px;">Current Stock Report</h3>
+                        </div>
+                        <div style="width:35%;display:table-cell;vertical-align:middle;text-align:left;">
+                            <h3 style="margin:0;font-weight:600;font-size:16px;">Prakriti Patna</h3>
+                            <h3 style="margin:0;font-weight:400;font-size:12px;">Generated: ${new Date().toLocaleString()}</h3>
+                        </div>
+                    </div>
+                </td></tr></table>
+                <hr style="border:1px solid #1E2757" />`;
+
+    // For each subcategory render a table similar to purchase layout
+    for (let sub of Object.keys(groups)) {
+      let g = groups[sub];
+      html += `<h4 style="margin:8px 0;font-size:13px;">Sub Category: ${sub} (Items: ${g.items.length})</h4>`;
+      // add Material column into main table
+      html += `<table cellspacing="0" cellpadding="5" border="0" align="center"><thead><tr>
+        <th style="text-align:left;width:30px;">#</th>
+        <th style="text-align:left;">Product Name</th>
+        <th style="text-align:left;">Material</th>
+        <th style="text-align:left;width:100px;">Certificate</th>
+        <th style="text-align:left;width:80px;">Qty(pcs)</th>
+        <th style="text-align:left;width:100px;">Total Wt(gm)</th>
+        <th style="text-align:left;width:100px;">Price</th>
+        </tr></thead><tbody>`;
+
+      for (let i = 0; i < g.items.length; i++) {
+        const r = g.items[i];
+        // build material cell text and accumulate global material totals
+        let materialCell = '';
+        let seenMaterials = new Set();
+        if (r.stock_materials && r.stock_materials.length) {
+          let mparts = [];
+          for (let m of r.stock_materials) {
+            const mName = m.material_name || m.material_id || 'Unknown';
+            const w = Number(m.weight || m.quantity || 0) || 0;
+            const unit = m.unit_name || '';
+            mparts.push(`${mName} - ${weightFormat(w)} ${unit}`);
+
+            // initialize material totals map
+            if (!materialTotals[mName]) {
+              materialTotals[mName] = {
+                product_count: 0,
+                total_product_qty: 0,
+                total_product_weight: 0,
+                total_material_weight: 0,
+                total_price: 0,
+              };
+            }
+
+            // accumulate material specific sums
+            if (!seenMaterials.has(mName)) {
+              materialTotals[mName].product_count += 1;
+              materialTotals[mName].total_product_qty += Number(r.quantity || 0);
+              //materialTotals[mName].total_product_weight += Number(r.total_weight || 0);
+              materialTotals[mName].total_price += Number(r.mrp || 0);
+              seenMaterials.add(mName);
+            }
+            materialTotals[mName].total_material_weight += Number(w || 0);
+          }
+          materialCell = mparts.join('<br>');
+        }
+
+        html += `<tr style="background-color:${i % 2 == 0 ? '#fff' : '#f2f2f2'}"><td style="padding:6px;">${i + 1}</td>
+            <td style="padding:6px;">${r.name || ''} ${r.size_name?` - ${r.size_name}`:''}</td>
+            <td style="padding:6px;">${materialCell}</td>
+            <td style="padding:6px;">${r.certificate_no || ''}</td>
+            <td style="padding:6px;">${r.quantity || 0}</td>
+            <td style="padding:6px;">${r.total_weight_display || r.total_weight || 0}</td>
+            <td style="padding:6px;">${r.mrp_display || displayAmount(r.mrp, false, true, true) || (displayAmount(0, false, true, true))}</td>
+        </tr>`;
+      }
+
+      // Render totals as a normal row inside tbody to avoid repeating footers across pages
+      html += `</tbody>
+            <tr style="font-weight:600;background:#e9e9e9;">
+              <td colspan="2" style="padding:6px;">Totals</td>
+              <td style="padding:6px;"></td>
+              <td style="padding:6px;"></td>
+              <td style="padding:6px;">${g.total_qty}</td>
+              <td style="padding:6px;">${weightFormat(g.total_weight)+" gm"}</td>
+              <td style="padding:6px;">${displayAmount(g.total_value, false, true, true)}</td>
+            </tr>
+        </table><div style="height:12px"></div>`;
+    }
+
+    // Final overall totals row (All products)
+    html += `<table cellspacing="0" cellpadding="5" border="0" align="center"><tbody>
+      <tr style="font-weight:700;background:#dfe6f7;">
+        <td colspan="2" style="padding:6px;">All Products Total</td>
+        <td style="padding:6px;"></td>
+        <td style="padding:6px;"></td>
+        <td style="padding:6px;">${overallTotals.total_qty}</td>
+        <td style="padding:6px;">${weightFormat(overallTotals.total_weight)+" gm"}</td>
+        <td style="padding:6px;">${displayAmount(overallTotals.total_value, false, true, true)}</td>
+      </tr>
+    </tbody></table><div style="height:12px"></div>`;
+
+    // material-wise totals summary (global across report)
+    if (materialTotals && Object.keys(materialTotals).length) {
+      html += `<h4 style="margin:8px 0;font-size:13px;">Material Wise Totals</h4>`;
+      html += `<table cellspacing="0" cellpadding="5" border="0" align="center" style="margin-bottom:10px;border-collapse:collapse;color:#000;font-size:11px;"><thead><tr style="background:#1E2757;color:#fff;"><th style="text-align:left;">Material</th><th style="text-align:left;width:80px;">Product Qty(pcs)</th><th style="text-align:left;width:120px;">Total Material Wt(gm)</th><th style="text-align:left;width:120px;">Total Price</th></tr></thead><tbody>`;
+      for (let mn of Object.keys(materialTotals)) {
+        const m = materialTotals[mn];
+        html += `<tr style="background-color:#fff"><td style="padding:6px;">${mn}</td><td style="padding:6px;">${m.total_product_qty}</td><td style="padding:6px;">${weightFormat(m.total_material_weight)+" gm"}</td><td style="padding:6px;">${displayAmount(m.total_price, false, true, true)}</td></tr>`;
+      }
+      html += `</tbody></table><div style="height:12px"></div>`;
+    }
+
+    // footer
+    html += `<div style="width:100%;padding-top:10px;border-top:1px solid #ddd;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;">
+          <div>Generated by Prakriti System</div>
+          <div>Total Subcategories: ${Object.keys(groups).length}</div>
+        </div>
+      </div>`;
+
+    html += `</div></body></html>`;
+
+    const htmlPdf = require("html-pdf-node");
+    const file = { content: html };
+    const options = { format: "A4", margin: { top: "10mm", bottom: "10mm" } };
+
+    try {
+      const filename = `current-stock-report_${new Date().getTime()}.pdf`;
+      const file_path = `public/reports/${filename}`;
+      // ensure directory exists
+      try {
+        fs.mkdirSync("public/reports", { recursive: true });
+      } catch (e) {
+        addLog("currentStockReportPdf mkdir error: " + (e && e.message ? e.message : e));
+      }
+
+      try {
+        const pdfBuffer = await htmlPdf.generatePdf(file, options);
+        const buf = Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer);
+        fs.writeFileSync(file_path, buf);
+        addLog(`currentStockReportPdf generated: ${file_path}`);
+        return res.send(
+          formatResponse(
+            {
+              file_name: filename,
+              url: getFileAbsulatePathPDF(file_path),
+            },
+            "Current stock report"
+          )
+        );
+      } catch (e) {
+        addLog("currentStockReportPdf generation error: " + (e && e.message ? e.message : e));
+        console.error("currentStockReportPdf generation error:", e);
+        return res.status(errorCodes.default).send(formatErrorResponse("Failed to generate report"));
+      }
+    } catch (e) {
+      addLog("currentStockReportPdf unexpected error: " + (e && e.message ? e.message : e));
+      console.error("currentStockReportPdf unexpected error:", e);
+      return res.status(errorCodes.default).send(formatErrorResponse("Failed to generate report"));
+    }
+  } catch (err) {
+    addLog("currentStockReportPdf error: " + (err && err.message ? err.message : err));
+    console.error("currentStockReportPdf error:", err);
+    return res.status(errorCodes.default).send(formatErrorResponse("Failed to generate report"));
+  }
+};
 
 /**
  * Retrieve all Unit
@@ -360,37 +656,32 @@ exports.index = async (req, res) => {
     }*/
 
     let sCond = [];
-    if (!isEmpty(search)/*  && isNaN(search) */) {
-      let sArr = search.split(",");
-      /* compactLog(sArr); */
+    if (!isEmpty(search)) {
+      let sArr = String(search).split(",");
       for (let i = 0; i < sArr.length; i++) {
-        /* compactLog("sArr : ", sArr[i]); */
-        let s = sArr[i].trim().toLowerCase();
-        /* compactLog("s : ", s); */
-        if (s.indexOf("gm") !== -1) {
-          s = s.replace("gm", "").trim();
-          sCond.push({ total_weight: { [Op.lte]: `${s}` } });
-          //conditions = { ...conditions, [Op.or]: [{ 'total_weight': { [Op.lte]: `${s}` } }] };
-        }
-        else {/* if((/^\d+$/.test(str) || isNaN(s)) && s.length == 12){
-          sCond.push({ certificate_no: s });
-        }
-        else if (isNaN(s)) { */
+        let s = sArr[i].trim();
+        if (s === "") continue;
+        // numeric price search
+        if (!isNaN(s)) {
+          const num = parseFloat(s);
+          sCond.push({ mrp: { [Op.lte]: num } });
+        } else {
+          // text search
+          const sl = s.toLowerCase();
           if (type == "product" || type == "return") {
-            sCond.push({ "$product.name$": { [Op.like]: `%${s}%` } });
-            sCond.push({ "$product.product_code$": { [Op.like]: `%${s}%` } });
-            //conditions = { ...conditions, [Op.or]: [{ '$product.name$': { [Op.like]: `%${s}%` } }, { certificate_no: s }, { '$product.product_code$': { [Op.like]: `%${s}%` } }, /*{ '$user.name$': { [Op.like]: `%${search}%` } }, { '$user.company_name$': { [Op.like]: `%${search}%` } }*/] };
+            sCond.push({ "$product.name$": { [Op.like]: `%${sl}%` } });
+            sCond.push({ certificate_no: sl });
+            sCond.push({ "$product.product_code$": { [Op.like]: `%${sl}%` } });
           } else {
-            sCond.push({ "$material.name$": { [Op.like]: `%${s}%` } });
-            sCond.push({ "$spurity.name$": { [Op.like]: `%${s}%` } });
-            //conditions = { ...conditions, [Op.or]: [{ '$material.name$': { [Op.like]: `%${s}%` } }] };
+            sCond.push({ "$material.name$": { [Op.like]: `%${sl}%` } });
+            sCond.push({ "$purity.name$": { [Op.like]: `%${sl}%` } });
           }
-          sCond.push({ certificate_no: s });
         }
       }
-      /* compactLog(sCond); */
-      conditions = { ...conditions, [Op.or]: sCond };
-    } 
+      if (sCond.length) {
+        conditions = { ...conditions, [Op.or]: sCond };
+      }
+    }
     /* if(search.length>=8) {
       let sArr = search.split(",");
       
