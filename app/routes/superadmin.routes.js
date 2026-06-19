@@ -1138,6 +1138,11 @@ module.exports = (app, express, io) => {
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     stocksController.getStockPriceByCategory,
   );
+  router.get(
+    "/stocks/current-stock-report",
+    [authJwt.verifyToken],
+    stocksController.currentStockReportPdf,
+  );
   router.post(
     "/stocks/return-stock/move-to-stock",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
