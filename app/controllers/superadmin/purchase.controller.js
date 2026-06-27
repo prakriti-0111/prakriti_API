@@ -1247,26 +1247,38 @@ exports.downloadTxnLedger = async (req, res) => {
       const options = { format: "A4" };
 
       (async () => {
-        const file = { content: html };
+        try {
+          const file = { content: html };
 
-        // Generate PDF
-        const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+          // Generate PDF
+          const pdfBuffer = await html_to_pdf.generatePdf(file, options);
 
-        // Save PDF to file
-        fs.writeFileSync(file_path, pdfBuffer);
-        compactLog("PDF generated successfully!");
+          // Ensure the destination directory exists before writing
+          fs.mkdirSync(file_path.substring(0, file_path.lastIndexOf("/")), {
+            recursive: true,
+          });
 
-        res.send(
-          formatResponse(
-            {
-              file_name: filename,
-              url: getFileAbsulatePathPDF(file_path),
-              items: passbook,
-              total: passbook.length,
-            },
-            "Ledger pdf",
-          ),
-        );
+          // Save PDF to file
+          fs.writeFileSync(file_path, pdfBuffer);
+          compactLog("PDF generated successfully!");
+
+          res.send(
+            formatResponse(
+              {
+                file_name: filename,
+                url: getFileAbsulatePathPDF(file_path),
+                items: passbook,
+                total: passbook.length,
+              },
+              "Ledger pdf",
+            ),
+          );
+        } catch (error) {
+          compactLog("PDF generation failed!", error);
+          return res
+            .status(errorCodes.default)
+            .send(formatErrorResponse(error.toString()));
+        }
       })();
     } catch (error) {
       return res
@@ -6068,27 +6080,39 @@ exports.downloadInvoiceInfo = async (req, res) => {
     const options = { format: "A4" };
 
     (async () => {
-      const file = { content: html };
+      try {
+        const file = { content: html };
 
-      // Generate PDF
-      const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+        // Generate PDF
+        const pdfBuffer = await html_to_pdf.generatePdf(file, options);
 
-      // Save PDF to file
-      fs.writeFileSync(file_path, pdfBuffer);
-      compactLog("PDF generated successfully!");
+        // Ensure the destination directory exists before writing
+        fs.mkdirSync(file_path.substring(0, file_path.lastIndexOf("/")), {
+          recursive: true,
+        });
 
-      res.send(
-        formatResponse(
-          {
-            file_name: purchaseData.invoice_number + "_tax.pdf",
-            url: getFileAbsulatePathPDF(file_path),
-            purchase,
-            purchaseData,
-            payments,
-          },
-          "Invoice pdf",
-        ),
-      );
+        // Save PDF to file
+        fs.writeFileSync(file_path, pdfBuffer);
+        compactLog("PDF generated successfully!");
+
+        res.send(
+          formatResponse(
+            {
+              file_name: purchaseData.invoice_number + "_tax.pdf",
+              url: getFileAbsulatePathPDF(file_path),
+              purchase,
+              purchaseData,
+              payments,
+            },
+            "Invoice pdf",
+          ),
+        );
+      } catch (error) {
+        compactLog("PDF generation failed!", error);
+        return res
+          .status(errorCodes.default)
+          .send(formatErrorResponse(error.toString()));
+      }
     })();
   } catch (error) {
     return res
@@ -6831,26 +6855,38 @@ exports.downloadInvoiceItemList = async (req, res) => {
     const options = { format: "A4" };
 
     (async () => {
-      const file = { content: html };
+      try {
+        const file = { content: html };
 
-      // Generate PDF
-      const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+        // Generate PDF
+        const pdfBuffer = await html_to_pdf.generatePdf(file, options);
 
-      // Save PDF to file
-      fs.writeFileSync(file_path, pdfBuffer);
-      compactLog("PDF generated successfully!");
+        // Ensure the destination directory exists before writing
+        fs.mkdirSync(file_path.substring(0, file_path.lastIndexOf("/")), {
+          recursive: true,
+        });
 
-      res.send(
-        formatResponse(
-          {
-            file_name: purchaseData.invoice_number + "_item_list.pdf",
-            url: getFileAbsulatePathPDF(file_path),
-            html: html,
-            purchaseData,
-          },
-          "Invoice pdf",
-        ),
-      );
+        // Save PDF to file
+        fs.writeFileSync(file_path, pdfBuffer);
+        compactLog("PDF generated successfully!");
+
+        res.send(
+          formatResponse(
+            {
+              file_name: purchaseData.invoice_number + "_item_list.pdf",
+              url: getFileAbsulatePathPDF(file_path),
+              html: html,
+              purchaseData,
+            },
+            "Invoice pdf",
+          ),
+        );
+      } catch (error) {
+        compactLog("PDF generation failed!", error);
+        return res
+          .status(errorCodes.default)
+          .send(formatErrorResponse(error.toString()));
+      }
     })();
   } catch (error) {
     return res
@@ -8478,26 +8514,38 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
     const options = { format: "A4" };
 
     (async () => {
-      const file = { content: html };
+      try {
+        const file = { content: html };
 
-      // Generate PDF
-      const pdfBuffer = await html_to_pdf.generatePdf(file, options);
+        // Generate PDF
+        const pdfBuffer = await html_to_pdf.generatePdf(file, options);
 
-      // Save PDF to file
-      fs.writeFileSync(file_path, pdfBuffer);
-      compactLog("PDF generated successfully!");
+        // Ensure the destination directory exists before writing
+        fs.mkdirSync(file_path.substring(0, file_path.lastIndexOf("/")), {
+          recursive: true,
+        });
 
-      res.send(
-        formatResponse(
-          {
-            file_name: purchaseData.invoice_number + "_item_details.pdf",
-            url: getFileAbsulatePathPDF(file_path),
-            purchaseData,
-            payments,
-          },
-          "Invoice pdf",
-        ),
-      );
+        // Save PDF to file
+        fs.writeFileSync(file_path, pdfBuffer);
+        compactLog("PDF generated successfully!");
+
+        res.send(
+          formatResponse(
+            {
+              file_name: purchaseData.invoice_number + "_item_details.pdf",
+              url: getFileAbsulatePathPDF(file_path),
+              purchaseData,
+              payments,
+            },
+            "Invoice pdf",
+          ),
+        );
+      } catch (error) {
+        compactLog("PDF generation failed!", error);
+        return res
+          .status(errorCodes.default)
+          .send(formatErrorResponse(error.toString()));
+      }
     })();
 
     /*const doc = new jsPDF();
