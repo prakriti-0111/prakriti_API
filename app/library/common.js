@@ -38,6 +38,7 @@ const {
   getFormatedAddress,
   ucWords,
   getFileAbsulatePath,
+  requiresPaymentApproval,
 } = require("@helpers/helper");
 const {
   NotificationCollection,
@@ -2092,6 +2093,116 @@ const isRetailer = (req) => {
 const isCustomer = (req) => {
   let role = isObject(req) ? req.role : req;
   return role == 6;
+};
+
+/**
+ * Role id for a user, or null when it cannot be resolved.
+ *
+ * Memoised for the life of the request batch: a single sale writes two payment
+ * rows and asks about the same two users for each, and roles do not change
+ * underneath a running transaction.
+ */
+const roleIdCache = new Map();
+const getUserRoleId = async (userId) => {
+  if (isEmpty(userId)) return null;
+  const key = String(userId);
+  if (roleIdCache.has(key)) return roleIdCache.get(key);
+  const user = await UserModel.findOne({
+    where: { id: userId },
+    attributes: ["id", "role_id"],
+  });
+  const roleId = user ? user.role_id : null;
+  roleIdCache.set(key, roleId);
+  // Keep the cache from growing without bound in a long-lived process.
+  if (roleIdCache.size > 500) roleIdCache.clear();
+  return roleId;
+};
+
+/**
+ * Does this payment need the receiver to accept it before the money moves?
+ *
+ * The relationship-aware form of `requiresPaymentApproval`: it looks the two
+ * parties' roles up first, so an SE selling to their retailer can settle cash
+ * and UPI on the spot while every other pair waits for an accept on every mode.
+ * Prefer this over the bare helper anywhere both user ids are in hand.
+ *
+ * @param {string} mode           payment_mode
+ * @param {string} [paymentType]  request-level payment_type (send_money | advance | payment)
+ * @param {number} senderUserId   the party the money comes from
+ * @param {number} receiverUserId the party whose wallet it lands in
+ */
+const paymentNeedsApproval = async (
+  mode,
+  paymentType,
+  senderUserId,
+  receiverUserId,
+) => {
+  // Cheap exits first - neither depends on who the parties are, so skip the
+  // two user lookups entirely for metal and for the wallet-screen types.
+  if (isEmpty(mode)) return false;
+  if (String(mode).toLowerCase().trim() === "metal") return false;
+  if (requiresPaymentApproval(mode, paymentType)) return true;
+
+  const [senderRole, receiverRole] = await Promise.all([
+    getUserRoleId(senderUserId),
+    getUserRoleId(receiverUserId),
+  ]);
+
+  return requiresPaymentApproval(mode, paymentType, {
+    senderRole,
+    receiverRole,
+  });
+};
+
+/**
+ * Wallet rows that have been superseded by an acceptance, and so must not be
+ * listed in their own right.
+ *
+ * When a request is accepted while newer rows already sit above it, the accept
+ * flow leaves the original in place and writes a fresh "Accepted" row at the
+ * top pointing back at it (`parent_id`). The original then belongs under that
+ * new row as history, not beside it in the list.
+ *
+ * The `payment_belongs` match is what makes this safe. Plenty of unrelated rows
+ * carry a `parent_id` - a sale writes the buyer's mirrored debit as a child of
+ * the seller's credit - but a mirror lands in the OTHER party's ledger, while
+ * an acceptance lands in the same one it supersedes. Without that clause this
+ * would hide every seller's credit row whose buyer-side debit had settled.
+ *
+ * @param {number} receiverId the ledger being listed (payments.payment_belongs)
+ * @returns a Sequelize literal suitable for `{ id: { [Op.notIn]: ... } }`
+ */
+const supersededWalletRowIds = (receiverId) =>
+  Sequelize.literal(
+    `(SELECT p2.parent_id FROM payments AS p2
+        WHERE p2.parent_id IS NOT NULL
+          AND p2.status = 'success'
+          AND p2.payment_belongs = ${parseInt(receiverId, 10) || 0}
+          AND p2.deleted_at IS NULL)`,
+  );
+
+/**
+ * The superseded rows folded away under one accepted row, oldest first.
+ * Empty for a row that settled in place, which is the common case.
+ */
+const getWalletRowHistory = async (row) => {
+  if (!row || isEmpty(row.parent_id)) return [];
+  const history = [];
+  let cursor = row;
+  // Walk the chain rather than assuming a single hop: accepting, superseding
+  // and accepting again is possible, and every step belongs in the history.
+  while (!isEmpty(cursor.parent_id) && history.length < 20) {
+    const parent = await PaymentModel.findOne({
+      where: {
+        id: cursor.parent_id,
+        payment_belongs: row.payment_belongs,
+      },
+    });
+    if (!parent) break;
+    history.push(parent);
+    cursor = parent;
+  }
+  return history.reverse();
 };
 
 const updateWalletRemainingBalance = async (userId, paymenId, payment_type) => {
@@ -4990,5 +5101,9 @@ module.exports = {
   avlStockUserIds,
   avlStockUserIdsNew,
   getOwnUserSaleProducts,
-  calculateProductPriceReport
+  calculateProductPriceReport,
+  getUserRoleId,
+  paymentNeedsApproval,
+  supersededWalletRowIds,
+  getWalletRowHistory
 };
