@@ -6,7 +6,7 @@ const {
   displayAmount,
   paymentModeDisplay,
 } = require("@helpers/helper");
-const { getWalletBalance } = require("@library/common");
+const { getWalletBalance, getWalletRowHistory } = require("@library/common");
 const db = require("@models");
 const PaymentModel = db.payments;
 
@@ -19,7 +19,16 @@ const WalletCollection = async (data, p_mode = null) => {
   }
 };
 
-const getModelObject = async (data, index = null, p_mode = null) => {
+/**
+ * @param {boolean} withHistory serialise the superseded rows folded under this
+ *   one. False for the history entries themselves, so the walk terminates.
+ */
+const getModelObject = async (
+  data,
+  index = null,
+  p_mode = null,
+  withHistory = true,
+) => {
   let debit_amount = 0;
   let credit_amount = 0;
   if (data.type == "debit") {
@@ -151,7 +160,23 @@ const getModelObject = async (data, index = null, p_mode = null) => {
   const ui_can_accept =
     data.status == "pending" && data.can_accept ? true : false;
 
+  /*
+   * Rows this one superseded when it was accepted, oldest first. Present only
+   * when the acceptance had to be written as a new row because the ledger had
+   * already moved on; a row accepted in place supersedes nothing and carries an
+   * empty history, so the UI shows no expander for it.
+   */
+  let history = [];
+  if (withHistory) {
+    const historyRows = await getWalletRowHistory(data);
+    history = await mapConcurrent(historyRows, (row) =>
+      getModelObject(row, null, p_mode, false),
+    );
+  }
+
   return {
+    history: history,
+    has_history: history.length > 0,
     id: data.id,
     amount: displayAmount(data.amount),
     payment_mode: payment_mode,
