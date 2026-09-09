@@ -25,7 +25,6 @@ const {
   encodeForStorage,
   decodeFromStorage,
   cleanInput,
-  requiresPaymentApproval,
 } = require("@helpers/helper");
 const {
   updateOrCreate,
@@ -49,6 +48,7 @@ const {
   getUserColumnValue,
   avlStockUserIdsNew,
   getLiveGoldRate,
+  paymentNeedsApproval,
 } = require("@library/common");
 const { getPaginationOptions } = require("@helpers/paginator");
 const { byTxnDateDesc } = require("@helpers/ledgerOrder");
@@ -1246,7 +1246,20 @@ exports.store = async (req, res) => {
     let status = "due",
       paid_amount = 0,
       due_amount = 0;
-    if (!requiresPaymentApproval(data.payment_mode)) {
+    /*
+     * One verdict for this whole sale: the invoice's paid/due figures below and
+     * the payment rows further down must agree about whether the money has
+     * actually landed. An SE taking cash or UPI from their own retailer settles
+     * on the spot; every other pair, and cheque/RTGS in every pair, waits for
+     * the receiver to accept.
+     */
+    const salePaymentNeedsApproval = await paymentNeedsApproval(
+      data.payment_mode,
+      null,
+      data.user_id,
+      userID,
+    );
+    if (!salePaymentNeedsApproval) {
       status =
         priceFormat(data.paid_amount) >= priceFormat(data.total_payable)
           ? "paid"
@@ -1724,6 +1737,16 @@ exports.store = async (req, res) => {
       }
 
       if (amount > 0) {
+        /*
+         * One verdict for the whole pair. An SE taking cash or UPI from their
+         * own retailer settles on the spot; every other pair, and cheque/RTGS
+         * in every pair, waits for the receiver to accept. Decided once here so
+         * the seller's credit and the buyer's debit below can never disagree -
+         * when they did, a cheque sale debited the buyer immediately while the
+         * seller's credit stayed pending, and the money existed in no wallet at
+         * all until someone clicked accept.
+         */
+        const needsApproval = salePaymentNeedsApproval;
         let payment = await paymentModel.create({
           payment_mode: data.payment_mode,
           amount: amount,
@@ -1732,7 +1755,7 @@ exports.store = async (req, res) => {
           payment_date: moment().format("YYYY-MM-DD"),
           txn_id: data.transaction_no,
           cheque_no: data.cheque_no,
-          status: requiresPaymentApproval(data.payment_mode) ? "pending" : "success",
+          status: needsApproval ? "pending" : "success",
           type: "credit",
           table_type: "sale",
           table_id: sale.id,
@@ -1753,14 +1776,8 @@ exports.store = async (req, res) => {
           payment_date: moment().format("YYYY-MM-DD"),
           txn_id: data.transaction_no,
           cheque_no: data.cheque_no,
-          /*
-           * Both halves of the pair have to wait together. This was hardcoded
-           * "success" while the credit above honoured the approval rule, so a
-           * cheque or RTGS sale debited the buyer immediately and left the
-           * seller's credit pending - the money left one wallet and arrived in
-           * none, which is one way a buyer's balance went negative.
-           */
-          status: requiresPaymentApproval(data.payment_mode) ? "pending" : "success",
+          // Both halves of the pair move together - see the note above.
+          status: needsApproval ? "pending" : "success",
           type: "debit",
           table_type: "purchase",
           table_id: purchase ? purchase.id : sale.id,
@@ -2152,7 +2169,7 @@ exports.statuschange = async (req, res) => {
         where: { table_type: "sale", table_id: sale.id },
       });
       if (payment) {
-        if (requiresPaymentApproval(payment.payment_mode) && payment.status == "pending") {
+        if (payment.status == "pending") {
           paidAmnt = priceFormat(paidAmnt - parseFloat(payment.amount));
         }
       }
@@ -2201,7 +2218,7 @@ exports.statuschange = async (req, res) => {
           where: { table_type: "sale", table_id: sale.id },
         });
         if (payment) {
-          if (requiresPaymentApproval(payment.payment_mode) && payment.status == "pending") {
+          if (payment.status == "pending") {
             await paymentModel.destroy({ where: { id: payment.id } });
             await paymentModel.destroy({
               where: { table_type: "purchase", table_id: sale.id },

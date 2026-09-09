@@ -1822,35 +1822,76 @@ exports.updateStatus = async (req, res) => {
         where: { parent_id: payment.id, status: "pending" },
       });
 
-      // mark original receiver-side request row as processed (keep status=pending so serializer shows 'processed')
-      const updateObj = { can_accept: false };
-      if (data.ref_no) updateObj.ref_no = data.ref_no;
-      await PaymentModel.update(updateObj, { where: { id: payment.id } });
-
-      // insert a new accepted ledger row so it appears at the top of the list
-      const acceptedPayment = await PaymentModel.create({
-        parent_id: payment.id,
-        user_id: payment.user_id,
-        payment_by: payment.payment_by,
-        amount: payment.amount,
-        payment_mode: payment.payment_mode,
-        payment_type: payment.payment_type,
-        remaining_balance: 0,
-        notes: payment.notes || null,
-        cheque_no: payment.cheque_no || null,
-        txn_id: payment.txn_id || null,
-        weight: payment.weight || null,
-        status: "success",
-        payment_date: moment().format("YYYY-MM-DD"),
-        table_type: payment.table_type,
-        table_id: payment.table_id,
-        payment_belongs: payment.payment_belongs,
-        due_date: payment.due_date || null,
-        type: payment.type,
-        purpose: payment.purpose,
-        can_accept: false,
-        is_advance: payment.is_advance,
+      /*
+       * Where the accepted row goes depends on whether the receiver's ledger
+       * has moved on since the request landed.
+       *
+       * Nothing newer: the row is still the latest thing they have, so it just
+       * becomes "Accepted" in place - one row, no duplicate.
+       *
+       * Something newer: the ledger reads newest-first, so an in-place update
+       * would bury the acceptance mid-list. The original is superseded instead
+       * and a fresh row carrying the accepted status goes to the top, with the
+       * original folded away underneath it as history the UI can expand.
+       *
+       * "Newer" is judged across the receiver's whole ledger - any row of
+       * theirs with a higher id, whoever sent it and whatever type it was.
+       */
+      const newerRowCount = await PaymentModel.count({
+        where: {
+          payment_belongs: payment.payment_belongs,
+          id: { [Op.gt]: payment.id },
+        },
       });
+      const isLatestForReceiver = newerRowCount === 0;
+
+      let acceptedPayment;
+      if (isLatestForReceiver) {
+        const updateObj = { status: "success", can_accept: false };
+        if (data.ref_no) updateObj.ref_no = data.ref_no;
+        await PaymentModel.update(updateObj, { where: { id: payment.id } });
+        acceptedPayment = await PaymentModel.findOne({
+          where: { id: payment.id },
+        });
+      } else {
+        // Supersede the original: it keeps status=pending so it still reads as
+        // a request, and can_accept=false so it can no longer be acted on.
+        const updateObj = { can_accept: false };
+        if (data.ref_no) updateObj.ref_no = data.ref_no;
+        await PaymentModel.update(updateObj, { where: { id: payment.id } });
+
+        /*
+         * The accepted row shares its parent's `payment_belongs`, which is what
+         * separates it from a mirrored counterparty row: a mirror lands in the
+         * OTHER party's ledger, this one lands in the same ledger it supersedes.
+         * The wallet query relies on exactly that to know which originals to
+         * fold away - see WalletCollection / wallet.controller.
+         */
+        acceptedPayment = await PaymentModel.create({
+          parent_id: payment.id,
+          user_id: payment.user_id,
+          payment_by: payment.payment_by,
+          amount: payment.amount,
+          payment_mode: payment.payment_mode,
+          payment_type: payment.payment_type,
+          remaining_balance: 0,
+          notes: payment.notes || null,
+          cheque_no: payment.cheque_no || null,
+          txn_id: payment.txn_id || null,
+          weight: payment.weight || null,
+          ref_no: data.ref_no || payment.ref_no || null,
+          status: "success",
+          payment_date: moment().format("YYYY-MM-DD"),
+          table_type: payment.table_type,
+          table_id: payment.table_id,
+          payment_belongs: payment.payment_belongs,
+          due_date: payment.due_date || null,
+          type: payment.type,
+          purpose: payment.purpose,
+          can_accept: false,
+          is_advance: payment.is_advance,
+        });
+      }
       await updateWalletRemainingBalance(
         acceptedPayment.payment_belongs,
         acceptedPayment.id,
@@ -1940,9 +1981,13 @@ exports.updateStatus = async (req, res) => {
               });
               if (childPayment) {
                 // do not modify sender-side payment rows here; only update purchase records when appropriate
-                if (
-                  !requiresPaymentApproval(childPayment.payment_mode, childPayment.table_type)
-                ) {
+                /*
+                 * `table_type` is "sale"/"purchase"/"send_money" - it was being
+                 * passed where a request-level payment_type belongs, so this
+                 * asked a question the helper could not answer. What actually
+                 * matters is whether the mirrored row has settled.
+                 */
+                if (childPayment.status == "success") {
                   const updateObj2 = { due_amount, paid_amount, status };
                   if (payment.due_date)
                     updateObj2.due_date = moment(payment.due_date).format(
