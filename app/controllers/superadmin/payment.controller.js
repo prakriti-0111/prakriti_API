@@ -32,6 +32,7 @@ const {
   sendNotification,
   updateAdvanceAmount,
   isManager,
+  supersededPaymentRowIds,
 } = require("@library/common");
 const {
   recalculatePaymentRemainingBalance,
@@ -60,6 +61,15 @@ exports.index = async (req, res) => {
   if (!isEmpty(table_id)) {
     conditions.table_id = table_id;
   }
+
+  /*
+   * A request that was accepted after newer rows had arrived is represented by
+   * the "Accepted" row written above it; the original folds away underneath as
+   * history and must not also appear as a row of its own. Same rule the wallet
+   * screen follows, so an invoice's payment table and the wallet never disagree
+   * about how many rows one payment produced.
+   */
+  conditions.id = { [Op.notIn]: supersededPaymentRowIds() };
 
   const paginatorOptions = getPaginationOptions(page, limit);
   PaymentModel.findAndCountAll({

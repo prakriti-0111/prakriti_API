@@ -6,7 +6,7 @@ const {
   displayAmount,
   paymentModeDisplay,
 } = require("@helpers/helper");
-const { getWalletBalance, getWalletRowHistory } = require("@library/common");
+const { getWalletBalance, getPaymentRowHistory } = require("@library/common");
 const db = require("@models");
 const PaymentModel = db.payments;
 
@@ -29,6 +29,12 @@ const getModelObject = async (
   p_mode = null,
   withHistory = true,
 ) => {
+  /*
+   * A history row is a record of what happened, not a live ledger line. The
+   * accepted row above it already carries the money, so repeating the figure
+   * here would read as though the amount had landed twice.
+   */
+  const isHistoryRow = !withHistory;
   let debit_amount = 0;
   let credit_amount = 0;
   if (data.type == "debit") {
@@ -184,10 +190,15 @@ const getModelObject = async (
    */
   let history = [];
   if (withHistory) {
-    const historyRows = await getWalletRowHistory(data);
+    const historyRows = await getPaymentRowHistory(data);
     history = await mapConcurrent(historyRows, (row) =>
       getModelObject(row, null, p_mode, false),
     );
+  }
+
+  if (isHistoryRow) {
+    debit_amount = 0;
+    credit_amount = 0;
   }
 
   return {

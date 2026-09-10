@@ -18,7 +18,7 @@ const {
   getWalletBalance,
   getWorkingUserID,
   isManager,
-  supersededWalletRowIds,
+  supersededPaymentRowIds,
 } = require("@library/common");
 const { WalletCollection } = require("@resources/superadmin/WalletCollection");
 const PaymentModel = db.payments;
@@ -59,7 +59,7 @@ exports.index = async (req, res) => {
    * the "Accepted" row written above it; the original folds away underneath as
    * history and must not also appear as a row of its own.
    */
-  conditions.id = { [Op.notIn]: supersededWalletRowIds(superAdminId) };
+  conditions.id = { [Op.notIn]: supersededPaymentRowIds(superAdminId) };
   const paginatorOptions = getPaginationOptions(page, limit);
   PaymentModel.findAndCountAll({
     order: [["id", "DESC"]],
