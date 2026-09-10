@@ -8,7 +8,7 @@ const sequelize = db.sequelize;
 const {
   getWalletBalance,
   getSuperAdminId,
-  supersededWalletRowIds,
+  supersededPaymentRowIds,
 } = require("@library/common");
 const {WalletCollection} = require("@resources/superadmin/WalletCollection");
 const PaymentModel = db.payments;
@@ -34,7 +34,7 @@ exports.index = async (req, res) => {
   }
   conditions = {...conditions, ...getDateFromToWhere(date_from, date_to, 'payment_date')}
   // Superseded originals belong under their accepted row, not beside it.
-  conditions.id = { [Op.notIn]: supersededWalletRowIds(req.userId) };
+  conditions.id = { [Op.notIn]: supersededPaymentRowIds(req.userId) };
   const paginatorOptions = getPaginationOptions(page, limit);
   PaymentModel.findAndCountAll({ 
     order:[['id', 'DESC']],

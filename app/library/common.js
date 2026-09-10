@@ -2158,7 +2158,7 @@ const paymentNeedsApproval = async (
 };
 
 /**
- * Wallet rows that have been superseded by an acceptance, and so must not be
+ * Payment rows that have been superseded by an acceptance, and so must not be
  * listed in their own right.
  *
  * When a request is accepted while newer rows already sit above it, the accept
@@ -2172,23 +2172,34 @@ const paymentNeedsApproval = async (
  * an acceptance lands in the same one it supersedes. Without that clause this
  * would hide every seller's credit row whose buyer-side debit had settled.
  *
- * @param {number} receiverId the ledger being listed (payments.payment_belongs)
+ * @param {number} [receiverId] the single ledger being listed, when there is
+ *   one (the wallet screen). Given it, the check is a cheap constant compare.
+ *   Omitted - as on the invoice payment tables, which list one invoice across
+ *   both parties - it self-joins to compare each row against its own parent.
  * @returns a Sequelize literal suitable for `{ id: { [Op.notIn]: ... } }`
  */
-const supersededWalletRowIds = (receiverId) =>
+const supersededPaymentRowIds = (receiverId = null) =>
   Sequelize.literal(
-    `(SELECT p2.parent_id FROM payments AS p2
-        WHERE p2.parent_id IS NOT NULL
-          AND p2.status = 'success'
-          AND p2.payment_belongs = ${parseInt(receiverId, 10) || 0}
-          AND p2.deleted_at IS NULL)`,
+    receiverId === null || receiverId === undefined
+      ? `(SELECT p2.parent_id FROM payments AS p2
+           INNER JOIN payments AS p1 ON p1.id = p2.parent_id
+           WHERE p2.parent_id IS NOT NULL
+             AND p2.status = 'success'
+             AND p2.payment_belongs = p1.payment_belongs
+             AND p2.deleted_at IS NULL
+             AND p1.deleted_at IS NULL)`
+      : `(SELECT p2.parent_id FROM payments AS p2
+           WHERE p2.parent_id IS NOT NULL
+             AND p2.status = 'success'
+             AND p2.payment_belongs = ${parseInt(receiverId, 10) || 0}
+             AND p2.deleted_at IS NULL)`,
   );
 
 /**
  * The superseded rows folded away under one accepted row, oldest first.
  * Empty for a row that settled in place, which is the common case.
  */
-const getWalletRowHistory = async (row) => {
+const getPaymentRowHistory = async (row) => {
   if (!row || isEmpty(row.parent_id)) return [];
   const history = [];
   let cursor = row;
@@ -5106,6 +5117,6 @@ module.exports = {
   calculateProductPriceReport,
   getUserRoleId,
   paymentNeedsApproval,
-  supersededWalletRowIds,
-  getWalletRowHistory
+  supersededPaymentRowIds,
+  getPaymentRowHistory
 };

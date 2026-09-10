@@ -6,6 +6,7 @@ const {
   displayAmount,
   paymentModeDisplay,
 } = require("@helpers/helper");
+const { getPaymentRowHistory } = require("@library/common");
 const db = require("@models");
 const PaymentModel = db.payments;
 
@@ -13,12 +14,18 @@ const PaymentCollection = async (data) => {
   if (isObject(data)) {
     return await getModelObject(data);
   } else {
-    return await mapConcurrent(data, (item, i) => getModelObject(item));
+    return await mapConcurrent(data, (item) => getModelObject(item));
 
   }
 };
 
-const getModelObject = async (data) => {
+/**
+ * @param {boolean} isHistoryRow true when this row is being serialised as one
+ *   of the superseded entries folded under an accepted row. Such a row is a
+ *   record of what happened, not a live line: it carries no money figure (the
+ *   accepted row above it holds that) and no further history of its own.
+ */
+const getModelObject = async (data, isHistoryRow = false) => {
   let payment_mode = paymentModeDisplay(data.payment_mode);
   if (data.payment_mode == "cheque" && !isEmpty(data.cheque_no)) {
     payment_mode += " ( " + data.cheque_no + " )";
@@ -183,9 +190,30 @@ const getModelObject = async (data) => {
       "</p>";
   }
 
+  // The wallet screen's Credit column follows the same rule as Amount above.
+  let credit_amount = isFinalStatus ? displayAmount(data.amount) : "";
+
+  /*
+   * Rows this one superseded when it was accepted, oldest first. Present only
+   * when the acceptance had to be written as a new row because the ledger had
+   * already moved on; a payment accepted in place supersedes nothing and
+   * carries an empty history, so the UI shows no expander for it.
+   */
+  let history = [];
+  if (!isHistoryRow) {
+    const historyRows = await getPaymentRowHistory(data);
+    history = await mapConcurrent(historyRows, (row) =>
+      getModelObject(row, true),
+    );
+  }
+
   return {
+    history: history,
+    has_history: history.length > 0,
     id: data.id,
-    amount: displayAmount(data.amount),
+    amount: isHistoryRow ? "" : amount_display,
+    // The raw figure, for callers that need it regardless of settlement state.
+    amount_value: displayAmount(data.amount),
     payment_mode: paymentModeDisplay(data.payment_mode),
     notes: data.notes || "",
     cheque_no: data.cheque_no || "",
@@ -209,8 +237,9 @@ const getModelObject = async (data) => {
     purpose: purpose,
     action_value: action_status,
     display_mode: display_mode,
-    credit: credit_amount,
+    credit: isHistoryRow ? 0 : credit_amount,
     can_accept:
+      !isHistoryRow &&
       data.status == "pending" &&
       data.can_accept &&
       !isSenderViewingReceiverRow &&
