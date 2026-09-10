@@ -43,7 +43,6 @@ const {
   getDistributorAdmin,
   isAdmin,
   getWalletBalance,
-  hasWalletFunds,
   getOwnUserSaleProducts,
   getUserColumnValue,
   avlStockUserIdsNew,
@@ -1210,22 +1209,12 @@ exports.store = async (req, res) => {
   }
 
   let userID = isManager(req) ? req.userId : await getWorkingUserID(req);
-  /*
-   * A sale settled entirely out of the buyer's advance still moves real money,
-   * so the advance has to cover it. Commented out until now, which let the
-   * balance run negative.
-   */
-  if (data.advance_amount > 0 && data.due_amount == 0) {
-    if (!(await hasWalletFunds(userID, data.payment_mode, data.total_payable))) {
-      return res
-        .status(errorCodes.default)
-        .send(
-          formatErrorResponse(
-            "Insufficient wallet balance for adjust sale amount from advance.",
-          ),
-        );
-    }
-  }
+  // if (data.advance_amount > 0 && data.due_amount == 0) {
+  //   let walletBalance = await getWalletBalance(userID, data.payment_mode);
+  //   if (walletBalance < priceFormat(data.total_payable)) {
+  //     return res.status(errorCodes.default).send(formatErrorResponse("Insufficient wallet balance for adjust sale amount from advance."));
+  //   }
+  // }
 
   try {
     //const trans = await sequelize.transaction(async (t) => {
@@ -2173,10 +2162,13 @@ exports.statuschange = async (req, res) => {
           paidAmnt = priceFormat(paidAmnt - parseFloat(payment.amount));
         }
       }
-      if (!(await hasWalletFunds(userID, return_payment_mode, paidAmnt))) {
-        return res
-          .status(errorCodes.default)
-          .send(formatErrorResponse("Insufficient wallet balance."));
+      if (paidAmnt > 0) {
+        let walletBalance = await getWalletBalance(userID, return_payment_mode);
+        if (walletBalance < paidAmnt) {
+          return res
+            .status(errorCodes.default)
+            .send(formatErrorResponse("Insufficient wallet balance."));
+        }
       }
     }
 
@@ -2697,9 +2689,7 @@ exports.view = async (req, res) => {
   let liveGold = null;
   if (isCurrentRateInvoice(req)) {
     const liveRates = await getLiveGoldRate();
-    console.log("[Sale View] Live rates:", liveRates);
     const repricing = repriceSaleAtLiveGold(sale, liveRates);
-    console.log("[Sale View] Repricing changes:", repricing.changes);
     /* The page has to be able to say which rate it is showing, and to stay
        quiet when the feed gave us nothing (rate 0) rather than print a zero. */
     liveGold = {
@@ -2859,12 +2849,13 @@ exports.returnSale = async (req, res) => {
     (!from_retailer_customer ||
       (from_retailer_customer && return_status == "completed"))
   ) {
+    let walletBalance = await getWalletBalance(
+      userID,
+      data.return_payment_mode,
+    );
     if (
-      !(await hasWalletFunds(
-        userID,
-        data.return_payment_mode,
-        return_amount_from_wallet,
-      ))
+      return_amount_from_wallet > 0 &&
+      walletBalance < return_amount_from_wallet
     ) {
       return res
         .status(errorCodes.default)
@@ -3588,12 +3579,13 @@ exports.returnSaleNew = async (req, res) => {
       (from_retailer_customer && return_status == "completed"))
   ) {
     /* not retailer customer or retailer customer and charges not applied */
+    let walletBalance = await getWalletBalance(
+      userID,
+      data.return_payment_mode,
+    );
     if (
-      !(await hasWalletFunds(
-        userID,
-        data.return_payment_mode,
-        return_amount_from_wallet,
-      ))
+      return_amount_from_wallet > 0 &&
+      walletBalance < return_amount_from_wallet
     ) {
       return res
         .status(errorCodes.default)
@@ -5292,6 +5284,20 @@ exports.downloadInvoice = async (req, res) => {
       .status(errorCodes.default)
       .send(formatErrorResponse("Sale not found"));
   }
+
+  /* "Current Invoice": the same jewellery re-costed at today's gold rate. The
+     plain Invoice button keeps printing the rates frozen at sale time; this
+     branch reprices the loaded instance IN MEMORY ONLY - never saved - so the
+     template below renders the live figures instead. */
+  const atCurrentRate = isCurrentRateInvoice(req);
+  let liveRepricing = null;
+  if (atCurrentRate) {
+    const liveRates = await getLiveGoldRate();
+    liveRepricing = repriceSaleAtLiveGold(sale, liveRates);
+    liveRepricing.rate_display = liveRates.display || "";
+    liveRepricing.rates = liveRates;
+  }
+
   let saleData = SaleCollection(sale);
 
   let payments = await PaymentModel.findAll({
@@ -5422,9 +5428,12 @@ exports.downloadInvoice = async (req, res) => {
                           <td>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
+                                  <tr><td style="position: relative;">
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
                                       300;">TAX INVOICE</h1>
+                                  ${atCurrentRate ? `<span style="position: absolute; top: 0; right: 10px; background: #e53935; color: #fff; padding: 4px 12px; font-size: 11px; font-weight: 600; border-radius: 3px;">CURRENT RATE</span>` : ""}
+                                  </td></tr>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
                                   align="center" width="100%">
@@ -6607,7 +6616,11 @@ exports.downloadInvoice = async (req, res) => {
   /* -------------- commented by Soumalya Nandy ------------ */
 
   try {
-    let file_path = "public/invoices/" + saleData.invoice_number + ".pdf";
+    /* Separate file, so a current-rate copy can never overwrite the real
+       invoice sitting at <invoice>.pdf. */
+    const file_suffix = atCurrentRate ? "_current.pdf" : ".pdf";
+    let file_path =
+      "public/invoices/" + saleData.invoice_number + file_suffix;
     const options = { format: "A4" };
 
     (async () => {
@@ -6626,10 +6639,12 @@ exports.downloadInvoice = async (req, res) => {
       res.send(
         formatResponse(
           {
-            file_name: saleData.invoice_number + ".pdf",
-            url: getFileAbsulatePathPDF(file_path),
+            file_name: saleData.invoice_number + file_suffix,
+            url: `${getFileAbsulatePathPDF(file_path)}?v=${Date.now()}`,
             saleData,
             payments,
+            at_current_rate: atCurrentRate,
+            live_repricing: liveRepricing,
           },
           "Invoice pdf",
         ),
@@ -6773,28 +6788,10 @@ exports.downloadInvoiceInfo = async (req, res) => {
   let liveRepricing = null;
   if (atCurrentRate) {
     const liveRates = await getLiveGoldRate();
-    console.log("[Current Invoice] Live rates:", liveRates);
     liveRepricing = repriceSaleAtLiveGold(sale, liveRates);
-    console.log("[Current Invoice] Repricing changes:", liveRepricing.changes);
     liveRepricing.rate_display = liveRates.display || "";
     liveRepricing.rates = liveRates;
   }
-
-  /**
-   * A current invoice prints the rate it was costed at, otherwise the reader
-   * cannot tell it apart from the historical one. Stays silent when the feed
-   * gave nothing, rather than printing a zero rate.
-   */
-  const liveGoldLine =
-    atCurrentRate && liveRepricing && liveRepricing.changes.length
-      ? `<li><span style="font-weight: 400; font-size: 12px; margin: 0;">Gold Rate (today) - </span>` +
-        `<span style="font-weight: 600; font-size: 12px; margin: 0;">` +
-        [
-          liveRepricing.rates && liveRepricing.rates.rate22 ? `22K ${displayAmount(liveRepricing.rates.rate22)}/g` : "",
-          liveRepricing.rates && liveRepricing.rates.rate18 ? `18K ${displayAmount(liveRepricing.rates.rate18)}/g` : "",
-        ].filter(Boolean).join(" · ") +
-        `</span></li>`
-      : "";
 
   let saleData = SaleCollection(sale);
 
@@ -6937,7 +6934,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                   <h1 style="font-size: 14px; text-align:
                                       center; margin-bottom: 5px; font-weight:
                                       300;">SALE${saleData.is_approved == "3" ? " ON APPROVAL" : ""} TAX INVOICE</h1>
-                                  ${atCurrentRate ? `<span style="position: absolute; top: 0; right: 10px; background: #e53935; color: #fff; padding: 4px 12px; font-size: 11px; font-weight: 600; border-radius: 3px;">CURRENT RATE</span>` : ""}
+                                  ${atCurrentRate ? `<span style="position: absolute; top: 0; right: 10px; background: #e53935; color: #fff; padding: 4px 12px; font-size: 11px; font-weight: 600; border-radius: 3px;">CURRENT</span>` : ""}
                                   </td></tr>
                               </table>
                               <table cellspacing="0" cellpadding="0" border="0"
@@ -7068,7 +7065,6 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                                               600; font-size:
                                                               12px; margin:
                                                               0;">${saleData.invoice_number}</span></li>
-                                                      ${liveGoldLine}
                                                   </ul>
                                                   <ul style="margin: 0;
                                                       padding: 0;margin-left:52px; list-style:

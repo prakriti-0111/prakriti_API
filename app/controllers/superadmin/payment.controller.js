@@ -21,7 +21,6 @@ const {
 } = require("@resources/superadmin/PaymentCollection");
 const {
   getWalletBalance,
-  hasWalletFunds,
   getSuperAdminId,
   isSuperAdmin,
   isAdmin,
@@ -133,7 +132,11 @@ exports.store = async (req, res) => {
       if ("payment_type" in data) {
         if (data.payment_type == "send_money") {
           //check have money in wallet
-          if (!(await hasWalletFunds(currentUserID, data.payment_mode, amount))) {
+          let walletBalance = await getWalletBalance(
+            currentUserID,
+            data.payment_mode,
+          );
+          if (amount > 0 && walletBalance < amount) {
             return res
               .status(errorCodes.default)
               .send(formatErrorResponse("Insufficient wallet balance."));
@@ -160,7 +163,7 @@ exports.store = async (req, res) => {
             metal_rate: data.metal_rate || null,
             gross_weight: data.weight || null,
             status:
-              !requiresPaymentApproval(data.payment_mode, data.payment_type)
+              !requiresPaymentApproval(data.payment_mode)
                 ? "success"
                 : "pending",
             payment_date: moment(data.payment_date, ["YYYY-MM-DD","MM/DD/YYYY","DD/MM/YYYY"]).format("YYYY-MM-DD"),
@@ -212,7 +215,7 @@ exports.store = async (req, res) => {
               metal_rate: data.metal_rate || null,
               gross_weight: data.weight || null,
               status:
-                !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                !requiresPaymentApproval(data.payment_mode)
                   ? "success"
                   : "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -259,7 +262,7 @@ exports.store = async (req, res) => {
 
               compactLog("AMOUNT:", amount, "DUE:", due_amount, "PAID:", paid_amount, "STATUS:", status, "PAYMENT:", payment_amount);
               if (
-                !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                !requiresPaymentApproval(data.payment_mode)
               ) {
                 await SaleModel.update(
                   {
@@ -322,7 +325,7 @@ exports.store = async (req, res) => {
                 metal_rate: data.metal_rate || null,
                 gross_weight: data.weight || null,
                 status:
-                  !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                  !requiresPaymentApproval(data.payment_mode)
                     ? "success"
                     : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -360,7 +363,7 @@ exports.store = async (req, res) => {
                 metal_rate: data.metal_rate || null,
                 gross_weight: data.weight || null,
                 status:
-                  !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                  !requiresPaymentApproval(data.payment_mode)
                     ? "success"
                     : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -409,7 +412,7 @@ exports.store = async (req, res) => {
               }
 
               if (
-                !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                !requiresPaymentApproval(data.payment_mode)
               ) {
                 await PurchaseModel.update(
                   {
@@ -447,7 +450,7 @@ exports.store = async (req, res) => {
                 metal_rate: data.metal_rate || null,
                 gross_weight: data.weight || null,
                 status:
-                  !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                  !requiresPaymentApproval(data.payment_mode)
                     ? "success"
                     : "pending",
                 payment_date: moment(data.payment_date, ["YYYY-MM-DD","MM/DD/YYYY","DD/MM/YYYY"]).format("YYYY-MM-DD"),
@@ -521,7 +524,7 @@ exports.store = async (req, res) => {
               metal_rate: data.metal_rate || null,
               gross_weight: data.weight || null,
               status:
-                !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                !requiresPaymentApproval(data.payment_mode)
                   ? "success"
                   : "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -576,7 +579,7 @@ exports.store = async (req, res) => {
               });
             }
             let paymentStatus =
-              isPaymentToSuperAdmin || requiresPaymentApproval(data.payment_mode, data.payment_type)
+              isPaymentToSuperAdmin || requiresPaymentApproval(data.payment_mode)
                 ? "pending"
                 : "success";
             let purpose = "",
@@ -659,7 +662,7 @@ exports.store = async (req, res) => {
                 metal_rate: data.metal_rate || null,
                 gross_weight: data.weight || null,
                 status:
-                  !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                  !requiresPaymentApproval(data.payment_mode)
                     ? "success"
                     : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -706,7 +709,7 @@ exports.store = async (req, res) => {
               }
 
               if (
-                !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                !requiresPaymentApproval(data.payment_mode)
               ) {
                 await SaleModel.update(
                   {
@@ -769,7 +772,7 @@ exports.store = async (req, res) => {
                 metal_rate: data.metal_rate || null,
                 gross_weight: data.weight || null,
                 status:
-                  !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                  !requiresPaymentApproval(data.payment_mode)
                     ? "success"
                     : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -807,7 +810,7 @@ exports.store = async (req, res) => {
                 metal_rate: data.metal_rate || null,
                 gross_weight: data.weight || null,
                 status:
-                  !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                  !requiresPaymentApproval(data.payment_mode)
                     ? "success"
                     : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -872,8 +875,8 @@ exports.store = async (req, res) => {
               compactLog("======STATUS=====", status);
               compactLog("======PAYMENT AMOUNT=====", payment_amount);
               //return false;
-              //if ((!isPaymentToSuperAdmin && !requiresPaymentApproval(data.payment_mode, data.payment_type)) || data.payment_mode == "metal") {
-              if (!isPaymentToSuperAdmin && !requiresPaymentApproval(data.payment_mode, data.payment_type)) {
+              //if ((!isPaymentToSuperAdmin && !requiresPaymentApproval(data.payment_mode)) || data.payment_mode == "metal") {
+              if (!isPaymentToSuperAdmin && !requiresPaymentApproval(data.payment_mode)) {
                 await PurchaseModel.update(
                   {
                     due_amount: due_amount,
@@ -905,7 +908,7 @@ exports.store = async (req, res) => {
                 isAdmin(user.role_id) &&
                 item.sale_id;
 
-              if (isAdminSupplier && !requiresPaymentApproval(data.payment_mode, data.payment_type)) {
+              if (isAdminSupplier && !requiresPaymentApproval(data.payment_mode)) {
                 await SaleModel.update(
                   {
                     due_amount: due_amount,
@@ -920,7 +923,7 @@ exports.store = async (req, res) => {
               }
 
               let paymentStatus =
-                isPaymentToSuperAdmin || requiresPaymentApproval(data.payment_mode, data.payment_type)
+                isPaymentToSuperAdmin || requiresPaymentApproval(data.payment_mode)
                   ? "pending"
                   : "success";
 
@@ -1082,7 +1085,7 @@ exports.store = async (req, res) => {
               metal_rate: data.metal_rate || null,
               gross_weight: data.weight || null,
               status:
-                !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                !requiresPaymentApproval(data.payment_mode)
                   ? "success"
                   : "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -1136,7 +1139,7 @@ exports.store = async (req, res) => {
               });
             }
             let paymentStatus =
-              isPaymentToAdmin || requiresPaymentApproval(data.payment_mode, data.payment_type)
+              isPaymentToAdmin || requiresPaymentApproval(data.payment_mode)
                 ? "pending"
                 : "success";
             let purpose = "";
@@ -1216,7 +1219,7 @@ exports.store = async (req, res) => {
                 amount = 0;
               }
 
-              if (!isPaymentToAdmin && !requiresPaymentApproval(data.payment_mode, data.payment_type)) {
+              if (!isPaymentToAdmin && !requiresPaymentApproval(data.payment_mode)) {
                 await PurchaseModel.update(
                   {
                     due_amount: due_amount,
@@ -1240,7 +1243,7 @@ exports.store = async (req, res) => {
               }
 
               let paymentStatus =
-                isPaymentToAdmin || requiresPaymentApproval(data.payment_mode, data.payment_type)
+                isPaymentToAdmin || requiresPaymentApproval(data.payment_mode)
                   ? "pending"
                   : "success";
 
@@ -1334,7 +1337,7 @@ exports.store = async (req, res) => {
               }
 
               if (
-                !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                !requiresPaymentApproval(data.payment_mode)
               ) {
                 await SaleModel.update(
                   {
@@ -1396,7 +1399,7 @@ exports.store = async (req, res) => {
                 metal_rate: data.metal_rate || null,
                 gross_weight: data.weight || null,
                 status:
-                  !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                  !requiresPaymentApproval(data.payment_mode)
                     ? "success"
                     : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -1433,7 +1436,7 @@ exports.store = async (req, res) => {
                 metal_rate: data.metal_rate || null,
                 gross_weight: data.weight || null,
                 status:
-                  !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                  !requiresPaymentApproval(data.payment_mode)
                     ? "success"
                     : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -1528,7 +1531,7 @@ exports.store = async (req, res) => {
               metal_rate: data.metal_rate || null,
               gross_weight: data.weight || null,
               status:
-                !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                !requiresPaymentApproval(data.payment_mode)
                   ? "success"
                   : "pending",
               payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -1560,7 +1563,7 @@ exports.store = async (req, res) => {
               metal_rate: data.metal_rate || null,
               gross_weight: data.weight || null,
               status:
-                !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                !requiresPaymentApproval(data.payment_mode)
                   ? "success"
                   : "pending",
               payment_date: moment(data.payment_date, ["YYYY-MM-DD","MM/DD/YYYY","DD/MM/YYYY"]).format("YYYY-MM-DD"),
@@ -1608,7 +1611,7 @@ exports.store = async (req, res) => {
               }
 
               if (
-                !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                !requiresPaymentApproval(data.payment_mode)
               ) {
                 await SaleModel.update(
                   {
@@ -1670,7 +1673,7 @@ exports.store = async (req, res) => {
                 metal_rate: data.metal_rate || null,
                 gross_weight: data.weight || null,
                 status:
-                  !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                  !requiresPaymentApproval(data.payment_mode)
                     ? "success"
                     : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
@@ -1707,7 +1710,7 @@ exports.store = async (req, res) => {
                 metal_rate: data.metal_rate || null,
                 gross_weight: data.weight || null,
                 status:
-                  !requiresPaymentApproval(data.payment_mode, data.payment_type)
+                  !requiresPaymentApproval(data.payment_mode)
                     ? "success"
                     : "pending",
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
