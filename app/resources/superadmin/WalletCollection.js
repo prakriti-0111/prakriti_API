@@ -153,13 +153,23 @@ const getModelObject = async (
   if (index == 0 && p_mode == "advance") {
     remaining_balance = await getWalletBalance(data.payment_belongs, "Advance");
   } else remaining_balance = data.remaining_balance || 0;
-  // Show "To be processed" only for actionable pending rows.
+  /*
+   * Show "To be processed" only for actionable pending rows.
+   *
+   * A chip, not coloured text: #ff9800 on the white row is about 2.2:1, and no
+   * shade of yellow-orange text clears 4.5:1 while still reading as yellow.
+   * Dark text on the same colour as a background is 8.6:1 and unmistakably
+   * yellow, which is what makes it stand out at a glance.
+   */
   if (data.status == "pending" && data.can_accept) {
     credit_amount = 0;
     display_mode +=
-      '<p style="margin:0;font-size:12px;color:#ff9800;">To be processed: ' +
+      '<p style="margin:0;font-size:12px;">' +
+      '<span style="display:inline-block;padding:1px 8px;border-radius:10px;' +
+      "background:#ffd54f;color:#3d2f00;font-size:12px;font-weight:600;" +
+      'white-space:nowrap;">To be processed: ' +
       displayAmount(data.amount) +
-      "</p>";
+      "</span></p>";
   }
 
   // Ensure action buttons are only enabled for truly pending rows that can be accepted.
