@@ -2219,6 +2219,28 @@ const getPaymentRowHistory = async (row) => {
   return history.reverse();
 };
 
+/**
+ * Would debiting `amount` from this wallet leave it short?
+ *
+ * A wallet must never go negative: you cannot pay out money you do not hold.
+ * Several controllers already open-coded this check (loan, salary, sale,
+ * returnSale, admin purchase); the payment endpoint never did, which is how an
+ * invoice paid from an empty wallet drove the balance below zero.
+ *
+ * @param {number} userId  whose wallet is being debited
+ * @param {string} mode    payment_mode - each mode holds its own balance
+ * @param {number} amount  the debit
+ * @returns {boolean} true when the wallet can cover it
+ */
+const hasWalletFunds = async (userId, mode, amount) => {
+  const debit = parseFloat(amount);
+  if (!(debit > 0)) return true;
+  // Metal is not held as a wallet balance, so there is nothing to check.
+  if (!isEmpty(mode) && String(mode).toLowerCase().trim() === "metal") return true;
+  const balance = parseFloat(await getWalletBalance(userId, mode));
+  return balance >= debit;
+};
+
 const updateWalletRemainingBalance = async (userId, paymenId, payment_type) => {
   payment_type = payment_type === undefined ? "wallet" : payment_type;
   let remaining_balance = await getWalletBalance(
@@ -5063,6 +5085,7 @@ module.exports = {
   getLiveGoldRate,
   getUserColumnValue,
   getWalletBalance,
+  hasWalletFunds,
   emailExists,
   normalizeEmail,
   loginIdentifierWhere,

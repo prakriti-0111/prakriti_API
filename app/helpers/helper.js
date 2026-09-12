@@ -563,6 +563,19 @@ const SALES_EXECUTIVE_ROLE = 4;
 const RETAILER_ROLE = 5;
 
 /**
+ * Roles that can actually act on an accept/decline.
+ *
+ * A supplier has no panel at all, and nor do customers, employees, workers or
+ * investors. Demanding their approval would leave the payment pending forever
+ * with nobody able to clear it, so a payment to one of them keeps the original
+ * mode-based behaviour: cash and UPI settle on the spot, cheque and RTGS wait.
+ */
+const WALLET_PARTY_ROLES = [1, 2, 3, 4, 5];
+
+const canActOnApproval = (roleId) =>
+  !isEmpty(roleId) && WALLET_PARTY_ROLES.includes(parseInt(roleId, 10));
+
+/**
  * Is this an SE <-> retailer pair? Checked in both directions so the two halves
  * of one invoice - the seller's credit and the buyer's mirrored debit - always
  * reach the same verdict and can never settle out of step with each other.
@@ -607,6 +620,14 @@ const requiresPaymentApproval = (mode, paymentType, context) => {
     // SE <-> retailer: cash and UPI land in the wallet directly, cheque and
     // RTGS still wait to be accepted.
     if (isSalesExecutiveRetailerPair(senderRole, receiverRole)) {
+      return APPROVAL_PAYMENT_MODES.includes(String(mode).toLowerCase().trim());
+    }
+    /*
+     * The receiver has to be able to accept. A supplier has no panel, so
+     * asking them to approve would strand the payment; those keep the
+     * mode-based rule they always had.
+     */
+    if (!canActOnApproval(receiverRole)) {
       return APPROVAL_PAYMENT_MODES.includes(String(mode).toLowerCase().trim());
     }
     // Any other pair: the receiver accepts it, whatever the mode.
@@ -908,6 +929,8 @@ module.exports = {
   paymentModeDisplay,
   requiresPaymentApproval,
   isSalesExecutiveRetailerPair,
+  canActOnApproval,
+  WALLET_PARTY_ROLES,
   SALES_EXECUTIVE_ROLE,
   RETAILER_ROLE,
   APPROVAL_PAYMENT_MODES,
