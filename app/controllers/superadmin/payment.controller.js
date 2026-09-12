@@ -14,6 +14,7 @@ const {
   displayAmount,
   priceFormat,
   requiresPaymentApproval,
+  canActOnApproval,
 } = require("@helpers/helper");
 const sequelize = db.sequelize;
 const {
@@ -33,6 +34,7 @@ const {
   isManager,
   supersededPaymentRowIds,
   paymentNeedsApproval,
+  hasWalletFunds,
 } = require("@library/common");
 const {
   recalculatePaymentRemainingBalance,
@@ -115,6 +117,29 @@ exports.store = async (req, res) => {
       ? req.userId
       : await getWorkingUserID(req);
     let amount = parseFloat(data.amount);
+
+    /*
+     * A wallet must never go negative - you cannot pay out money you do not
+     * hold. This endpoint had no such check, so paying an invoice from an empty
+     * wallet simply drove the balance below zero.
+     *
+     * Only payments that take money OUT are checked: settling a purchase
+     * invoice, or sending money / advance from the wallet screen. A sale
+     * payment brings money in, and metal is not held as a balance.
+     */
+    const debitsThisWallet =
+      data.table_type === "purchase" ||
+      ["send_money", "advance"].includes(
+        String(data.payment_type || "").toLowerCase().trim(),
+      );
+    if (
+      debitsThisWallet &&
+      !(await hasWalletFunds(currentUserID, data.payment_mode, amount))
+    ) {
+      return res
+        .status(errorCodes.default)
+        .send(formatErrorResponse("Insufficient wallet balance."));
+    }
     let conditions = { status: "due" };
     if ("table_id" in data && !isEmpty(data.table_id)) {
       conditions.id = data.table_id;
@@ -1042,7 +1067,17 @@ exports.store = async (req, res) => {
                * ledger. A super admin supplier already has its credit row
                * written above, so it is excluded here to avoid a duplicate.
                */
-              const creditSupplier = !isPaymentToSuperAdmin && !isEmpty(receiverId);
+              /*
+               * Only for a supplier that actually holds a wallet. A plain
+               * supplier (role 8) has no panel and no wallet screen, so a
+               * credit row there would be invisible and meaningless - those
+               * purchases keep the single-sided record they always had.
+               */
+              const creditSupplier =
+                !isPaymentToSuperAdmin &&
+                !isEmpty(receiverId) &&
+                user &&
+                canActOnApproval(user.role_id);
               if (creditSupplier) {
                 let supplierPayment = await PaymentModel.create({
                   parent_id: payment2.id,
@@ -1895,6 +1930,34 @@ exports.updateStatus = async (req, res) => {
         .send(formatErrorResponse("Payment not found"));
 
     if (data.status == 1) {
+      /*
+       * Re-check at accept. A pending debit moves no money until this moment,
+       * so the balance it was raised against may since have been spent
+       * elsewhere - settling it regardless would push the wallet negative.
+       */
+      const debitSide = await PaymentModel.findOne({
+        where:
+          payment.type === "debit"
+            ? { id: payment.id }
+            : { parent_id: payment.id, type: "debit" },
+      });
+      if (
+        debitSide &&
+        !(await hasWalletFunds(
+          debitSide.payment_belongs,
+          debitSide.payment_mode,
+          debitSide.amount,
+        ))
+      ) {
+        return res
+          .status(errorCodes.default)
+          .send(
+            formatErrorResponse(
+              "Insufficient wallet balance to accept this payment.",
+            ),
+          );
+      }
+
       // find sender-side mirrored row BEFORE inserting new accepted row
       // (both share parent_id = payment.id, so must look up before creating)
       const senderMirrorRow = await PaymentModel.findOne({
