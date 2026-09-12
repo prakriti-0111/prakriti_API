@@ -32,6 +32,7 @@ const {
   updateAdvanceAmount,
   isManager,
   supersededPaymentRowIds,
+  paymentNeedsApproval,
 } = require("@library/common");
 const {
   recalculatePaymentRemainingBalance,
@@ -854,7 +855,21 @@ exports.store = async (req, res) => {
               order: [["id", "ASC"]],
               where: { ...conditions, user_id: currentUserID },
             });
-            let user = await UserModel.findByPk(data.user_id);
+            /*
+             * Who is being paid. "Pay Now" on the invoice screen sends no
+             * user_id, so fall back to the supplier recorded on the invoice.
+             * Without this the receiver was unknown: no credit row was written
+             * into their wallet - so an admin paying a super admin never showed
+             * up in the super admin's wallet history - and the approval rule
+             * could not see the pair, leaving a UPI payment to settle on the
+             * spot when only SE <-> retailer may do that.
+             */
+            let receiverId = data.user_id;
+            if (isEmpty(receiverId)) {
+              const firstInvoice = tableData[0];
+              receiverId = firstInvoice ? firstInvoice.supplier_id : null;
+            }
+            let user = await UserModel.findByPk(receiverId);
             let isPaymentToSuperAdmin = false;
             if (user && isSuperAdmin(user.role_id)) {
               isPaymentToSuperAdmin = true;
@@ -937,8 +952,19 @@ exports.store = async (req, res) => {
                 );
               }
 
+              /*
+               * Relationship-aware: only an SE paying their own retailer settles
+               * cash / UPI on the spot. Every other pair waits on every mode.
+               * The mode-only test let an admin's UPI payment auto-accept.
+               */
               let paymentStatus =
-                isPaymentToSuperAdmin || requiresPaymentApproval(data.payment_mode, data.payment_type)
+                isPaymentToSuperAdmin ||
+                (await paymentNeedsApproval(
+                  data.payment_mode,
+                  data.payment_type,
+                  currentUserID,
+                  receiverId,
+                ))
                   ? "pending"
                   : "success";
 
@@ -964,7 +990,7 @@ exports.store = async (req, res) => {
                   ),
                   table_type: "sale",
                   table_id: item.sale_id,
-                  payment_belongs: data.user_id,
+                  payment_belongs: receiverId,
                   due_date: data.due_date
                     ? moment(data.due_date, ["YYYY-MM-DD","MM/DD/YYYY","DD/MM/YYYY"]).format("YYYY-MM-DD")
                     : null,
@@ -976,7 +1002,9 @@ exports.store = async (req, res) => {
 
               let payment2 = await PaymentModel.create({
                 parent_id: payment ? payment.id : null,
-                user_id: data.user_id,
+                // The counterparty, resolved from the invoice when Pay Now
+                // sends no user_id.
+                user_id: receiverId,
                 payment_by: req.userId,
                 amount: payment_amount,
                 payment_mode: data.payment_mode,
@@ -1005,10 +1033,17 @@ exports.store = async (req, res) => {
 
               await updateWalletRemainingBalance(currentUserID, payment2.id);
 
-              // Mirror the payment as a credit into the admin-supplier's wallet
-              // so it appears in their wallet history (previously this credit
-              // row was only created for superadmin suppliers).
-              if (isAdminSupplier) {
+              /*
+               * Mirror the payment as a credit into the supplier's wallet.
+               *
+               * This used to require the supplier be an admin AND the purchase
+               * be linked to a sale, so an SE or distributor supplier never saw
+               * money an admin had paid them - it existed only in the payer's
+               * ledger. A super admin supplier already has its credit row
+               * written above, so it is excluded here to avoid a duplicate.
+               */
+              const creditSupplier = !isPaymentToSuperAdmin && !isEmpty(receiverId);
+              if (creditSupplier) {
                 let supplierPayment = await PaymentModel.create({
                   parent_id: payment2.id,
                   user_id: currentUserID,
@@ -1024,13 +1059,17 @@ exports.store = async (req, res) => {
                   weight: data.effective_weight || null,
                   metal_rate: data.metal_rate || null,
                   gross_weight: data.weight || null,
-                  status: paymentStatus,
+                  // In step with the payer's debit - the two halves of one
+                  // payment must never settle independently.
+                  status: payment2.status,
                   payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                     "YYYY-MM-DD",
                   ),
-                  table_type: "sale",
-                  table_id: item.sale_id,
-                  payment_belongs: data.user_id,
+                  // Reference the linked sale when there is one; otherwise the
+                  // purchase this payment was made against.
+                  table_type: item.sale_id ? "sale" : "purchase",
+                  table_id: item.sale_id || item.id,
+                  payment_belongs: receiverId,
                   due_date: data.due_date
                     ? moment(data.due_date, ["YYYY-MM-DD","MM/DD/YYYY","DD/MM/YYYY"]).format("YYYY-MM-DD")
                     : null,
@@ -1040,7 +1079,7 @@ exports.store = async (req, res) => {
                 });
 
                 await updateWalletRemainingBalance(
-                  data.user_id,
+                  receiverId,
                   supplierPayment.id,
                 );
               }
@@ -1285,7 +1324,7 @@ exports.store = async (req, res) => {
                   ),
                   table_type: "sale",
                   table_id: item.sale_id,
-                  payment_belongs: data.user_id,
+                  payment_belongs: receiverId,
                   due_date: data.due_date
                     ? moment(data.due_date, ["YYYY-MM-DD","MM/DD/YYYY","DD/MM/YYYY"]).format("YYYY-MM-DD")
                     : null,
