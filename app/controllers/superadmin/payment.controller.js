@@ -128,10 +128,17 @@ exports.store = async (req, res) => {
      * payment brings money in, and metal is not held as a balance.
      */
     const debitsThisWallet =
+      // Settling a purchase invoice, or recording an advance GIVEN - both take
+      // money out of the caller's wallet.
       data.table_type === "purchase" ||
-      ["send_money", "advance"].includes(
-        String(data.payment_type || "").toLowerCase().trim(),
-      );
+      // Sending money from the wallet screen.
+      String(data.payment_type || "").toLowerCase().trim() === "send_money";
+    /*
+     * Note "advance" is deliberately NOT listed on its own: an advance against
+     * a sale is money RECEIVED, and demanding the receiver hold funds would
+     * refuse them their own incoming payment. An advance against a purchase is
+     * money given, and the table_type test above already covers it.
+     */
     if (
       debitsThisWallet &&
       !(await hasWalletFunds(currentUserID, data.payment_mode, amount))
