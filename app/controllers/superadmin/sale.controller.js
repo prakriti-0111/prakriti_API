@@ -48,6 +48,7 @@ const {
   avlStockUserIdsNew,
   getLiveGoldRate,
   paymentNeedsApproval,
+  walletShortfall,
 } = require("@library/common");
 const { getPaginationOptions } = require("@helpers/paginator");
 const { byTxnDateDesc } = require("@helpers/ledgerOrder");
@@ -1169,6 +1170,29 @@ exports.store = async (req, res) => {
     "sale store payload:",
     data && typeof data === "object" ? Object.keys(data).length : typeof data,
   );
+  /*
+   * The buyer pays from their own wallet, so it has to cover the amount before
+   * the sale records it as paid. Without this the buyer's mirrored debit was
+   * written regardless and their balance simply went negative - the same
+   * mechanism that left 13 retailer wallets at -838,981.
+   *
+   * walletShortfall() only applies to a buyer whose portal shows a wallet
+   * (admin, SE, distributor, super admin, employee). A retailer or customer
+   * buyer has no wallet to draw on - they pay with real cash - so they are
+   * skipped and ordinary retail sales are unaffected. This mirrors the check
+   * purchase.controller.store() already performs on its own caller.
+   */
+  if (priceFormat(data.paid_amount) > 0 && !isEmpty(data.user_id)) {
+    const shortfall = await walletShortfall(
+      data.user_id,
+      data.payment_mode,
+      priceFormat(data.paid_amount),
+    );
+    if (shortfall) {
+      return res.status(errorCodes.default).send(formatErrorResponse(shortfall));
+    }
+  }
+
   let reportCharge = await ReportChargeModel.findAll({
     order: [["amount", "ASC"]],
     where: {},
