@@ -572,6 +572,22 @@ const RETAILER_ROLE = 5;
  */
 const WALLET_PARTY_ROLES = [1, 2, 3, 4, 5];
 
+/**
+ * Roles whose portal shows a wallet they manage: super admin, admin,
+ * distributor, sales executive and employee. (Role 12 is a second "Employee"
+ * role in the data.)
+ *
+ * These users transact ONLY through that wallet, so any debit against one of
+ * them - on any payment mode, and whoever initiated it - has to be covered by
+ * the balance. A retailer, customer or supplier has no wallet screen: they pay
+ * with real cash or a bank transfer, so their balance is not the source of the
+ * funds and is not checked.
+ */
+const WALLET_VISIBLE_ROLES = [1, 2, 3, 4, 7, 12];
+
+const hasVisibleWallet = (roleId) =>
+  !isEmpty(roleId) && WALLET_VISIBLE_ROLES.includes(parseInt(roleId, 10));
+
 const canActOnApproval = (roleId) =>
   !isEmpty(roleId) && WALLET_PARTY_ROLES.includes(parseInt(roleId, 10));
 
@@ -930,6 +946,8 @@ module.exports = {
   requiresPaymentApproval,
   isSalesExecutiveRetailerPair,
   canActOnApproval,
+  hasVisibleWallet,
+  WALLET_VISIBLE_ROLES,
   WALLET_PARTY_ROLES,
   SALES_EXECUTIVE_ROLE,
   RETAILER_ROLE,

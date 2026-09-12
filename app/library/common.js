@@ -39,6 +39,7 @@ const {
   ucWords,
   getFileAbsulatePath,
   requiresPaymentApproval,
+  hasVisibleWallet,
 } = require("@helpers/helper");
 const {
   NotificationCollection,
@@ -2239,6 +2240,37 @@ const hasWalletFunds = async (userId, mode, amount) => {
   if (!isEmpty(mode) && String(mode).toLowerCase().trim() === "metal") return true;
   const balance = parseFloat(await getWalletBalance(userId, mode));
   return balance >= debit;
+};
+
+/**
+ * Can this wallet cover the debit? Returns null when it can, or a message when
+ * it cannot.
+ *
+ * The check follows WHOSE wallet is debited, not who pressed the button. A user
+ * whose portal shows a wallet transacts only through it, so a sale recorded by
+ * the seller still has to be covered by the buyer's balance - otherwise the
+ * buyer's wallet simply goes negative, which is how 13 retailer wallets reached
+ * -838,981 before anyone noticed.
+ *
+ * A party with no wallet screen (retailer, customer, supplier) is skipped: they
+ * pay with real cash or a bank transfer, so their balance is not the source.
+ *
+ * @param {number} userId whose wallet is being debited
+ * @param {string} mode   payment_mode - each mode holds its own balance
+ * @param {number} amount the debit
+ */
+const walletShortfall = async (userId, mode, amount) => {
+  const debit = parseFloat(amount);
+  if (!(debit > 0) || isEmpty(userId)) return null;
+  // Metal is not held as a wallet balance.
+  if (!isEmpty(mode) && String(mode).toLowerCase().trim() === "metal") return null;
+
+  const roleId = await getUserRoleId(userId);
+  if (!hasVisibleWallet(roleId)) return null;
+
+  const balance = parseFloat(await getWalletBalance(userId, mode));
+  if (balance >= debit) return null;
+  return "Insufficient wallet balance.";
 };
 
 const updateWalletRemainingBalance = async (userId, paymenId, payment_type) => {
@@ -5086,6 +5118,7 @@ module.exports = {
   getUserColumnValue,
   getWalletBalance,
   hasWalletFunds,
+  walletShortfall,
   emailExists,
   normalizeEmail,
   loginIdentifierWhere,

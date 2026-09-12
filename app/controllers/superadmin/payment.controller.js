@@ -35,6 +35,7 @@ const {
   supersededPaymentRowIds,
   paymentNeedsApproval,
   hasWalletFunds,
+  walletShortfall,
 } = require("@library/common");
 const {
   recalculatePaymentRemainingBalance,
@@ -127,19 +128,41 @@ exports.store = async (req, res) => {
      * invoice, or sending money / advance from the wallet screen. A sale
      * payment brings money in, and metal is not held as a balance.
      */
-    const debitsThisWallet =
+    /*
+     * A user whose portal shows a wallet transacts only through it, so any
+     * debit against such a user must be covered by their balance - on every
+     * payment mode, and regardless of who initiated the payment.
+     *
+     * Two parties can be debited here:
+     *  - the caller, when settling a purchase invoice or sending money out;
+     *  - the counterparty, when the caller records a SALE payment, because the
+     *    buyer's mirrored debit is written on their behalf and they are not at
+     *    the screen to be asked.
+     *
+     * Parties with no wallet screen (retailer, customer, supplier) are skipped:
+     * they pay with real cash or a bank transfer, so their balance is not the
+     * source of the funds.
+     */
+    const callerDebits =
       data.table_type === "purchase" ||
-      ["send_money", "advance"].includes(
-        String(data.payment_type || "").toLowerCase().trim(),
+      String(data.payment_type || "").toLowerCase().trim() === "send_money";
+    const counterpartyDebits = data.table_type === "sale";
+
+    const debitChecks = [];
+    if (callerDebits) debitChecks.push(currentUserID);
+    if (counterpartyDebits && !isEmpty(data.user_id)) debitChecks.push(data.user_id);
+
+    for (const debitUserId of debitChecks) {
+      const shortfall = await walletShortfall(
+        debitUserId,
+        data.payment_mode,
+        amount,
       );
-    if (
-      debitsThisWallet &&
-      !(await hasWalletFunds(currentUserID, data.payment_mode, amount))
-    ) {
-      return res
-        .status(errorCodes.default)
-        .send(formatErrorResponse("Insufficient wallet balance."));
+      if (shortfall) {
+        return res.status(errorCodes.default).send(formatErrorResponse(shortfall));
+      }
     }
+
     let conditions = { status: "due" };
     if ("table_id" in data && !isEmpty(data.table_id)) {
       conditions.id = data.table_id;
@@ -1930,34 +1953,6 @@ exports.updateStatus = async (req, res) => {
         .send(formatErrorResponse("Payment not found"));
 
     if (data.status == 1) {
-      /*
-       * Re-check at accept. A pending debit moves no money until this moment,
-       * so the balance it was raised against may since have been spent
-       * elsewhere - settling it regardless would push the wallet negative.
-       */
-      const debitSide = await PaymentModel.findOne({
-        where:
-          payment.type === "debit"
-            ? { id: payment.id }
-            : { parent_id: payment.id, type: "debit" },
-      });
-      if (
-        debitSide &&
-        !(await hasWalletFunds(
-          debitSide.payment_belongs,
-          debitSide.payment_mode,
-          debitSide.amount,
-        ))
-      ) {
-        return res
-          .status(errorCodes.default)
-          .send(
-            formatErrorResponse(
-              "Insufficient wallet balance to accept this payment.",
-            ),
-          );
-      }
-
       // find sender-side mirrored row BEFORE inserting new accepted row
       // (both share parent_id = payment.id, so must look up before creating)
       const senderMirrorRow = await PaymentModel.findOne({
