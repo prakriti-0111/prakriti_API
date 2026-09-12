@@ -1930,34 +1930,6 @@ exports.updateStatus = async (req, res) => {
         .send(formatErrorResponse("Payment not found"));
 
     if (data.status == 1) {
-      /*
-       * Re-check at accept. A pending debit moves no money until this moment,
-       * so the balance it was raised against may since have been spent
-       * elsewhere - settling it regardless would push the wallet negative.
-       */
-      const debitSide = await PaymentModel.findOne({
-        where:
-          payment.type === "debit"
-            ? { id: payment.id }
-            : { parent_id: payment.id, type: "debit" },
-      });
-      if (
-        debitSide &&
-        !(await hasWalletFunds(
-          debitSide.payment_belongs,
-          debitSide.payment_mode,
-          debitSide.amount,
-        ))
-      ) {
-        return res
-          .status(errorCodes.default)
-          .send(
-            formatErrorResponse(
-              "Insufficient wallet balance to accept this payment.",
-            ),
-          );
-      }
-
       // find sender-side mirrored row BEFORE inserting new accepted row
       // (both share parent_id = payment.id, so must look up before creating)
       const senderMirrorRow = await PaymentModel.findOne({
