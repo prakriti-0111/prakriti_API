@@ -143,10 +143,33 @@ exports.store = async (req, res) => {
      * they pay with real cash or a bank transfer, so their balance is not the
      * source of the funds.
      */
+    const requestPaymentType = String(data.payment_type || "")
+      .toLowerCase()
+      .trim();
+    /*
+     * A wallet-screen transfer is NOT an invoice payment, even though the UI
+     * stamps table_type="sale" on a Send Money whose recipient is an admin or
+     * distributor. Treating that as a sale made the counterparty check fire on
+     * the RECEIVER, so an SE with Rs 500 in RTGS was refused because the
+     * receiving admin held nothing. A genuine invoice payment always names the
+     * invoice it settles, so table_id is required as well.
+     */
+    const isWalletScreenTransfer = ["send_money", "advance", "payment"].includes(
+      requestPaymentType,
+    );
+    /*
+     * The caller is paying out whenever they are settling something they owe
+     * (table_type "purchase" - an invoice, an advance given, a wallet-screen
+     * "payment"), or sending money from their wallet. The wallet-transfer
+     * exclusion below belongs only to the counterparty test; applying it here
+     * left payment_type "payment" against a purchase unguarded.
+     */
     const callerDebits =
-      data.table_type === "purchase" ||
-      String(data.payment_type || "").toLowerCase().trim() === "send_money";
-    const counterpartyDebits = data.table_type === "sale";
+      data.table_type === "purchase" || requestPaymentType === "send_money";
+    const counterpartyDebits =
+      !isWalletScreenTransfer &&
+      data.table_type === "sale" &&
+      !isEmpty(data.table_id);
 
     const debitChecks = [];
     if (callerDebits) debitChecks.push(currentUserID);
