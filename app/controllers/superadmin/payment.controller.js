@@ -157,10 +157,15 @@ exports.store = async (req, res) => {
     const isWalletScreenTransfer = ["send_money", "advance", "payment"].includes(
       requestPaymentType,
     );
+    /*
+     * The caller is paying out whenever they are settling something they owe
+     * (table_type "purchase" - an invoice, an advance given, a wallet-screen
+     * "payment"), or sending money from their wallet. The wallet-transfer
+     * exclusion below belongs only to the counterparty test; applying it here
+     * left payment_type "payment" against a purchase unguarded.
+     */
     const callerDebits =
-      (!isWalletScreenTransfer && data.table_type === "purchase") ||
-      requestPaymentType === "send_money" ||
-      (requestPaymentType === "advance" && data.table_type === "purchase");
+      data.table_type === "purchase" || requestPaymentType === "send_money";
     const counterpartyDebits =
       !isWalletScreenTransfer &&
       data.table_type === "sale" &&
