@@ -40,8 +40,19 @@ const getModelObject = async (data, isHistoryRow = false) => {
   // Keep old request row as "Processed" and hide any action on it.
   let hasAcceptedChild = false;
   if (!data.parent_id && data.status == "pending") {
+    /*
+     * Scoped to the same ledger. A transfer writes the counterparty's mirror as
+     * a child of this row, and that mirror lands in the OTHER party's ledger -
+     * so an unscoped lookup read the sender's own debit as proof the receiver
+     * had accepted. That is what made a still-pending row show "Processed" and
+     * lose its Accept / Decline buttons.
+     */
     const acceptedChild = await PaymentModel.findOne({
-      where: { parent_id: data.id, status: "success" },
+      where: {
+        parent_id: data.id,
+        status: "success",
+        payment_belongs: data.payment_belongs,
+      },
     });
     if (acceptedChild) {
       hasAcceptedChild = true;
@@ -52,8 +63,13 @@ const getModelObject = async (data, isHistoryRow = false) => {
   // accepted, this pending row is stale and should be shown as Processed.
   let hasAcceptedSibling = false;
   if (data.parent_id && data.status == "pending") {
+    // Same-ledger rule as above.
     const acceptedSibling = await PaymentModel.findOne({
-      where: { parent_id: data.parent_id, status: "success" },
+      where: {
+        parent_id: data.parent_id,
+        status: "success",
+        payment_belongs: data.payment_belongs,
+      },
     });
     if (acceptedSibling && acceptedSibling.id != data.id) {
       hasAcceptedSibling = true;
@@ -81,7 +97,13 @@ const getModelObject = async (data, isHistoryRow = false) => {
     !data.parent_id &&
     (data.status == "pending" || data.status == "failed")
   ) {
-    action_status = "Processed";
+    /*
+     * A declined request is finished and refused, not merely "acted on". This
+     * branch labelled both alike, so a decline rendered as "Processed" - green,
+     * settled - with the amount still in the money column. Only a row that is
+     * still pending and has been superseded is Processed.
+     */
+    action_status = data.status == "failed" ? "Declined" : "Processed";
     if (data.payment_mode == "cheque") {
       if (!isEmpty(data.ref_no)) {
         display_mode +=
