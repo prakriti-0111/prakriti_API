@@ -25,7 +25,6 @@ const {
   encodeForStorage,
   decodeFromStorage,
   cleanInput,
-  requiresPaymentApproval,
 } = require("@helpers/helper");
 const {
   updateOrCreate,
@@ -48,6 +47,8 @@ const {
   getUserColumnValue,
   avlStockUserIdsNew,
   getLiveGoldRate,
+  paymentNeedsApproval,
+  walletShortfall,
 } = require("@library/common");
 const { getPaginationOptions } = require("@helpers/paginator");
 const { byTxnDateDesc } = require("@helpers/ledgerOrder");
@@ -148,7 +149,19 @@ exports.index = async (req, res) => {
   }
   if (!isEmpty(user_id)) {
     conditions.user_id = user_id;
-    if (isSuperAdmin(req) && isAdmin(req) && isDistributor(req)) {
+    /*
+     * Viewing one retailer's invoices.
+     *
+     * A sales executive may see only their OWN invoices to that retailer. An
+     * admin sees every seller's, so a retailer served by more than one SE shows
+     * the full history.
+     *
+     * This was gated on isSuperAdmin(req) && isAdmin(req) && isDistributor(req)
+     * - three roles at once, which no user can hold, since `role` is a single
+     * value. The filter therefore never applied and one SE could read another
+     * SE's invoices to the same retailer.
+     */
+    if (isSalesExecutive(req)) {
       conditions.sale_by = userID;
     }
   } else {
@@ -1169,6 +1182,29 @@ exports.store = async (req, res) => {
     "sale store payload:",
     data && typeof data === "object" ? Object.keys(data).length : typeof data,
   );
+  /*
+   * The buyer pays from their own wallet, so it has to cover the amount before
+   * the sale records it as paid. Without this the buyer's mirrored debit was
+   * written regardless and their balance simply went negative - the same
+   * mechanism that left 13 retailer wallets at -838,981.
+   *
+   * walletShortfall() only applies to a buyer whose portal shows a wallet
+   * (admin, SE, distributor, super admin, employee). A retailer or customer
+   * buyer has no wallet to draw on - they pay with real cash - so they are
+   * skipped and ordinary retail sales are unaffected. This mirrors the check
+   * purchase.controller.store() already performs on its own caller.
+   */
+  if (priceFormat(data.paid_amount) > 0 && !isEmpty(data.user_id)) {
+    const shortfall = await walletShortfall(
+      data.user_id,
+      data.payment_mode,
+      priceFormat(data.paid_amount),
+    );
+    if (shortfall) {
+      return res.status(errorCodes.default).send(formatErrorResponse(shortfall));
+    }
+  }
+
   let reportCharge = await ReportChargeModel.findAll({
     order: [["amount", "ASC"]],
     where: {},
@@ -1235,7 +1271,20 @@ exports.store = async (req, res) => {
     let status = "due",
       paid_amount = 0,
       due_amount = 0;
-    if (!requiresPaymentApproval(data.payment_mode)) {
+    /*
+     * One verdict for this whole sale: the invoice's paid/due figures below and
+     * the payment rows further down must agree about whether the money has
+     * actually landed. An SE taking cash or UPI from their own retailer settles
+     * on the spot; every other pair, and cheque/RTGS in every pair, waits for
+     * the receiver to accept.
+     */
+    const salePaymentNeedsApproval = await paymentNeedsApproval(
+      data.payment_mode,
+      null,
+      data.user_id,
+      userID,
+    );
+    if (!salePaymentNeedsApproval) {
       status =
         priceFormat(data.paid_amount) >= priceFormat(data.total_payable)
           ? "paid"
@@ -1713,6 +1762,16 @@ exports.store = async (req, res) => {
       }
 
       if (amount > 0) {
+        /*
+         * One verdict for the whole pair. An SE taking cash or UPI from their
+         * own retailer settles on the spot; every other pair, and cheque/RTGS
+         * in every pair, waits for the receiver to accept. Decided once here so
+         * the seller's credit and the buyer's debit below can never disagree -
+         * when they did, a cheque sale debited the buyer immediately while the
+         * seller's credit stayed pending, and the money existed in no wallet at
+         * all until someone clicked accept.
+         */
+        const needsApproval = salePaymentNeedsApproval;
         let payment = await paymentModel.create({
           payment_mode: data.payment_mode,
           amount: amount,
@@ -1721,7 +1780,7 @@ exports.store = async (req, res) => {
           payment_date: moment().format("YYYY-MM-DD"),
           txn_id: data.transaction_no,
           cheque_no: data.cheque_no,
-          status: requiresPaymentApproval(data.payment_mode) ? "pending" : "success",
+          status: needsApproval ? "pending" : "success",
           type: "credit",
           table_type: "sale",
           table_id: sale.id,
@@ -1742,7 +1801,8 @@ exports.store = async (req, res) => {
           payment_date: moment().format("YYYY-MM-DD"),
           txn_id: data.transaction_no,
           cheque_no: data.cheque_no,
-          status: "success",
+          // Both halves of the pair move together - see the note above.
+          status: needsApproval ? "pending" : "success",
           type: "debit",
           table_type: "purchase",
           table_id: purchase ? purchase.id : sale.id,
@@ -2134,7 +2194,7 @@ exports.statuschange = async (req, res) => {
         where: { table_type: "sale", table_id: sale.id },
       });
       if (payment) {
-        if (requiresPaymentApproval(payment.payment_mode) && payment.status == "pending") {
+        if (payment.status == "pending") {
           paidAmnt = priceFormat(paidAmnt - parseFloat(payment.amount));
         }
       }
@@ -2186,7 +2246,7 @@ exports.statuschange = async (req, res) => {
           where: { table_type: "sale", table_id: sale.id },
         });
         if (payment) {
-          if (requiresPaymentApproval(payment.payment_mode) && payment.status == "pending") {
+          if (payment.status == "pending") {
             await paymentModel.destroy({ where: { id: payment.id } });
             await paymentModel.destroy({
               where: { table_type: "purchase", table_id: sale.id },
