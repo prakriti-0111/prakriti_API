@@ -8,6 +8,9 @@ const db = require("@models");
 const moment = require("moment");
 const { Op, QueryTypes } = require("sequelize");
 const {
+  transferMaterial,
+} = require("@controllers/superadmin/stockMaterialHistory.controller");
+const {
   isEmpty,
   generateOrderNo,
   getDateFromToWhere,
@@ -75,10 +78,21 @@ exports.index = async (req, res) => {
    */
   conditions.id = { [Op.notIn]: supersededPaymentRowIds() };
 
+  /*
+   * Whose rows: the ones the caller entered. On one invoice's payment table
+   * also the ones written onto the caller's own ledger by the other party -
+   * a purchase made from a super admin sale has every payment entered by the
+   * super admin (payment_by) on the buyer's ledger (payment_belongs), so the
+   * buyer's Purchase Details listed none of them.
+   */
+  const whose = !isEmpty(table_id)
+    ? { [Op.or]: [{ payment_by: req.userId }, { payment_belongs: req.userId }] }
+    : { payment_by: req.userId };
+
   const paginatorOptions = getPaginationOptions(page, limit);
   PaymentModel.findAndCountAll({
     order: [["id", "DESC"]],
-    where: { payment_by: req.userId, ...conditions },
+    where: { ...whose, ...conditions },
     offset: paginatorOptions.offset,
     limit: paginatorOptions.limit,
     include: [
@@ -202,14 +216,27 @@ exports.store = async (req, res) => {
     const atCurrentRate = ["1", "true"].includes(String(data.at_current_rate));
     if (
       atCurrentRate &&
-      data.table_type === "sale" &&
+      ["sale", "purchase"].includes(data.table_type) &&
       !isEmpty(data.table_id) &&
       !isWalletScreenTransfer
     ) {
-      const sale = await SaleModel.findOne({
-        attributes: { exclude: ["req_data"] },
-        where: { id: data.table_id, sale_by: currentUserID },
-      });
+      /* the buyer paying a purchase re-values the sale it was made from */
+      let saleId = data.table_id;
+      let saleWhere = { sale_by: currentUserID };
+      if (data.table_type === "purchase") {
+        const purchase = await PurchaseModel.findOne({
+          attributes: ["id", "sale_id"],
+          where: { id: data.table_id, user_id: currentUserID },
+        });
+        saleId = purchase ? purchase.sale_id : null;
+        saleWhere = {};
+      }
+      const sale = saleId
+        ? await SaleModel.findOne({
+            attributes: { exclude: ["req_data"] },
+            where: { id: saleId, ...saleWhere },
+          })
+        : null;
       const live = sale ? (await liveSaleAmounts([sale])).get(sale.id) : null;
       if (!live) {
         return res
@@ -230,6 +257,46 @@ exports.store = async (req, res) => {
       await SaleModel.update(revalued, { where: { id: sale.id } });
       await PurchaseModel.update(revalued, { where: { sale_id: sale.id } });
     }
+
+    /*
+     * One invoice can only take what it owes. The settle loop below pays the
+     * due and silently drops the rest, so a metal payment larger than the due
+     * credited only the due while the metal moved in full (RV-S-125: 10.24 g
+     * worth 152,034.30 recorded as 11,885.28). Refuse it instead.
+     */
+    if (
+      ["sale", "purchase"].includes(data.table_type) &&
+      !isEmpty(data.table_id) &&
+      !isWalletScreenTransfer
+    ) {
+      const invoice =
+        data.table_type === "sale"
+          ? await SaleModel.findOne({
+              attributes: ["id", "due_amount", "status"],
+              where: { id: data.table_id, sale_by: currentUserID },
+            })
+          : await PurchaseModel.findOne({
+              attributes: ["id", "due_amount", "status"],
+              where: { id: data.table_id, user_id: currentUserID },
+            });
+      const due = invoice && invoice.status === "due" ? parseFloat(invoice.due_amount) : 0;
+      if (invoice && amount > due + 0.01) {
+        return res
+          .status(errorCodes.default)
+          .send(formatErrorResponse(`Amount must be less than or equal to the due amount (${due.toFixed(2)}).`));
+      }
+    }
+
+    /* what a metal payment is made of, so a pending one can move the metal
+       when it is accepted (see updateStatus) */
+    const metalFields =
+      String(data.payment_mode || "").toLowerCase() === "metal"
+        ? {
+            material_id: data.material_id || null,
+            purity_id: data.purity_id || null,
+            unit_id: data.unit_id || null,
+          }
+        : {};
 
     let conditions = { status: "due" };
     if ("table_id" in data && !isEmpty(data.table_id)) {
@@ -993,6 +1060,7 @@ exports.store = async (req, res) => {
             compactLog(
               data.due_date ? moment(data.due_date, ["YYYY-MM-DD","MM/DD/YYYY","DD/MM/YYYY"]).format("YYYY-MM-DD") : null,
             );
+            let metalMoved = false;
             for (let i = 0; i < tableData.length; i++) {
               let item = tableData[i];
               let status = "due",
@@ -1100,6 +1168,7 @@ exports.store = async (req, res) => {
                   weight: data.effective_weight || null,
                   metal_rate: data.metal_rate || null,
                   gross_weight: data.weight || null,
+                  ...metalFields,
                   status: "pending",
                   payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                     "YYYY-MM-DD",
@@ -1132,6 +1201,7 @@ exports.store = async (req, res) => {
                 weight: data.effective_weight || null,
                 metal_rate: data.metal_rate || null,
                 gross_weight: data.weight || null,
+                ...metalFields,
                 status: paymentStatus,
                 payment_date: moment(data.payment_date, "MM/DD/YYYY").format(
                   "YYYY-MM-DD",
@@ -1148,6 +1218,42 @@ exports.store = async (req, res) => {
               });
 
               await updateWalletRemainingBalance(currentUserID, payment2.id);
+
+              /*
+               * A metal payment that settled on the spot (not to the super
+               * admin - those wait for acceptance and move the metal then)
+               * moves the metal now: payer -> supplier, written to the stock
+               * history, the payer's stock allowed below zero. Once per
+               * request, however many invoices the amount was spread over.
+               */
+              if (
+                !metalMoved &&
+                payment2.status === "success" &&
+                metalFields.material_id &&
+                metalFields.purity_id &&
+                parseFloat(data.weight) > 0 &&
+                !isEmpty(receiverId)
+              ) {
+                metalMoved = true;
+                await transferMaterial(
+                  req,
+                  {
+                    from_user_id: currentUserID,
+                    to_user_id: receiverId,
+                    material_id: metalFields.material_id,
+                    purity_id: metalFields.purity_id,
+                    unit_id: metalFields.unit_id,
+                    quantity: 0,
+                    payment_mode: "metal",
+                    amount: data.amount,
+                    metal_rate: data.metal_rate || null,
+                    ref_no: item.invoice_number,
+                    weight: data.weight,
+                    effective_weight: data.effective_weight || data.weight,
+                  },
+                  { allowNegative: true },
+                );
+              }
 
               /*
                * Mirror the payment as a credit into the supplier's wallet.
@@ -1185,6 +1291,7 @@ exports.store = async (req, res) => {
                   weight: data.effective_weight || null,
                   metal_rate: data.metal_rate || null,
                   gross_weight: data.weight || null,
+                  ...metalFields,
                   // In step with the payer's debit - the two halves of one
                   // payment must never settle independently.
                   status: payment2.status,
@@ -2021,6 +2128,46 @@ exports.updateStatus = async (req, res) => {
         .send(formatErrorResponse("Payment not found"));
 
     if (data.status == 1) {
+      /*
+       * An accepted metal payment moves the metal now - from the payer to the
+       * receiver, with the debit/credit written to the stock history, and the
+       * payer's stock allowed to go below zero (an admin paying in metal they
+       * do not hold yet). Only on the pending -> accepted step, so it cannot
+       * run twice, and before anything else is marked accepted, so a failed
+       * transfer leaves the payment pending. Rows without the purity/material
+       * (written before they were stored) keep the old behaviour.
+       */
+      if (
+        payment.status === "pending" &&
+        String(payment.payment_mode || "").toLowerCase() === "metal" &&
+        payment.material_id &&
+        payment.purity_id &&
+        parseFloat(payment.gross_weight) > 0
+      ) {
+        const invoice =
+          payment.table_type === "sale"
+            ? await SaleModel.findOne({ attributes: ["invoice_number"], where: { id: payment.table_id } })
+            : await PurchaseModel.findOne({ attributes: ["invoice_number"], where: { id: payment.table_id } });
+        await transferMaterial(
+          req,
+          {
+            from_user_id: payment.user_id,
+            to_user_id: payment.payment_belongs,
+            material_id: payment.material_id,
+            purity_id: payment.purity_id,
+            unit_id: payment.unit_id,
+            quantity: 0,
+            payment_mode: "metal",
+            amount: payment.amount,
+            metal_rate: payment.metal_rate,
+            ref_no: invoice ? invoice.invoice_number : null,
+            weight: payment.gross_weight,
+            effective_weight: payment.weight || payment.gross_weight,
+          },
+          { allowNegative: true },
+        );
+      }
+
       // find sender-side mirrored row BEFORE inserting new accepted row
       // (both share parent_id = payment.id, so must look up before creating)
       const senderMirrorRow = await PaymentModel.findOne({
