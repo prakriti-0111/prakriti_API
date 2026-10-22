@@ -2721,6 +2721,26 @@ const sendNotification = async (type, req, params, userId) => {
   }
 };
 
+/**
+ * The people whose expenses an admin reviews: its own sales executives - the
+ * ones under its own distributors and the ones it owns directly - plus itself.
+ *
+ * Deliberately the same set the sales executive list shows that admin, so the
+ * expense list and the filter above it cannot disagree about who exists.
+ */
+const getAdminTeamUserIds = async (adminId) => {
+  const distributorIds = await getAdminOwnDistributorIds(adminId);
+  const salesExecutives = await UserModel.findAll({
+    attributes: ["id"],
+    where: {
+      role_id: getRoleId("sales_executive"),
+      parent_id: { [Op.in]: [...distributorIds, adminId] },
+    },
+    raw: true,
+  });
+  return [...new Set([adminId, ...arrayColumn(salesExecutives, "id")])];
+};
+
 const getAdminSEWhereCondition = async (distributors, state_id, isIds) => {
   let distributorsIds = [];
   if (!distributors) {
@@ -5249,6 +5269,7 @@ module.exports = {
   productHaveWishlist,
   getAdminDistributorIds,
   getAdminOwnDistributorIds,
+  getAdminTeamUserIds,
   getOrderStatusProgress,
   getNotificationLabelByType,
   convertToNotificationGroup,
