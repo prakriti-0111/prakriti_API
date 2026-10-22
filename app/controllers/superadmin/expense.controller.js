@@ -3,6 +3,7 @@ const {
   isEmpty,
   getDateFromToWhere,
   isWeeklyHoliday,
+  displayAmount,
 } = require("@helpers/helper");
 const {
   errorCodes,
@@ -83,6 +84,15 @@ const reviewsOthers = (req) =>
  * Compared case-insensitively on purpose: store() writes "Accepted" while the
  * accept button sends "accepted", and both sit in the same column.
  */
+/**
+ * Two different purses pay for the two kinds of entry, and the old message did
+ * not say which one it meant - an admin with a full trading wallet was told
+ * "Insufficient wallet balance." because its empty expense float was the one
+ * being checked. Naming the purse and the figure makes that self-evident.
+ */
+const insufficientBalance = (which, available) =>
+  `Insufficient ${which} balance. Available: ${displayAmount(available)}.`;
+
 const paymentStatusFor = (expenseStatus) =>
   String(expenseStatus).toLowerCase() === "accepted" ? "success" : "pending";
 
@@ -196,18 +206,29 @@ exports.store = async (req, res) => {
   let userID = await getWorkingUserID(req);
 
   if (!reviewsOthers(req)) {
+    /* spending your own float */
     let wallet_balance = await getWalletBalance(userID, null, "expense");
     if (parseFloat(data.amount) > wallet_balance) {
       return res
         .status(errorCodes.default)
-        .send(formatErrorResponse("Insufficient wallet balance."));
+        .send(
+          formatErrorResponse(insufficientBalance("expense wallet", wallet_balance))
+        );
     }
   } else {
+    /* issuing from your own wallet, in the mode being paid */
     let wallet_balance = await getWalletBalance(userID, data.payment_mode);
     if (parseFloat(data.amount) > wallet_balance) {
       return res
         .status(errorCodes.default)
-        .send(formatErrorResponse("Insufficient wallet balance."));
+        .send(
+          formatErrorResponse(
+            insufficientBalance(
+              data.payment_mode ? `${data.payment_mode} wallet` : "wallet",
+              wallet_balance
+            )
+          )
+        );
     }
   }
 
@@ -375,7 +396,9 @@ exports.update = async (req, res) => {
     if (moreAmt > 0 && moreAmt > wallet_balance) {
       return res
         .status(errorCodes.default)
-        .send(formatErrorResponse("Insufficient wallet balance."));
+        .send(
+          formatErrorResponse(insufficientBalance("expense wallet", wallet_balance))
+        );
     }
   }
 
