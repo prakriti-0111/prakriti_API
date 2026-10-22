@@ -73,6 +73,15 @@ const getModelObject = async (
   const isSenderSendMoney =
     data.table_type == "send_money" && data.type == "debit";
 
+  /*
+   * An expense row is a mirror of the expense, not a request to settle here.
+   * It is accepted or declined on the expense screen, by the sales executive it
+   * belongs to, and statusUpdate() then promotes or deletes this row. So the
+   * wallet reports its status and offers no buttons - accepting from here would
+   * settle the payment while the expense itself stayed pending.
+   */
+  const isExpenseRow = data.table_type == "expenses";
+
   // accepted child exists for this original request row
   let hasAcceptedChild = false;
   if (!data.parent_id && data.status == "pending") {
@@ -143,6 +152,10 @@ const getModelObject = async (
       action_status = "Processed";
     } else if (isSenderSendMoney && !data.can_accept) {
       action_status = "Sent";
+    } else if (isExpenseRow) {
+      /* always Pending, never Processed: can_accept is not what decides an
+         expense's fate, the expense screen is */
+      action_status = "Pending";
     } else {
       action_status = data.can_accept ? "Pending" : "Processed";
     }
@@ -193,9 +206,10 @@ const getModelObject = async (
    * rows are not counted in the running balance).
    */
 
-  // Ensure action buttons are only enabled for truly pending rows that can be accepted.
+  // Ensure action buttons are only enabled for truly pending rows that can be
+  // accepted here - an expense is settled on its own screen, never from the wallet.
   const ui_can_accept =
-    data.status == "pending" && data.can_accept ? true : false;
+    data.status == "pending" && data.can_accept && !isExpenseRow ? true : false;
 
   /*
    * Rows this one superseded when it was accepted, oldest first. Present only

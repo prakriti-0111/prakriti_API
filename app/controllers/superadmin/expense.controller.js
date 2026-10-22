@@ -3,6 +3,7 @@ const {
   isEmpty,
   getDateFromToWhere,
   isWeeklyHoliday,
+  displayAmount,
 } = require("@helpers/helper");
 const {
   errorCodes,
@@ -19,6 +20,8 @@ const {
   haveLeave,
   getWalletBalance,
   isDistributor,
+  isAdmin,
+  getAdminTeamUserIds,
   getUserColumnValue,
   sendNotification,
 } = require("@library/common");
@@ -56,13 +59,59 @@ const { isSalesExecutive } = require("../../library/common");
  * @param req
  * @param res
  */
+/**
+ * Roles that act on a sales executive's expense rather than filing their own:
+ * they pick the executive on the form, the entry becomes an "issue" against
+ * that executive's wallet, and it is accepted on their own authority.
+ *
+ * One definition because store(), update() and index() each branch on it, and
+ * an admin left out of any single one of them files an expense that debits the
+ * wrong wallet.
+ */
+const reviewsOthers = (req) =>
+  isSuperAdmin(req) || isDistributor(req) || isAdmin(req);
+
+/**
+ * A wallet row follows its expense, it never runs ahead of it.
+ *
+ * The issuer's debit used to be written "success" no matter what, so the money
+ * left the wallet and the row read "Accepted" - WalletCollection maps a
+ * successful payment to that label - while the expense itself still said
+ * Pending. statusUpdate() promotes every pending row of an expense when it is
+ * accepted and deletes them all when it is declined, so a pending row is
+ * picked up correctly either way.
+ *
+ * Compared case-insensitively on purpose: store() writes "Accepted" while the
+ * accept button sends "accepted", and both sit in the same column.
+ */
+/**
+ * Two different purses pay for the two kinds of entry, and the old message did
+ * not say which one it meant - an admin with a full trading wallet was told
+ * "Insufficient wallet balance." because its empty expense float was the one
+ * being checked. Naming the purse and the figure makes that self-evident.
+ */
+const insufficientBalance = (which, available) =>
+  `Insufficient ${which} balance. Available: ${displayAmount(available)}.`;
+
+const paymentStatusFor = (expenseStatus) =>
+  String(expenseStatus).toLowerCase() === "accepted" ? "success" : "pending";
+
 exports.index = async (req, res) => {
   let { page, limit, reason_id, search, from_date, to_date, user_id, type } =
     req.query;
   let userID = await getWorkingUserID(req);
   let conditions = {};
-  if (!isSuperAdmin(req) && !isDistributor(req)) {
-    conditions = { user_id: userID };
+  /**
+   * Who this caller is allowed to see, independent of what they asked for.
+   * null means no restriction - the superadmin and, as before, the distributor.
+   * An admin reviews its own sales executives, the way the superadmin reviews
+   * the whole book; everyone else sees only their own expenses.
+   */
+  let allowedUserIds = null;
+  if (isAdmin(req)) {
+    allowedUserIds = await getAdminTeamUserIds(req.userId);
+  } else if (!isSuperAdmin(req) && !isDistributor(req)) {
+    allowedUserIds = [userID];
   }
   if (!isEmpty(search)) {
     conditions = {
@@ -78,6 +127,18 @@ exports.index = async (req, res) => {
   }
   if (!isEmpty(user_id)) {
     conditions.user_id = user_id;
+  }
+  /* Applied last and on top of the requested user_id: picking someone from the
+     filter must narrow the scope, never widen it. Asking for a user outside it
+     returns nothing rather than someone else's expenses. */
+  if (allowedUserIds) {
+    conditions.user_id = isEmpty(user_id)
+      ? { [Op.in]: allowedUserIds }
+      : {
+          [Op.in]: allowedUserIds.filter(
+            (id) => String(id) === String(user_id)
+          ),
+        };
   }
   if (!isEmpty(type)) {
     conditions.type = type;
@@ -110,11 +171,17 @@ exports.index = async (req, res) => {
     if (isDistributor(req)) {
       have_action = await getUserColumnValue(req.userId, "expense_action");
     }
-    let wallet_balance =
-      isSuperAdmin(req) || isDistributor(req)
-        ? 0
-        : await getWalletBalance(userID, null, "expense");
-    if ((isSuperAdmin(req) || isDistributor(req)) && !isEmpty(user_id)) {
+    /* A reviewer has no expense wallet of its own on this screen - it shows the
+       wallet of whoever is picked in the filter, and nothing until one is. */
+    let wallet_balance = reviewsOthers(req)
+      ? 0
+      : await getWalletBalance(userID, null, "expense");
+    if (
+      reviewsOthers(req) &&
+      !isEmpty(user_id) &&
+      (!allowedUserIds ||
+        allowedUserIds.some((id) => String(id) === String(user_id)))
+    ) {
       wallet_balance = await getWalletBalance(user_id, null, "expense");
     }
 
@@ -138,29 +205,42 @@ exports.store = async (req, res) => {
   let data = req.body;
   let userID = await getWorkingUserID(req);
 
-  if (!isSuperAdmin(req) && !isDistributor(req)) {
+  if (!reviewsOthers(req)) {
+    /* spending your own float */
     let wallet_balance = await getWalletBalance(userID, null, "expense");
     if (parseFloat(data.amount) > wallet_balance) {
       return res
         .status(errorCodes.default)
-        .send(formatErrorResponse("Insufficient wallet balance."));
+        .send(
+          formatErrorResponse(insufficientBalance("expense wallet", wallet_balance))
+        );
     }
   } else {
+    /* issuing from your own wallet, in the mode being paid */
     let wallet_balance = await getWalletBalance(userID, data.payment_mode);
     if (parseFloat(data.amount) > wallet_balance) {
       return res
         .status(errorCodes.default)
-        .send(formatErrorResponse("Insufficient wallet balance."));
+        .send(
+          formatErrorResponse(
+            insufficientBalance(
+              data.payment_mode ? `${data.payment_mode} wallet` : "wallet",
+              wallet_balance
+            )
+          )
+        );
     }
   }
 
   let expenseStatus = "pending";
-  if ((isSuperAdmin(req) || isDistributor(req)) && isEmpty(data.user_id)) {
+  if (reviewsOthers(req) && isEmpty(data.user_id)) {
     expenseStatus = "Accepted";
   }
 
+  const paymentStatus = paymentStatusFor(expenseStatus);
+
   let type = "";
-  if ((isSuperAdmin(req) || isDistributor(req)) && !isEmpty(data.user_id)) {
+  if (reviewsOthers(req) && !isEmpty(data.user_id)) {
     type = "issue";
   } else {
     type = "expense";
@@ -205,7 +285,7 @@ exports.store = async (req, res) => {
    */
   let reason = await ReasonModel.findOne({ where: { id: expense.reason_id } });
   let purpose = reason ? reason.name : "daily expense";
-  if (isSuperAdmin(req) || isDistributor(req)) {
+  if (reviewsOthers(req)) {
     let payment = await PaymentModel.create({
       user_id: isEmpty(data.user_id) ? userID : data.user_id,
       payment_by: userID,
@@ -215,7 +295,7 @@ exports.store = async (req, res) => {
       table_id: expense.id,
       remaining_balance: 0,
       notes: expense.description,
-      status: "success",
+      status: paymentStatus,
       payment_date: moment().format("YYYY-MM-DD"),
       payment_belongs: userID,
       type: "debit",
@@ -232,7 +312,7 @@ exports.store = async (req, res) => {
         table_id: expense.id,
         remaining_balance: 0,
         notes: expense.description,
-        status: "pending",
+        status: paymentStatus,
         payment_date: moment().format("YYYY-MM-DD"),
         payment_belongs: data.user_id,
         type: "credit",
@@ -251,7 +331,7 @@ exports.store = async (req, res) => {
       table_id: expense.id,
       remaining_balance: 0,
       notes: expense.description,
-      status: "success",
+      status: paymentStatus,
       payment_date: moment().format("YYYY-MM-DD"),
       payment_belongs: userID,
       type: "debit",
@@ -310,13 +390,15 @@ exports.update = async (req, res) => {
 
   let userID = await getWorkingUserID(req);
 
-  if (!isSuperAdmin(req) && !isDistributor(req)) {
+  if (!reviewsOthers(req)) {
     let wallet_balance = await getWalletBalance(userID, null, "expense");
     let moreAmt = parseFloat(data.amount) - parseFloat(expense.amount);
     if (moreAmt > 0 && moreAmt > wallet_balance) {
       return res
         .status(errorCodes.default)
-        .send(formatErrorResponse("Insufficient wallet balance."));
+        .send(
+          formatErrorResponse(insufficientBalance("expense wallet", wallet_balance))
+        );
     }
   }
 
@@ -355,7 +437,7 @@ exports.update = async (req, res) => {
   let reason = await ReasonModel.findOne({ where: { id: expense.reason_id } });
   let purpose = reason ? reason.name : "daily expense";
   let amount = postData.amount;
-  if (isSuperAdmin(req) || isDistributor(req)) {
+  if (reviewsOthers(req)) {
     let payment = await PaymentModel.create({
       user_id: isEmpty(data.user_id) ? userID : data.user_id,
       payment_by: userID,
@@ -365,7 +447,7 @@ exports.update = async (req, res) => {
       table_id: expense.id,
       remaining_balance: 0,
       notes: expense.description,
-      status: "success",
+      status: paymentStatusFor(expense.status),
       payment_date: moment().format("YYYY-MM-DD"),
       payment_belongs: userID,
       type: "debit",
@@ -382,7 +464,7 @@ exports.update = async (req, res) => {
         table_id: expense.id,
         remaining_balance: 0,
         notes: expense.description,
-        status: "success",
+        status: paymentStatusFor(expense.status),
         payment_date: moment().format("YYYY-MM-DD"),
         payment_belongs: data.user_id,
         type: "credit",
@@ -401,7 +483,7 @@ exports.update = async (req, res) => {
       table_id: expense.id,
       remaining_balance: 0,
       notes: expense.description,
-      status: "success",
+      status: paymentStatusFor(expense.status),
       payment_date: moment().format("YYYY-MM-DD"),
       payment_belongs: userID,
       type: "debit",
