@@ -23,11 +23,16 @@ const getModelObject = async(data, load_stock_wallet) => {
         }
     }
     let parent_user_name = ('parent' in data && data.parent) ? data.parent.name : '';
-    let totalStock = 0, totalStockPrice = 0, walletBalance = 0, attendence = "", attendence_address = '';
+    let totalStock = 0, totalStockPrice = 0, walletBalance = 0, expenseWalletBalance = 0, attendence = "", attendence_address = '';
     if(load_stock_wallet){
         totalStock = await getTotalStockByUser(data.id);
         totalStockPrice = await getTotalStockPriceByUser(null, data.id);
         walletBalance = await getWalletBalance(data.id);
+        /* Two separate purses: the default "wallet" payment_type is the trading
+           balance, "expense" is the float issued for daily expenses. The expense
+           screen already reports this one; the list needs it too so a reviewer
+           can see who still has money to spend before issuing more. */
+        expenseWalletBalance = await getWalletBalance(data.id, null, "expense");
     }
     attendence = await getTodayAttendence(data);
     attendence_address = await getLoginLogoutAddress(data.id);
@@ -78,6 +83,7 @@ const getModelObject = async(data, load_stock_wallet) => {
         total_stock: totalStock,
         total_stock_price: displayAmount(totalStockPrice),
         wallet_balance: displayAmount(walletBalance),
+        expense_wallet_balance: displayAmount(expenseWalletBalance),
         attendence: ucWords(attendence),
         attendence_address: attendence_address,
         advance_amount: displayAmount(data.advance_amount),

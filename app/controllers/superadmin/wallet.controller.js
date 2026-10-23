@@ -25,6 +25,19 @@ const PaymentModel = db.payments;
 const SaleModel = db.sales;
 const UserModel = db.users;
 
+/* net fine metal (grams) from accepted metal payments in this ledger:
+   received minus paid - pending/declined rows do not count */
+const metalBalance = async (userId) => {
+  const [row] = await sequelize.query(
+    `SELECT COALESCE(SUM(CASE WHEN type = 'credit' THEN weight ELSE -weight END), 0) AS fine
+       FROM payments
+      WHERE payment_belongs = :userId AND payment_type = 'gold'
+        AND status = 'success' AND deleted_at IS NULL`,
+    { replacements: { userId }, type: sequelize.QueryTypes.SELECT },
+  );
+  return parseFloat(row.fine) || 0;
+};
+
 /**
  * Wallet History
  * @param req
@@ -34,7 +47,20 @@ exports.index = async (req, res) => {
   let { page, limit, date_from, date_to, table_type, table_id, payment_mode } =
     req.query;
   let superAdminId = isManager(req) ? req.userId : await getWorkingUserID(req);
-  let conditions = { payment_belongs: superAdminId, payment_type: "wallet" };
+  /* metal rows are payment_type "gold". All shows the whole flow - money and
+     metal in date order; a money mode shows only its money rows, Metal only
+     metal (where a pending metal payment from an admin is approved). Metal is
+     not part of the money balance, so its rows print no balance (see
+     WalletCollection). */
+  let conditions = {
+    payment_belongs: superAdminId,
+    payment_type:
+      payment_mode === "metal"
+        ? "gold"
+        : isEmpty(payment_mode)
+          ? { [Op.in]: ["wallet", "gold"] }
+          : "wallet",
+  };
   /* if(!isEmpty(table_type)){
     conditions.table_type = table_type;
   }
@@ -87,6 +113,7 @@ exports.index = async (req, res) => {
           advance: displayAmount(
             await getWalletBalance(superAdminId, "Advance")
           ),
+          metal: `${(await metalBalance(superAdminId)).toFixed(3)} GM`,
         },
       };
       res.send(formatResponse(result, "All Payments"));
