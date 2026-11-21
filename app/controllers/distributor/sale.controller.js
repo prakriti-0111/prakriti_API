@@ -1,4 +1,5 @@
 const config = require("@config/auth.config");
+const { deliverSoldOrders } = require("@library/orderCart");
 const html_to_pdf = require("@helpers/pdf");
 const {
   errorCodes,
@@ -361,6 +362,9 @@ exports.store = async (req, res) => {
         { where: { id: sale.id } },
       );
     }
+
+    // any open order whose pieces this sale sold to its buyer is delivered
+    await deliverSoldOrders({ saleId: sale.id });
 
     //complete order
     if (!isEmpty(data.order_id)) {

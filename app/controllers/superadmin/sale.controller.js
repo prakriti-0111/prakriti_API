@@ -1,4 +1,5 @@
 const config = require("@config/auth.config");
+const { deliverSoldOrders } = require("@library/orderCart");
 const {
   errorCodes,
   formatErrorResponse,
@@ -1957,6 +1958,9 @@ exports.store = async (req, res) => {
 
       await updateAdvanceAmount(data.user_id, userID, thisCreditAmnt, false);
     }
+
+    // any open order whose pieces this sale sold to its buyer is delivered
+    await deliverSoldOrders({ saleId: sale.id });
 
     //complete order - a customer's / retailer's order too, as the admin and
     //distributor sales already do (it was skipped here, leaving it Pending)

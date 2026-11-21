@@ -7,7 +7,7 @@ const { getPaginationOptions } = require('@helpers/paginator')
 const { OrderCollection } = require("@resources/distributor/OrderCollection");
 const { CartCollection } = require("@resources/distributor/CartCollection");
 const { CartMaterialCollection } = require("@resources/distributor/CartMaterialCollection");
-const { getOrderCartData, getStockMaterials, insertIntoCart } = require("@library/orderCart");
+const { getOrderCartData, getStockMaterials, insertIntoCart, deliverSoldOrders } = require("@library/orderCart");
 const moment = require('moment');
 const _ = require("lodash");
 const orderModel = db.orders;
@@ -151,6 +151,8 @@ exports.cancelOrder = async (req, res) => {
  * @param {*} res 
  */
 exports.fetch = async (req, res) => {
+  /* an order sold before this check existed shows as delivered once opened */
+  await deliverSoldOrders({ orderIds: [parseInt(req.params.id, 10)] });
   let order = await orderModel.findOne({
     where: { id: req.params.id },
     include: [
