@@ -9,6 +9,7 @@ const CategoryController = require("@controllers/sales_executive/category.contro
 const productController = require("@controllers/sales_executive/product.controller");
 const cartController = require("@controllers/sales_executive/cart.controller");
 const orderController = require("@controllers/sales_executive/order.controller");
+const stockRequestController = require("@controllers/sales_executive/stockRequest.controller");
 const addressController = require("@controllers/sales_executive/address.controller");
 const userController = require("@controllers/sales_executive/user.controller");
 const wishlistController = require("@controllers/sales_executive/wishlist.controller");
@@ -76,6 +77,12 @@ module.exports = (app, express, io) => {
     
     router.get("/orders", [authJwt.verifyToken], orderController.index);
     router.get("/orders/fetch/:id", [authJwt.verifyToken], orderController.fetch);
+    // stock the SE needs for an order and its admin holds: check, then request a transfer
+    router.get("/orders/:id/stock-availability", [authJwt.verifyToken], stockRequestController.availability);
+    router.post("/orders/:id/stock-request", [authJwt.verifyToken], stockRequestController.store);
+    // requests sent to this SE (its admin, or the order's admin, wants its pieces)
+    router.get("/stock-requests", [authJwt.verifyToken], stockRequestController.index);
+    router.post("/stock-requests/:id/add-to-cart", [authJwt.verifyToken], stockRequestController.addToCart);
     router.post("/place-order", [authJwt.verifyToken], orderController.placeOrder);
     router.post("/orders/cancel-order/:id", [authJwt.verifyToken], orderController.cancelOrder);
     router.post("/orders/confirm-order", [authJwt.verifyToken], orderController.confirmOrder);

@@ -3,6 +3,7 @@ const db = require("@models");
 const { Op, QueryTypes } = require("sequelize");
 const { getFileAbsulatePath, isEmpty, logoImage } = require("@helpers/helper");
 const { getNextUserName, sendEmail } = require("@library/common");
+const { frontendStockOwnerWhere } = require("@library/visitorState");
 const moment = require('moment');
 const dbSequelize = db.sequelize;
 const UserModel = db.users;
@@ -195,6 +196,23 @@ exports.stock_products_slider = async (req, res) => {
         ]
     }).then(async (data) => {
         //compactLog(data);
+        /* a card shows only when the visitor can see stock behind it: in its
+           listed pieces, else its sub-category, else its category */
+        const ownerWhere = await frontendStockOwnerWhere(req);
+        const visible = await db.stocks.findAll({
+            attributes: ["id"],
+            where: ownerWhere ? { user_id: ownerWhere } : {},
+            include: [{ model: ProductModel, as: "product", required: true, attributes: ["category_id", "sub_category_id"] }],
+        });
+        const stockIds = new Set(visible.map((s) => String(s.id)));
+        const subCats = new Set(visible.map((s) => s.product.sub_category_id));
+        const cats = new Set(visible.map((s) => s.product.category_id));
+        data = data.filter((slide) => {
+            const listed = String(slide.products || "").split(",").map((x) => x.trim()).filter(Boolean);
+            if (listed.length) return listed.some((id) => stockIds.has(id));
+            if (slide.sub_category_id) return subCats.has(slide.sub_category_id);
+            return cats.has(slide.category_id);
+        });
         let result = {
             items: StockProductSliderCollection(data),
             total: data.length

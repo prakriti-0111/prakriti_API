@@ -79,6 +79,7 @@ const saleController = require("@controllers/superadmin/sale.controller");
 const profileController = require("@controllers/superadmin/profile.controller");
 const roleController = require("@controllers/superadmin/role.controller");
 const orderController = require("@controllers/superadmin/order.controller");
+const stockRequestController = require("@controllers/sales_executive/stockRequest.controller");
 const customerController = require("@controllers/superadmin/customer.controller");
 const paymentController = require("@controllers/superadmin/payment.controller");
 const databaseSyncController = require("@controllers/superadmin/databaseSync.controller");
@@ -1277,6 +1278,33 @@ module.exports = (app, express, io) => {
     "/orders/update-products",
     [authJwt.verifyToken, authJwt.isSuperAdmin],
     orderController.updateProducts,
+  );
+  router.post(
+    "/orders/assign/:id",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    orderController.orderAssign,
+  );
+  // stock requests admins sent the super admin: list, put the pieces in the cart
+  router.get(
+    "/stock-requests",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockRequestController.index,
+  );
+  router.post(
+    "/stock-requests/:id/add-to-cart",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockRequestController.addToCart,
+  );
+  // a request on an order sent to the super admin; pass it on to an SE / admin
+  router.get(
+    "/orders/:id/stock-request",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockRequestController.adminView,
+  );
+  router.post(
+    "/orders/:id/stock-request/holder",
+    [authJwt.verifyToken, authJwt.isSuperAdmin],
+    stockRequestController.requestFromHolder,
   );
 
   //customers

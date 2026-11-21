@@ -1958,8 +1958,9 @@ exports.store = async (req, res) => {
       await updateAdvanceAmount(data.user_id, userID, thisCreditAmnt, false);
     }
 
-    //complete order
-    if (!isEmpty(data.order_id) && !data.order_from_customer) {
+    //complete order - a customer's / retailer's order too, as the admin and
+    //distributor sales already do (it was skipped here, leaving it Pending)
+    if (!isEmpty(data.order_id)) {
       await orderModel.update(
         {
           status: "delivered",

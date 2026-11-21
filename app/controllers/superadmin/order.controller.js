@@ -7,13 +7,31 @@ const { getPaginationOptions } = require('@helpers/paginator')
 const { OrderCollection } = require("@resources/distributor/OrderCollection");
 const { CartCollection } = require("@resources/distributor/CartCollection");
 const { CartMaterialCollection } = require("@resources/distributor/CartMaterialCollection");
-const { getOrderCartData } = require("@library/orderCart");
+const { getOrderCartData, getStockMaterials, insertIntoCart } = require("@library/orderCart");
 const moment = require('moment');
 const _ = require("lodash");
 const orderModel = db.orders;
 const { isEmpty, statusDisplay, getDateFromToWhere, convertUnitToGram, arrayColumn, priceFormat, requiresPaymentApproval } = require("@helpers/helper");
 const cartModel = db.carts;
-const { getRoleId, getWorkingUserID, getStockUserID, canStockAddCart, sendNotification, updateWalletRemainingBalance, updateAdvanceAmount, getUserColumnValue } = require("@library/common");
+const { getRoleId, getWorkingUserID, getStockUserID, canStockAddCart, sendNotification, updateWalletRemainingBalance, updateAdvanceAmount, getUserColumnValue, orderHandlingAdminId, canManageOrder, getAdminTeamUserIds, handledOrderIds } = require("@library/common");
+
+/* an order an admin handles is acted on by that admin only - the super admin
+   (and anyone else) just watches it; sends the refusal and returns false */
+const ensureCanManage = async (req, res, order) => {
+  if (!order) {
+    res.status(errorCodes.default).send(formatErrorResponse("order not found"));
+    return false;
+  }
+  if (!(await canManageOrder(req, order))) {
+    res.status(errorCodes.default).send(formatErrorResponse(
+      req.role == getRoleId("admin")
+        ? "This order is handled by another admin."
+        : "This order is handled by its admin - you can only view it.",
+    ));
+    return false;
+  }
+  return true;
+};
 const cartMaterialsModel = db.cart_materials;
 const orderMaterialsModel = db.order_materials;
 const materialPriceModel = db.material_prices
@@ -38,8 +56,12 @@ const PaymentModel = db.payments;
  * @param res
  */
 exports.index = async (req, res) => {
-  let { page, limit, status, date_from, date_to, order_from, user_id } = req.query;
+  let { page, limit, status, date_from, date_to, order_from, user_id, mine } = req.query;
   let conditions = {};
+  /* "My Orders": the ones no admin handles - the super admin's to act on */
+  if (mine == 1) {
+    conditions.id = { [Op.in]: await handledOrderIds(null) };
+  }
 
   if (!isEmpty(status)) {
     conditions.status = status;
@@ -202,7 +224,12 @@ exports.fetch = async (req, res) => {
   if (!order) {
     return res.status(errorCodes.default).send(formatErrorResponse('order not found'));
   }
-  res.send(formatResponse(await OrderCollection(order), "order fetched successfully!"));
+  const handlingAdminId = await orderHandlingAdminId(order);
+  res.send(formatResponse({
+    ...(await OrderCollection(order)),
+    can_manage: await canManageOrder(req, order),
+    handled_by_admin_name: handlingAdminId ? (await getUserColumnValue(handlingAdminId, 'name')) || '' : '',
+  }, "order fetched successfully!"));
 };
 
 /**
@@ -259,9 +286,6 @@ exports.updateOrderStatus = async (req, res) => {
   }
   if (data.status == "accepted") {
     obj.accepted_at = moment().format('YYYY-MM-DD HH:mm:ss')
-    if ('notes' in data && data.notes) {
-      obj.notes = data.notes;
-    }
   } else if (data.status == "shipped") {
     obj.shipped_at = moment().format('YYYY-MM-DD HH:mm:ss')
   } else if (data.status == "out_for_delivery") {
@@ -278,6 +302,20 @@ exports.updateOrderStatus = async (req, res) => {
   }
 
   let order = await orderModel.findOne({ where: { id: req.params.id } });
+  if (!(await ensureCanManage(req, res, order))) return;
+
+  /* a note with the status: a cancel note is the order's cancel reason; an
+     accepted / delivered note is added to the order's notes, labelled, so
+     the customer's own checkout note is kept */
+  const statusNote = String(data.notes || "").trim();
+  if (statusNote) {
+    if (data.status == "cancelled") {
+      obj.cancel_reason = statusNote;
+    } else if (data.status == "accepted" || data.status == "delivered") {
+      obj.notes = [order.notes, `${statusDisplay(data.status)}: ${statusNote}`].filter(Boolean).join("\n");
+    }
+  }
+
   if ('advance_amount' in data && data.advance_amount) {
     if (order) {
       let role_id = await getUserColumnValue(order.user_id, 'role_id')
@@ -346,6 +384,7 @@ exports.updateOrderStatus = async (req, res) => {
 exports.updateProducts = async (req, res) => {
   let data = req.body;
   let order = await orderModel.findOne({ where: { id: data.order_id } });
+  if (!(await ensureCanManage(req, res, order))) return;
 
   let orderProduct = await orderProductModel.findOne({
     where: {
@@ -536,14 +575,22 @@ exports.orderSaleProceed = async (req, res) => {
       }
     ]
   });
-  if (!order) {
-    return res.status(errorCodes.default).send(formatErrorResponse('order not found'));
-  }
+  if (!(await ensureCanManage(req, res, order))) return;
 
 
   let userID = await getWorkingUserID(req);
   let stockCon = { user_id: await getStockUserID(req, userID) };
 
+
+  /**
+   * Start from an empty cart - only this order's pieces go in. (This used to
+   * run after adding them, which emptied the cart the sale page then reads.
+   * Clearing first also frees a piece already in the cart to be added again.)
+   */
+  let carts = await cartModel.findAll({ where: { user_id: userID } });
+  let cartIds = arrayColumn(carts, 'id');
+  await cartMaterialsModel.destroy({ where: { cart_id: { [Op.in]: cartIds } } });
+  await cartModel.destroy({ where: { user_id: userID } });
 
   /**
    * Now add to cart order product from stock
@@ -552,7 +599,10 @@ exports.orderSaleProceed = async (req, res) => {
   for (let x = 0; x < order.orderProducts.length; x++) {
     let orderProduct = order.orderProducts[x];
     let thisCon = { ...stockCon, product_id: orderProduct.product_id };
-    if (isEmpty(orderProduct.size_id)) {
+    if (orderProduct.certificate_no) {
+      /* a certificate is that exact piece, not any piece of the product */
+      thisCon = { ...thisCon, certificate_no: orderProduct.certificate_no };
+    } else if (isEmpty(orderProduct.size_id)) {
       thisCon = { ...thisCon, size_id: { [Op.is]: null } }
     } else {
       thisCon = { ...thisCon, size_id: orderProduct.size_id }
@@ -678,57 +728,34 @@ exports.orderSaleProceed = async (req, res) => {
     return res.status(errorCodes.default).send(formatErrorResponse("You doesn't have stock."));
   }
 
-  /**
-  * Clear cart data
-  */
-  let carts = await cartModel.findAll({ where: { user_id: userID } });
-  let cartIds = arrayColumn(carts, 'id');
-  await cartMaterialsModel.destroy({ where: { cart_id: { [Op.in]: cartIds } } });
-  await cartModel.destroy({ where: { user_id: userID } });
-
   res.send(formatResponse({
     all_added: haveAllInStock ? 1 : 0
   }));
 
 }
 
-const getStockMaterials = (stockMaterials) => {
-  let materialItem = [];
-  for (let item of stockMaterials) {
-    materialItem.push({
-      material_id: item.material_id,
-      weight: item.weight,
-      quantity: item.quantity,
-      unit_id: item.unit_id,
-      purity_id: item.purity_id
-    });
+/**
+ * Assign an order to a sales executive - by whoever handles the order (its
+ * admin, or the super admin when no admin does). An admin may only pick an SE
+ * of its own team.
+ *
+ * @param {*} req
+ * @param {*} res
+ */
+exports.orderAssign = async (req, res) => {
+  const order = await orderModel.findOne({ where: { id: req.params.id } });
+  if (!(await ensureCanManage(req, res, order))) return;
+
+  const seId = parseInt(req.body.user_id, 10);
+  const seRole = seId ? await getUserColumnValue(seId, "role_id") : null;
+  if (seRole != getRoleId("sales_executive")) {
+    return res.status(errorCodes.default).send(formatErrorResponse("Please select a sales executive."));
   }
-  return materialItem;
-}
-
-const insertIntoCart = async (data) => {
-  let cart = await cartModel.create({
-    user_id: data.user_id,
-    stock_id: data.stock_id,
-    product_id: data.product_id,
-    size_id: data.size_id,
-    quantity: data.quantity,
-    total_weight: data.total_weight,
-    type: 'sale',
-    order_product_id: data.order_product_id
-  });
-  for (let x = 0; x < data.materials.length; x++) {
-    let material = data.materials[x];
-    await cartMaterialsModel.create({
-      cart_id: cart.id,
-      material_id: material.material_id,
-      purity_id: material.purity_id,
-      weight: material.weight,
-      unit_id: material.unit_id,
-      quantity: material.quantity
-    });
+  if (req.role == getRoleId("admin") && !(await getAdminTeamUserIds(req.userId)).includes(seId)) {
+    return res.status(errorCodes.default).send(formatErrorResponse("This sales executive is not in your team."));
   }
-}
 
-
-
+  await orderModel.update({ sales_executive_id: seId }, { where: { id: order.id } });
+  sendNotification("order_assigned", req, { order: order, sales_executive_id: seId });
+  res.send(formatResponse("", "Order assigned successfully."));
+};

@@ -99,6 +99,98 @@ const getOrderCartData = async (order_id, order_product_id, role) => {
     }
 }
 
+/* a stock piece's materials, in the shape cart rows take */
+const getStockMaterials = (stockMaterials) => {
+  let materialItem = [];
+  for (let item of stockMaterials) {
+    materialItem.push({
+      material_id: item.material_id,
+      weight: item.weight,
+      quantity: item.quantity,
+      unit_id: item.unit_id,
+      purity_id: item.purity_id
+    });
+  }
+  return materialItem;
+}
+
+const insertIntoCart = async (data) => {
+  let cart = await cartsModel.create({
+    user_id: data.user_id,
+    stock_id: data.stock_id,
+    product_id: data.product_id,
+    size_id: data.size_id,
+    quantity: data.quantity,
+    total_weight: data.total_weight,
+    type: 'sale',
+    order_product_id: data.order_product_id
+  });
+  for (let x = 0; x < data.materials.length; x++) {
+    let material = data.materials[x];
+    await db.cart_materials.create({
+      cart_id: cart.id,
+      material_id: material.material_id,
+      purity_id: material.purity_id,
+      weight: material.weight,
+      unit_id: material.unit_id,
+      quantity: material.quantity
+    });
+  }
+}
+
+/* order statuses a sale can still complete */
+const OPEN_ORDER_STATUSES = ["pending", "accepted", "on_process", "shipped"];
+
+/*
+ * Orders whose pieces have all been sold to the order's buyer are delivered -
+ * however the sale was made (from the order's Sale, or the plain Sale screen).
+ * Pieces are matched by certificate; an order with an uncertified item is left
+ * to its own status flow. Pass order ids, or a sale id to check the orders
+ * holding the certificates that sale sold.
+ * ponytail: one query per order; batch if a sale ever touches many orders.
+ */
+const deliverSoldOrders = async ({ orderIds = [], saleId = null }) => {
+  let ids = [...orderIds];
+  if (saleId) {
+    const certs = (
+      await db.sale_products.findAll({ attributes: ["certificate_no"], where: { sale_id: saleId }, raw: true })
+    ).map((r) => r.certificate_no).filter(Boolean);
+    if (certs.length) {
+      ids.push(...(await db.order_products.findAll({ attributes: ["order_id"], where: { certificate_no: certs }, raw: true })).map((r) => r.order_id));
+    }
+  }
+  ids = [...new Set(ids.filter(Boolean))];
+  if (!ids.length) return;
+  const orders = await db.orders.findAll({
+    attributes: ["id", "user_id", "createdAt"],
+    where: { id: ids, status: OPEN_ORDER_STATUSES },
+  });
+  for (const order of orders) {
+    const lines = await db.order_products.findAll({ attributes: ["certificate_no"], where: { order_id: order.id }, raw: true });
+    if (!lines.length || lines.some((l) => !l.certificate_no)) continue;
+    const saleIds = (
+      await db.sales.findAll({
+        attributes: ["id"],
+        where: { user_id: order.user_id, createdAt: { [Op.gte]: order.createdAt } },
+        raw: true,
+      })
+    ).map((r) => r.id);
+    if (!saleIds.length) continue;
+    const sold = await db.sale_products.findAll({
+      attributes: ["certificate_no"],
+      where: { sale_id: saleIds, certificate_no: lines.map((l) => l.certificate_no) },
+      raw: true,
+    });
+    const soldCerts = new Set(sold.map((r) => String(r.certificate_no).toLowerCase()));
+    if (lines.every((l) => soldCerts.has(String(l.certificate_no).toLowerCase()))) {
+      await db.orders.update({ status: "delivered" }, { where: { id: order.id } });
+    }
+  }
+};
+
 module.exports = {
-    getOrderCartData
+    deliverSoldOrders,
+    getOrderCartData,
+    getStockMaterials,
+    insertIntoCart
 }

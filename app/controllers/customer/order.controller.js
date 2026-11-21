@@ -183,6 +183,8 @@ exports.placeOrder = async (req, res) => {
     let sales_executive_id = null,
       user_id = req.userId;
     if (isRetailer(req)) {
+      /* no SE picked at checkout: the order stays unassigned - it still shows
+         to the retailer's SE and their admin, and that admin assigns it */
       sales_executive_id = !isEmpty(data.user_id) ? data.user_id : null;
     } else if (isSalesExecutive(req)) {
       sales_executive_id = req.userId;
