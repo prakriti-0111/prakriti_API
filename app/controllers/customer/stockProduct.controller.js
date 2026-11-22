@@ -3,6 +3,7 @@ const { errorCodes, formatErrorResponse, formatResponse } = require("@utils/resp
 const db = require("@models");
 const {isEmpty, isArray, convertUnitToGram, displayAmount, getDiscountedText, arrayColumn} = require("@helpers/helper");
 const {updateOrCreate} = require("@library/common");
+const { frontendStockOwnerWhere, hiddenFrontendStockOwnerIds } = require("@library/visitorState");
 const { getPaginationOptions } = require('@helpers/paginator')
 const {ProductCollection} = require("@resources/customer/ProductCollection");
 const {ProductListCollection} = require("@resources/customer/ProductListCollection");
@@ -12,6 +13,7 @@ const {NewProductDetailsCollection} = require("@resources/customer/NewProductDet
 const {CategoryCollection} = require("@resources/customer/CategoryCollection");
 const { Op, QueryTypes } = require("sequelize");
 const sequelize = db.sequelize;
+
 const ProductModel = db.products;
 const ProductMaterialModel = db.product_materials;
 const MaterialPriceModel = db.material_prices;
@@ -186,6 +188,11 @@ exports.index = async (req, res) => {
       });
     }*/
     
+    /* the visitor's state: its admins (and their SEs) plus the super admin;
+       with the state filter off, everyone but admins who turned their stock off */
+    const ownerWhere = await frontendStockOwnerWhere(req);
+    if (ownerWhere) conditions.user_id = ownerWhere;
+
     if(!isEmpty(offer)){
       try {
         offer = offer.split(",");
@@ -366,7 +373,7 @@ exports.viewNew = async (req, res) => {
       include: _include,
     });
   
-  if (!stock) {
+  if (!stock || (await hiddenFrontendStockOwnerIds()).includes(stock.user_id)) {
     return res.status(errorCodes.default).send(formatErrorResponse('Product not found'));
   }
   compactLog("stock id:", stock && stock.id);

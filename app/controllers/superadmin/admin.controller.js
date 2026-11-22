@@ -286,6 +286,8 @@ exports.store = async (req, res) => {
     company_logo: company_logo,
     status: data.status ? true : false,
     own: data.own ? true : false,
+    // the admin's stock is listed on the customer frontend unless turned off
+    show_frontend_stock: data.show_frontend_stock === false ? false : true,
     created_by: req.userId,
     documents: documents,
   };
@@ -465,6 +467,9 @@ exports.update = async (req, res) => {
     p_district_id: data.p_district_id || null,
     p_state_id: data.p_state_id || null,
     p_country_id: data.p_country_id || null,
+    ...("show_frontend_stock" in data
+      ? { show_frontend_stock: !!data.show_frontend_stock }
+      : {}),
     company_name: data.company_name || null,
     gst: data.gst || null,
     bank_name: data.bank_name || null,

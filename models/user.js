@@ -155,6 +155,7 @@ module.exports = (sequelize, DataTypes) => {
     partner: DataTypes.BOOLEAN,
     expense: DataTypes.BOOLEAN,
     expense_action: DataTypes.BOOLEAN,
+    show_frontend_stock: { type: DataTypes.BOOLEAN, defaultValue: true },
     created_by: DataTypes.INTEGER,
     documents: {
       type: DataTypes.TEXT,

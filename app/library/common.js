@@ -2753,6 +2753,92 @@ const getAdminTeamUserIds = async (adminId) => {
   return [...new Set([adminId, ...arrayColumn(salesExecutives, "id")])];
 };
 
+/*
+ * Orders an SE (or a set of SEs) answers for: orders with them as the order's
+ * SE, orders they placed, and - for orders saved without an SE - orders from
+ * the retailers under them (a retailer's parent_id is its SE).
+ */
+/*
+ * The admin who handles an order, or null when the super admin does. In order:
+ *   1. the order's SE - the one chosen, else the SE who placed it, else (saved
+ *      without one) the ordering retailer's own SE - and that SE's admin,
+ *      directly or through the distributor above the SE
+ *   2. else a distributor the order is addressed to, and that distributor's admin
+ * A customer order with neither stays with the super admin.
+ */
+/* the handler rule over an in-memory users map (id -> {role_id, parent_id}) */
+const handlerAdminFromUsers = (order, users) => {
+  const role = (id) => (users.get(id) || {}).role_id;
+  const adminAbove = (id) => {
+    let u = users.get(id);
+    for (let hop = 0; u && hop < 3; hop++) {
+      if (u.role_id == getRoleId("admin")) return u.id;
+      u = users.get(u.parent_id);
+    }
+    return null;
+  };
+  const se = getRoleId("sales_executive");
+  let seId = order.sales_executive_id || null;
+  if (!seId && order.order_by && role(order.order_by) == se) seId = order.order_by;
+  if (!seId && order.user_id && role(order.user_id) == getRoleId("retailer")) {
+    const parentId = (users.get(order.user_id) || {}).parent_id;
+    if (parentId && role(parentId) == se) seId = parentId;
+  }
+  if (seId) return adminAbove(seId);
+  if (order.to_user_id && role(order.to_user_id) == getRoleId("distributor")) {
+    return adminAbove(order.to_user_id);
+  }
+  return null;
+};
+
+const loadUsersMap = async () =>
+  new Map(
+    (
+      await UserModel.findAll({ attributes: ["id", "role_id", "parent_id"], raw: true, paranoid: false })
+    ).map((u) => [u.id, u]),
+  );
+
+const orderHandlingAdminId = async (order) => handlerAdminFromUsers(order, await loadUsersMap());
+
+/* ids of the orders a handler acts on: an admin's id, or null for the super
+   admin (orders no admin handles) - the "My Orders" tab */
+const handledOrderIds = async (handlerAdminId) => {
+  const users = await loadUsersMap();
+  const orders = await db.orders.findAll({
+    attributes: ["id", "sales_executive_id", "order_by", "user_id", "to_user_id"],
+    raw: true,
+  });
+  return orders
+    .filter((o) => (handlerAdminFromUsers(o, users) || null) == (handlerAdminId || null))
+    .map((o) => o.id);
+};
+
+/* whether this requester may act on the order: its admin, or the super admin
+   (and the super admin's managers) when no admin handles it */
+const canManageOrder = async (req, order) => {
+  /* the SE an order is assigned to works it too (e.g. "sale proceed") */
+  if (req.role == getRoleId("sales_executive")) return order.sales_executive_id == req.userId;
+  const adminId = await orderHandlingAdminId(order);
+  if (req.role == getRoleId("admin")) return adminId == req.userId;
+  return !adminId;
+};
+
+const ordersOfSalesExecutivesWhere = async (seIds) => {
+  const retailers = await UserModel.findAll({
+    attributes: ["id"],
+    where: { role_id: getRoleId("retailer"), parent_id: { [Op.in]: seIds } },
+    raw: true,
+  });
+  const retailerIds = arrayColumn(retailers, "id");
+  return [
+    { sales_executive_id: { [Op.in]: seIds } },
+    { order_by: { [Op.in]: seIds } },
+    ...(retailerIds.length
+      ? [{ sales_executive_id: null, user_id: { [Op.in]: retailerIds } }]
+      : []),
+  ];
+};
+
 const getAdminSEWhereCondition = async (distributors, state_id, isIds) => {
   let distributorsIds = [];
   if (!distributors) {
@@ -5282,6 +5368,10 @@ module.exports = {
   getAdminDistributorIds,
   getAdminOwnDistributorIds,
   getAdminTeamUserIds,
+  ordersOfSalesExecutivesWhere,
+  orderHandlingAdminId,
+  canManageOrder,
+  handledOrderIds,
   getOrderStatusProgress,
   getNotificationLabelByType,
   convertToNotificationGroup,

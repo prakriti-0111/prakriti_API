@@ -198,6 +198,9 @@ exports.index = async (req, res) => {
           let orderProduct = await orderProductModel.create({
             order_id: order.id,
             product_id: carts[i].product_id,
+            // the exact stock piece picked into the cart, as the customer checkout keeps it
+            stock_id: carts[i].stock_id ? parseInt(carts[i].stock_id) : null,
+            certificate_no: carts[i].certificate_no || null,
             size_id: carts[i].size_id,
             quantity: carts[i].quantity,
             //discount: carts[i].discount,
