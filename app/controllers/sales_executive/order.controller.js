@@ -8,7 +8,7 @@ const { CartCollection } = require("@resources/sales_executive/CartCollection");
 const { AddressCollection } = require("@resources/sales_executive/AddressCollection");
 const orderModel = db.orders;
 const { isEmpty, generateOrderNo, priceFormat } = require("@helpers/helper");
-const { getCartMaterialPrices, sendNotification, insertVisit } = require("@library/common");
+const { getCartMaterialPrices, sendNotification, insertVisit, ordersOfSalesExecutivesWhere } = require("@library/common");
 const cartModel = db.carts;
 const cartMaterialsModel = db.cart_materials;
 const orderMaterialsModel = db.order_materials;
@@ -34,12 +34,15 @@ const RoleModel = db.roles;
  * @param res
  */
 exports.index = async (req, res) => {
-  let { page, limit, all } = req.query;
-  let conditions = { sales_executive_id: "" };
-  let order_id = !isEmpty(req.query.order_id) ? req.query.order_id :req.userId;
-
+  let { page, limit, all, status, order_id } = req.query;
+  /* the SE's orders: as the order's SE, placed by them, or from their
+     retailers when the order was saved without an SE */
+  let conditions = { [Op.or]: await ordersOfSalesExecutivesWhere([req.userId]) };
   if (!isEmpty(order_id)) {
     conditions.id = order_id;
+  }
+  if (!isEmpty(status)) {
+    conditions.status = status;
   }
 
   const paginatorOptions = getPaginationOptions(page, limit);
@@ -166,6 +169,8 @@ exports.placeOrder = async (req, res) => {
       delivery_address: JSON.stringify(address),
       status: 'pending',
       to_user_id: distributor_id,
+      sales_executive_id: req.userId,
+      order_by: req.userId,
     };
 
     let order = await orderModel.create(postData1)
@@ -180,6 +185,9 @@ exports.placeOrder = async (req, res) => {
           let orderProduct = await orderProductModel.create({
             order_id: order.id,
             product_id: carts[i].product_id,
+            // the exact stock piece picked into the cart, as the customer checkout keeps it
+            stock_id: carts[i].stock_id ? parseInt(carts[i].stock_id) : null,
+            certificate_no: carts[i].certificate_no || null,
             size_id: carts[i].size_id,
             quantity: carts[i].quantity,
             //discount: carts[i].discount,

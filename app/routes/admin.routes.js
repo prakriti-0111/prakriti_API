@@ -23,6 +23,8 @@ const CategoryController = require("@controllers/admin/category.controller");
 const subcategoryController = require("@controllers/admin/subcategory.controller");
 const cartController = require("@controllers/admin/cart.controller");
 const orderController = require("@controllers/admin/order.controller");
+const superadminOrderController = require("@controllers/superadmin/order.controller");
+const stockRequestController = require("@controllers/sales_executive/stockRequest.controller");
 const paymentController = require("@controllers/admin/payment.controller");
 const profileController = require("@controllers/admin/profile.controller");
 const companyDetailsController = require("@controllers/admin/company-details.controller");
@@ -301,6 +303,55 @@ module.exports = (app, express, io) => {
     "/orders/cancel-order/:id",
     [authJwt.verifyToken, authJwt.isAdmin],
     orderController.cancelOrder,
+  );
+  /* handling an order the admin is responsible for - the same handlers as the
+     super admin's, which check the order belongs to this admin */
+  router.get(
+    "/orders/view/:id",
+    [authJwt.verifyToken, authJwt.isAdmin],
+    superadminOrderController.fetch,
+  );
+  router.post(
+    "/orders/update-status/:id",
+    [authJwt.verifyToken, authJwt.isAdmin],
+    superadminOrderController.updateOrderStatus,
+  );
+  router.post(
+    "/orders/sale-proceed/:id",
+    [authJwt.verifyToken, authJwt.isAdmin],
+    superadminOrderController.orderSaleProceed,
+  );
+  router.post(
+    "/orders/update-products",
+    [authJwt.verifyToken, authJwt.isAdmin],
+    superadminOrderController.updateProducts,
+  );
+  router.post(
+    "/orders/assign/:id",
+    [authJwt.verifyToken, authJwt.isAdmin],
+    superadminOrderController.orderAssign,
+  );
+  // an SE's stock transfer request on an order: list them, view one, put its pieces in the cart
+  router.get(
+    "/stock-requests",
+    [authJwt.verifyToken, authJwt.isAdmin],
+    stockRequestController.index,
+  );
+  router.get(
+    "/orders/:id/stock-request",
+    [authJwt.verifyToken, authJwt.isAdmin],
+    stockRequestController.adminView,
+  );
+  router.post(
+    "/stock-requests/:id/add-to-cart",
+    [authJwt.verifyToken, authJwt.isAdmin],
+    stockRequestController.addToCart,
+  );
+  // pass a request on: ask another admin or the super admin for items they hold
+  router.post(
+    "/orders/:id/stock-request/holder",
+    [authJwt.verifyToken, authJwt.isAdmin],
+    stockRequestController.requestFromHolder,
   );
 
   //sale carts

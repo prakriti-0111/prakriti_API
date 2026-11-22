@@ -8,7 +8,7 @@ const {CartCollection} = require("@resources/distributor/CartCollection");
 const {CartMaterialCollection} = require("@resources/distributor/CartMaterialCollection");
 const orderModel = db.orders;
 const { isEmpty, generateOrderNo, getDateFromToWhere } = require("@helpers/helper");
-const { getAdminDistributorIds, sendNotification, getSuperAdminId } = require("@library/common");
+const { getAdminDistributorIds, sendNotification, getSuperAdminId, getAdminTeamUserIds, ordersOfSalesExecutivesWhere, handledOrderIds } = require("@library/common");
 const cartModel = db.carts;
 const cartMaterialsModel =db.cart_materials;
 const orderMaterialsModel =db.order_materials;
@@ -30,7 +30,7 @@ const RoleModel = db.roles;
  * @param res
  */
 exports.index = async (req, res) => {
-  let { page, limit, status, date_from, date_to, my_orders } = req.query;
+  let { page, limit, status, date_from, date_to, my_orders, mine } = req.query;
   let conditions = {};
   
   if(!isEmpty(status)){
@@ -39,7 +39,19 @@ exports.index = async (req, res) => {
   if(my_orders == 1){
     conditions.user_id = req.userId;
   }else{
-    conditions.to_user_id = {[Op.in]: await getAdminDistributorIds(req.userId)};
+    /* sent to its distributors, or handled by an SE of its team (including
+       retailer orders placed without picking an SE) */
+    conditions[Op.or] = [
+      { to_user_id: { [Op.in]: await getAdminDistributorIds(req.userId) } },
+      ...(await ordersOfSalesExecutivesWhere(
+        (await getAdminTeamUserIds(req.userId)).filter((id) => id !== req.userId),
+      )),
+    ];
+  }
+
+  /* "My Orders" tab: only the orders this admin handles (acts on) */
+  if (mine == 1 && my_orders != 1) {
+    conditions.id = { [Op.in]: await handledOrderIds(req.userId) };
   }
 
   conditions = {...conditions, ...getDateFromToWhere(date_from, date_to)}
@@ -78,6 +90,18 @@ exports.index = async (req, res) => {
     let result = {
       items: await OrderCollection(data.rows),
       total: data.count,
+    }
+    /* flag orders with a pending stock request from the SE to this admin */
+    try {
+      const pending = await db.stock_transfer_requests.findAll({
+        attributes: ['order_id'],
+        where: { admin_id: req.userId, status: 'pending', order_id: data.rows.map((o) => o.id) },
+        raw: true,
+      });
+      const ids = new Set(pending.map((r) => r.order_id));
+      result.items = result.items.map((item) => ({ ...item, stock_request: ids.has(item.id) ? 'Pending' : '' }));
+    } catch (e) {
+      // stock_transfer_requests not migrated yet - list without the flag
     }
     res.send(formatResponse(result, 'orders'));
   })

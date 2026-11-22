@@ -68,6 +68,18 @@ const getModelObject = async (data, role_id) => {
     let main_image = data.product && !isEmpty(data.product.main_image) ? getFileAbsulatePath(data.product.main_image) : '';
     if (data.stock && data.stock.current_image && !isEmpty(data.stock.current_image)) {
         main_image = getFileAbsulatePath(data.stock.current_image);
+    } else if (!isEmpty(data.certificate_no)) {
+        /* frontend orders keep the piece's certificate, not its stock id - show
+           that piece's current image rather than the catalogue photo */
+        const piece = await db.stocks.findOne({
+            attributes: ['current_image'],
+            where: { certificate_no: data.certificate_no },
+            order: [['id', 'DESC']],
+            raw: true,
+        });
+        if (piece && !isEmpty(piece.current_image)) {
+            main_image = getFileAbsulatePath(piece.current_image);
+        }
     }
 
     let taxInfo = null;
@@ -85,7 +97,8 @@ const getModelObject = async (data, role_id) => {
     return {
         id: data.id,
         product_id: data.product_id,
-        certificate_no: !isEmpty(data.stock) ? data.stock.certificate_no : '',
+        // the stock link's certificate, else the one the order kept (frontend orders)
+        certificate_no: !isEmpty(data.stock) && data.stock.certificate_no ? data.stock.certificate_no : (data.certificate_no || ''),
         product_type: !isEmpty(data.product) ? data.product.type : '',
         product_type_diplay: !isEmpty(data.product) ? productTypeDisplay(data.product.type) : '',
         product_name: !isEmpty(data.product) ? data.product.name : '',

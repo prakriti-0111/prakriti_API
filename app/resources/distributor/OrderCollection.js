@@ -72,6 +72,7 @@ const getModelObject = async(data) => {
         },
         can_sell: can_sell,
         sale_executive_name: sale_executive_name,
+        sales_executive_id: data.sales_executive_id || null,
         formated_address: formated_address,
         no_of_products: products.length,
         city: !isEmpty(delivery_address) && 'city' in delivery_address ? delivery_address.city : '',

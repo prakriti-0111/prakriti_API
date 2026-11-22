@@ -108,6 +108,7 @@ const getModelObject = async (data, saleByUserId = null, live = false) => {
     p_state_id: data.p_state_id || "",
     p_country_id: data.p_country_id || "",
     company_name: data.company_name || "",
+    show_frontend_stock: data.show_frontend_stock !== false,
     gst: data.gst || "",
     bank_name: data.bank_name || "",
     bank_account_no: data.bank_account_no || "",

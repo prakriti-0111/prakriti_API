@@ -1,4 +1,5 @@
 const config = require("@config/auth.config");
+const { deliverSoldOrders } = require("@library/orderCart");
 const {
   errorCodes,
   formatErrorResponse,
@@ -62,6 +63,8 @@ const {
 
 /* The "Current Invoice" button posts current=1; accepted on the query string or
    in the body so either style of call works. */
+/* a fully paid invoice keeps the figures it was paid at - no current rate */
+const isFullyPaid = (sale) => !!sale && sale.status === "paid";
 const isCurrentRateInvoice = (req) => {
   const flag = req.query?.current ?? req.body?.current;
   return flag === true || flag === 1 || flag === "1" || flag === "true";
@@ -179,6 +182,10 @@ const liveLedgerDue = async (sale) => {
     sale.setDataValue("due_amount", amounts.due_amount);
   };
 };
+
+/* one material line in the item-details PDF: same height in every column */
+const MATERIAL_LINE_STYLE =
+  "height: 18px; line-height: 18px; margin: 0; padding: 0 4px; white-space: nowrap; font-size: 10px; font-weight: 400; text-align: left;";
 
 /* inline on a returned row's <tr> in the PDFs - every line of every cell is
    struck through, and fading (not a grey) keeps it legible on navy rows */
@@ -1952,8 +1959,12 @@ exports.store = async (req, res) => {
       await updateAdvanceAmount(data.user_id, userID, thisCreditAmnt, false);
     }
 
-    //complete order
-    if (!isEmpty(data.order_id) && !data.order_from_customer) {
+    // any open order whose pieces this sale sold to its buyer is delivered
+    await deliverSoldOrders({ saleId: sale.id });
+
+    //complete order - a customer's / retailer's order too, as the admin and
+    //distributor sales already do (it was skipped here, leaving it Pending)
+    if (!isEmpty(data.order_id)) {
       await orderModel.update(
         {
           status: "delivered",
@@ -2807,13 +2818,15 @@ exports.view = async (req, res) => {
   let liveGold = null;
   let allSaleProducts = null;
   let liveRates = null;
-  if (isCurrentRateInvoice(req)) {
+  if (isCurrentRateInvoice(req) && !isFullyPaid(sale)) {
     liveRates = await getLiveGoldRate();
     const applyDue = await liveLedgerDue(sale);
     /* returned pieces are no longer the customer's - bill what is held */
     allSaleProducts = [...(sale.saleProducts || [])];
-    withoutReturnedProducts(sale);
-    const repricing = repriceSaleAtLiveGold(sale, liveRates);
+    /* held pieces at today's rate, in the stored figures' terms - like the
+       invoice PDFs. Repricing the sale itself left taxable_amount and CGST/SGST
+       without the report charge and its GST, which the page takes back out. */
+    const repricing = heldAtLiveRate(sale, liveRates);
     applyDue(); // the same Due as the sales lists
     /* The page has to be able to say which rate it is showing, and to stay
        quiet when the feed gave us nothing (rate 0) rather than print a zero. */
@@ -2905,19 +2918,17 @@ exports.edit = async (req, res) => {
       .send(formatErrorResponse("Sale not found"));
   }
 
-  /* The return page asks for current=1: a return is credited at today's gold
-     rate, not the invoice's. Only the line figures move - what the customer
-     actually owes is a fact of the ledger, and the return form nets the refund
-     against due_amount, so the stored balance is put back. Nothing is saved. */
-  if (isCurrentRateInvoice(req)) {
-    const due_amount = sale.due_amount;
-    repriceSaleAtLiveGold(sale, await getLiveGoldRate());
-    sale.setDataValue("due_amount", due_amount);
-  }
+  /* A return is credited at the rate the sale was made at, so the return
+     page gets the sale exactly as stored - no repricing at today's rate. */
+  /* the total as billed - the return page's Billed Amount and return cap */
+  const billed_total_amount = sale.total_amount;
 
   res.send(
     formatResponse(
-      await SaleEditCollection(sale, req),
+      {
+        ...(await SaleEditCollection(sale, req)),
+        billed_total_amount,
+      },
       "Purchase edit details",
     ),
   );
@@ -2978,12 +2989,14 @@ exports.returnSale = async (req, res) => {
     return_status = "pending";
   }
 
-  // the return amount is editable on the form; keep it within the sale's own total
+  // the return amount is editable on the form; returns are credited at the
+  // sale's own rate, so keep it within the bill as stored
   const returnAmount = parseFloat(data.return_amount) || 0;
-  if (returnAmount < 0 || returnAmount > parseFloat(sale.total_amount || 0)) {
+  const returnCap = parseFloat(sale.total_amount || 0);
+  if (returnAmount < 0 || returnAmount > returnCap + 0.005) {
     return res
       .status(errorCodes.default)
-      .send(formatErrorResponse("Return amount can't be more than the sale total."));
+      .send(formatErrorResponse("Return amount can't be more than the bill amount."));
   }
   data.return_amount = returnAmount;
 
@@ -3716,12 +3729,14 @@ exports.returnSaleNew = async (req, res) => {
     return_status,
   );
 
-  // the return amount is editable on the form; keep it within the sale's own total
+  // the return amount is editable on the form; returns are credited at the
+  // sale's own rate, so keep it within the bill as stored
   const returnAmount = parseFloat(data.return_amount) || 0;
-  if (returnAmount < 0 || returnAmount > parseFloat(sale.total_amount || 0)) {
+  const returnCap = parseFloat(sale.total_amount || 0);
+  if (returnAmount < 0 || returnAmount > returnCap + 0.005) {
     return res
       .status(errorCodes.default)
-      .send(formatErrorResponse("Return amount can't be more than the sale total."));
+      .send(formatErrorResponse("Return amount can't be more than the bill amount."));
   }
   data.return_amount = returnAmount;
 
@@ -5443,7 +5458,7 @@ exports.downloadInvoice = async (req, res) => {
      plain Invoice button keeps printing the rates frozen at sale time; this
      branch reprices the loaded instance IN MEMORY ONLY - never saved - so the
      template below renders the live figures instead. */
-  const atCurrentRate = isCurrentRateInvoice(req);
+  const atCurrentRate = isCurrentRateInvoice(req) && !isFullyPaid(sale);
   let liveRepricing = null;
   let allSaleProducts = null;
   if (atCurrentRate) {
@@ -6967,7 +6982,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
      plain Invoice button keeps printing the rates frozen at sale time; this
      branch reprices the loaded instance IN MEMORY ONLY — never saved — so the
      template below renders the live figures instead. */
-  const atCurrentRate = isCurrentRateInvoice(req);
+  const atCurrentRate = isCurrentRateInvoice(req) && !isFullyPaid(sale);
   let liveRepricing = null;
   let allSaleProducts = null;
   if (atCurrentRate) {
@@ -7623,7 +7638,6 @@ exports.downloadInvoiceInfo = async (req, res) => {
                                       <th rowspan="2" style="text-align: center; color: #fff; font-size: 11px; font-weight: 400; border: 1px solid #ffffff; width: 38px; padding: 5px 3px;">Unit</th>
                                       <th rowspan="2" style="text-align: center; color: #fff; font-size: 11px; font-weight: 400; border: 1px solid #ffffff; width: 50px; padding: 5px 3px;">Rate</th>
                                       <th rowspan="2" style="text-align: center; color: #fff; font-size: 11px; font-weight: 600; border: 1px solid #ffffff; width: 65px; padding: 5px 3px;"><b>Making<br/>Charge</b></th>
-                                      <th rowspan="2" style="text-align: center; color: #fff; font-size: 11px; font-weight: 400; border: 1px solid #ffffff; width: 48px; padding: 5px 3px;">Tax<br/>%</th>
                                       <th rowspan="2" style="text-align: center; color: #fff; font-size: 11px; font-weight: 400; border: 1px solid #ffffff; width: 75px; padding: 5px 3px;">Amount (₹)</th>
                                   </tr>
                                   <tr style="background-color: #1E2757;">
@@ -7638,6 +7652,8 @@ exports.downloadInvoiceInfo = async (req, res) => {
     let totalTaxableAmt = 0;
     let totalMakingCharge = 0;
     let totalTax = 0;
+    let totalMaterialTax = 0;
+    let taxPercentSet = new Set();
 
     /* Sum making_charge after discount from products */
     if (saleData.products) {
@@ -7671,6 +7687,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
       if (billed) {
         totalTaxableAmt += taxableAmt;
         totalTax += (taxableAmt * taxPercent) / 100;
+      taxPercentSet.add(taxPercent);
       }
       item.material.forEach((mat) => {
         if (!billed) return;
@@ -7681,12 +7698,20 @@ exports.downloadInvoiceInfo = async (req, res) => {
             unit: mat.unit,
             rate: parseFloat(mat.rate) || 0,
             amount: 0,
+            tax: 0,
+            taxPercents: new Set(),
             isGold: key.toLowerCase().includes("gold"),
           };
         }
+        const matAmount =
+          mat.material_cost != null /* after the discount */
+            ? parseFloat(mat.material_cost) || 0
+            : (parseFloat(mat.weight) || 0) * (parseFloat(mat.rate) || 0);
         materialTotals[key].weight += parseFloat(mat.weight) || 0;
-        materialTotals[key].amount +=
-          (parseFloat(mat.weight) || 0) * (parseFloat(mat.rate) || 0);
+        materialTotals[key].amount += matAmount;
+        materialTotals[key].tax += (matAmount * taxPercent) / 100;
+        materialTotals[key].taxPercents.add(taxPercent);
+        totalMaterialTax += (matAmount * taxPercent) / 100;
       });
 
       let materialNames = item.material.map((itm) => itm.name).join("<br/>");
@@ -7695,7 +7720,7 @@ exports.downloadInvoiceInfo = async (req, res) => {
         .join("<br/>");
       let materialUnits = item.material.map((itm) => itm.unit).join("<br/>");
       let materialRates = item.material
-        .map((itm) => itm.rate.toFixed(2))
+        .map((itm) => /* rate after discount, so it matches the amount charged */ (itm.material_cost != null && parseFloat(itm.weight) ? parseFloat(itm.material_cost) / parseFloat(itm.weight) : parseFloat(itm.rate)).toFixed(2))
         .join("<br/>");
       let bgTrColor = i % 2 == 0 ? "#f5f5f5" : "#ffffff";
       let slNo = i + 1 <= 9 ? "0" + (i + 1) : i + 1;
@@ -7713,19 +7738,18 @@ exports.downloadInvoiceInfo = async (req, res) => {
                   <td style="text-align: center; font-size: 11px; font-weight: 400; padding: 6px 4px; border: 1px solid #e0e0e0;">${materialUnits}</td>
                   <td style="text-align: center; font-size: 11px; font-weight: 400; padding: 6px 4px; border: 1px solid #e0e0e0;">${materialRates}</td>
                   <td style="text-align: center; font-size: 11px; font-weight: 400; padding: 6px 4px; border: 1px solid #e0e0e0;">${makingCharge > 0 ? makingCharge.toFixed(2) : "-"}</td>
-                  <td style="text-align: center; font-size: 11px; font-weight: 400; padding: 6px 4px; border: 1px solid #e0e0e0;">${item.tax}%</td>
                   <td style="text-align: right; font-size: 11px; font-weight: 600; padding: 6px 4px; border: 1px solid #e0e0e0; color: #1E2746;">${item.taxableAmount.toFixed(2)}</td>
               </tr>`;
     }
 
     /* Summary rows below the table */
-    html += `<tr><td colspan="12" style="border-bottom: none; padding: 4px;"></td></tr>`;
+    html += `<tr><td colspan="11" style="border-bottom: none; padding: 4px;"></td></tr>`;
 
     /* Total Gross Weight */
     html += `<tr>
-                <td colspan="5" style="font-size: 12px; font-weight: 600; color: #1E2746; padding: 4px; border-bottom: 1px solid #e0e0e0;">Total Gross Weight (GW)</td>
-                <td colspan="2" style="font-size: 12px; font-weight: 600; color: #1E2746; padding: 4px; text-align: center; white-space: nowrap; border-bottom: 1px solid #e0e0e0;">${totalGrossWeight.toFixed(3)} gm</td>
-                <td colspan="5" style="border-bottom: 1px solid #e0e0e0;"></td>
+                <td colspan="3" style="font-size: 12px; font-weight: 600; color: #1E2746; padding: 4px; border-bottom: 1px solid #e0e0e0;">Total Gross Weight (GW)</td>
+                <td colspan="2" style="font-size: 12px; font-weight: 600; color: #1E2746; padding: 4px; text-align: right; white-space: nowrap; border-bottom: 1px solid #e0e0e0;">${totalGrossWeight.toFixed(3)} gm</td>
+                <td colspan="6" style="border-bottom: 1px solid #e0e0e0;"></td>
             </tr>`;
 
     /* Material-wise totals (gold first) */
@@ -7739,28 +7763,56 @@ exports.downloadInvoiceInfo = async (req, res) => {
       let isGold = name.toLowerCase().includes("gold");
       let fontWeight = isGold ? "600" : "400";
       let fontColor = isGold ? "#1E2746" : "#555";
+      let matTaxPct =
+        data.taxPercents.size === 1 ? `x ${[...data.taxPercents][0]}%` : "";
       html += `<tr>
-                  <td colspan="4" style="font-size: 12px; font-weight: ${fontWeight}; color: ${fontColor}; padding: 4px; border-bottom: 1px solid #eeeeee;">${name}</td>
+                  <td colspan="3" style="font-size: 12px; font-weight: ${fontWeight}; color: ${fontColor}; padding: 4px; border-bottom: 1px solid #eeeeee;">${name}</td>
                   <td colspan="2" style="font-size: 12px; font-weight: ${fontWeight}; color: ${fontColor}; padding: 4px; text-align: right; white-space: nowrap; border-bottom: 1px solid #eeeeee;">${data.weight.toFixed(3)} ${data.unit}</td>
-                  <td colspan="2" style="font-size: 12px; font-weight: ${fontWeight}; color: ${fontColor}; padding: 4px; text-align: center; white-space: nowrap; border-bottom: 1px solid #eeeeee;">x ${data.rate.toFixed(2)}</td>
+                  <td colspan="2" style="font-size: 12px; font-weight: ${fontWeight}; color: ${fontColor}; padding: 4px; text-align: center; white-space: nowrap; border-bottom: 1px solid #eeeeee;">x ${(data.weight ? data.amount / data.weight : data.rate).toFixed(2)}</td>
                   <td colspan="2" style="font-size: 12px; font-weight: ${fontWeight}; color: ${fontColor}; padding: 4px; text-align: right; white-space: nowrap; border-bottom: 1px solid #eeeeee;">${data.amount.toFixed(2)}</td>
-                  <td colspan="2" style="border-bottom: 1px solid #eeeeee;"></td>
+                  <td style="font-size: 12px; font-weight: ${fontWeight}; color: ${fontColor}; padding: 4px; text-align: center; white-space: nowrap; border-bottom: 1px solid #eeeeee;">${matTaxPct}</td>
+                  <td style="font-size: 12px; font-weight: ${fontWeight}; color: ${fontColor}; padding: 4px; text-align: right; white-space: nowrap; border-bottom: 1px solid #eeeeee;">${(data.amount + data.tax).toFixed(2)}</td>
               </tr>`;
     }
 
-    /* Making Charge */
+    /* Making Charge — its tax is the remainder once material tax is out, so
+       the rows always add up to the totals below. The x N% label only shows
+       when every item shares one rate. */
+    let makingChargeTax = totalTax - totalMaterialTax;
     if (totalMakingCharge > 0) {
+      let makingTaxPct =
+        taxPercentSet.size === 1 ? `x ${[...taxPercentSet][0]}%` : "";
       html += `<tr>
-                  <td colspan="8" style="font-size: 12px; font-weight: 700; color: #555; padding: 4px;">Making Charge</td>
+                  <td colspan="7" style="font-size: 12px; font-weight: 700; color: #555; padding: 4px;">Making Charge</td>
                   <td colspan="2" style="font-size: 12px; font-weight: 700; color: #555; padding: 4px; text-align: right; white-space: nowrap;">${totalMakingCharge.toFixed(2)}</td>
-                  <td colspan="2"></td>
+                  <td style="font-size: 12px; font-weight: 700; color: #555; padding: 4px; text-align: center; white-space: nowrap;">${makingTaxPct}</td>
+                  <td style="font-size: 12px; font-weight: 700; color: #555; padding: 4px; text-align: right; white-space: nowrap;">${(totalMakingCharge + makingChargeTax).toFixed(2)}</td>
               </tr>`;
     }
 
-    /* Taxable Amount total */
+    /* Report Charge - right after the making charge, and part of the taxable amount */
+    const summaryReportQty = parseInt(saleData.report_qty) || 0;
+    const summaryReportRate = parseFloat(saleData.report_charge) || 0;
+    const summaryReportTaxPct = parseFloat(saleData.report_tax_percentage) || 0;
+    const summaryReportAmt = summaryReportQty * summaryReportRate;
+    const summaryReportTax = (summaryReportAmt * summaryReportTaxPct) / 100;
+    if (summaryReportAmt > 0) {
+      html += `<tr>
+                  <td colspan="7" style="font-size: 12px; font-weight: 700; color: #555; padding: 4px;">Report Charge (${summaryReportQty} pcs x ${summaryReportRate.toFixed(2)})</td>
+                  <td colspan="2" style="font-size: 12px; font-weight: 700; color: #555; padding: 4px; text-align: right; white-space: nowrap;">${summaryReportAmt.toFixed(2)}</td>
+                  <td style="font-size: 12px; font-weight: 700; color: #555; padding: 4px; text-align: center; white-space: nowrap;">x ${summaryReportTaxPct}%</td>
+                  <td style="font-size: 12px; font-weight: 700; color: #555; padding: 4px; text-align: right; white-space: nowrap;">${(summaryReportAmt + summaryReportTax).toFixed(2)}</td>
+              </tr>`;
+    }
+
+    /* Total: net in the amount column, gross in the with-tax column */
+    const totalBeforeTax = totalTaxableAmt + summaryReportAmt;
+    const totalTaxAll = totalTax + summaryReportTax;
     html += `<tr style="border: none;">
-                <td colspan="9" style="font-size: 13px; font-weight: 700; color: #1E2746; padding: 4px 4px 2px; border-top: 2px solid #90caf9; border-bottom: none;">Taxable Amt.</td>
-                <td colspan="3" style="font-size: 13px; font-weight: 700; color: #1E2746; text-align: right; padding: 4px 4px 2px; border-top: 2px solid #90caf9; border-bottom: none;">${totalTaxableAmt.toFixed(2)}</td>
+                <td colspan="7" style="font-size: 13px; font-weight: 700; color: #1E2746; padding: 4px; border-top: 2px solid #90caf9; border-bottom: none;">Total</td>
+                <td colspan="2" style="font-size: 13px; font-weight: 700; color: #1E2746; text-align: right; white-space: nowrap; padding: 4px; border-top: 2px solid #90caf9; border-bottom: none;">${totalBeforeTax.toFixed(2)}</td>
+                <td style="font-size: 13px; font-weight: 700; color: #1E2746; text-align: right; white-space: nowrap; padding: 4px; border-top: 2px solid #90caf9; border-bottom: none;">${totalTaxAll.toFixed(2)}</td>
+                <td style="font-size: 13px; font-weight: 700; color: #1E2746; text-align: right; white-space: nowrap; padding: 4px; border-top: 2px solid #90caf9; border-bottom: none;">${(totalBeforeTax + totalTaxAll).toFixed(2)}</td>
             </tr>`;
 
     let receive_metal = 0;
@@ -7787,19 +7839,6 @@ exports.downloadInvoiceInfo = async (req, res) => {
     let rest_metal =
       Math.round((fine_metals - receive_metal) * 100) / 100 + 0;
 
-    let totalReportCharge =
-      parseInt(saleData.report_qty) * parseFloat(saleData.report_charge);
-    let taxOnReportCharge =
-      (totalReportCharge * parseFloat(saleData.report_tax_percentage)) / 100;
-    let afterTaxTotalReportCharge = totalReportCharge + taxOnReportCharge;
-
-    if (saleData.report_qty > 0) {
-      html += `<tr style="border: none;">
-                  <td colspan="2" style="font-size: 13px; font-weight: 700; color: #1E2746; padding: 2px 4px; border: none;">Report Charges (18%)</td>
-                  <td colspan="6" style="font-size: 12px; color: #555; padding: 2px 4px; border: none;">${saleData.report_qty} Pics x ${saleData.report_charge.toFixed(2)} =</td>
-                  <td colspan="4" style="font-size: 13px; font-weight: 700; color: #1E2746; text-align: right; padding: 2px 4px; border: none;">${totalReportCharge.toFixed(2)}</td>
-              </tr>`;
-    }
 
     /* Discount - Removed */
 
@@ -7884,6 +7923,15 @@ exports.downloadInvoiceInfo = async (req, res) => {
       <td style="width: 46%; padding: 3px 0;"><input type="text" value="${value}" style="display: block; width: 100%; box-sizing: border-box; font-size: 12px; font-weight: ${bold ? "600" : "400"}; text-align: right; padding: 2px 4px;"></td>
     </tr>`;
   html += amtRow("Total", saleData.taxable_amount, true);
+  // all the tax on the bill - product GST and the report charge's GST
+  html += amtRow(
+    "Tax Amount",
+    displayAmount(
+      (parseFloat(saleData.cgst_tax) || 0) +
+        (parseFloat(saleData.sgst_tax) || 0) +
+        (parseFloat(saleData.igst_tax) || 0),
+    ),
+  );
   if (saleData.is_same_state_trnx && saleData.cgst_tax) {
     html += amtRow("CGST Amt", saleData.cgst_tax_display);
   }
@@ -8036,7 +8084,7 @@ exports.downloadInvoiceItemList = async (req, res) => {
   /* current=1: every row at today's gold rate, returned (crossed-out) ones
      included. This document prints only row sums, so the products are
      repriced on a stand-in and no sale-level figure is touched. */
-  if (isCurrentRateInvoice(req)) {
+  if (isCurrentRateInvoice(req) && !isFullyPaid(sale)) {
     repriceSaleAtLiveGold(
       { saleProducts: sale.saleProducts || [], discount: 0, paid_amount: 0 },
       await getLiveGoldRate(),
@@ -8702,7 +8750,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
      the returned ones listed crossed out after them */
   let allSaleProducts = null;
   let liveRates = null;
-  if (isCurrentRateInvoice(req)) {
+  if (isCurrentRateInvoice(req) && !isFullyPaid(sale)) {
     liveRates = await getLiveGoldRate();
     const applyDue = await liveLedgerDue(sale);
     allSaleProducts = [...(sale.saleProducts || [])];
@@ -8713,6 +8761,20 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
   if (allSaleProducts) {
     addReturnedRows(sale, allSaleProducts, liveRates, saleData);
   }
+
+  /* totals box breakdown: making (after its discount) and report charge of
+     the billed pieces; the materials are what is left of the taxable amount */
+  const itemMakingAmt = (saleData.products || [])
+    .filter((p) => !p.is_return)
+    .reduce(
+      (t, p) =>
+        t +
+        (parseFloat(p.making_charge) || 0) -
+        (parseFloat(p.making_charge_discount_amount) || 0),
+      0,
+    );
+  const itemReportAmt =
+    (parseInt(saleData.report_qty) || 0) * (parseFloat(saleData.report_charge) || 0);
 
   let payments = await PaymentModel.findAll({
     where: {
@@ -9159,14 +9221,14 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
   
                                           </tr>
                                           <tr style="vertical-align: top; background-color: #FFFFFF;${returnedRowStyle(saleData.products[i])}">
-                                              <td colspan="2" style="border-bottom: 1px solid #1E2757; padding:0;">
+                                              <td colspan="2" style="border-bottom: 1px solid #1E2757;">
                                                   
                                           `;
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
-      html += `<div style="display: flex;
-                                                  margin: 5px 5px 0px 5px; text-align: left; width:150px;">
-                                                  <div style="
-                                                      line-height:1; text-align: left;">
+      /* every per-material line is one fixed-height, unwrapped line in each
+         column, so a material's name, amount, discount and cost stay level */
+      html += `<div style="${MATERIAL_LINE_STYLE}">
+                                                  <div>
                                                       <span
                                                           style="
                                                           font-size:10px;
@@ -9230,11 +9292,8 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                               </td>
                                               <td style="border-bottom:1px solid #1E2757;">`;
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
-      html += `<div style="display: flex;
-                                                      width:50px;
-                                                      margin: 0px 5px 0px 0px; text-align: left;">
-                                                      <div style="
-                                                          line-height:1; text-align: left;">
+      html += `<div style="${MATERIAL_LINE_STYLE}">
+                                                      <div>
                                                           <span
                                                               style="
                                                               font-size:10px;
@@ -9251,7 +9310,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                               </td>
                                               <td style="border-bottom:1px solid #1E2757;">`;
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
-      html += `<div style="width:90px;">`;
+      html += `<div style="${MATERIAL_LINE_STYLE}">`;
       if (isEmpty(saleData.products[i].materials[x].discount_amount)) {
         html += `-`;
       } else {
@@ -9280,10 +9339,7 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
                                               </td>
                                               <td style="border-bottom: 1px solid #1E2757;">`;
     for (let x = 0; x < saleData.products[i].materials.length; x++) {
-      html += `<div style="text-align: left; font-size: 10px; font-weight: 400;
-                                                      margin-top: 5px; 
-                                                      width: 40px
-                                                      line-height:1;">${removeCurrencyAndDecimalFromPrice(
+      html += `<div style="${MATERIAL_LINE_STYLE}">${removeCurrencyAndDecimalFromPrice(
                                                         saleData.products[i]
                                                           .materials[x]
                                                           .material_cost,
@@ -9376,443 +9432,94 @@ exports.downloadInvoiceItemDetails = async (req, res) => {
 
                                           </tr>`;
   }
-  html += `<tr style="
-                                              vertical-align: top;">
-                                              <td colspan="6"
-                                                  style="
-                                                  border:none;">
-
-                                              </td>
-                                              <td style="">
-                                                  <div style="padding-top:5px;">
-                                                      <h4 style="margin:
-                                                          0;
-                                                          text-align:
-                                                          left; font-size:
-                                                          12px;
-                                                          font-weight:
-                                                          600; display:
-                                                          ;">
-                                                          <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalTagPriceDisplay,
-                                                          )}</div></h4>
-                                                  </div>
-                                              </td>
-                                              
-                                              <td style="">
-                                                  <div style="padding-top:5px;">
-                                                      <h4 style="margin:
-                                                          0;
-                                                          text-align:
-                                                          left; font-size:
-                                                          12px;
-                                                          font-weight:
-                                                          600; display:
-                                                          ;">
-                                                          <div>${removeCurrencyAndDecimalFromPrice(
-                                                            totalSaveDisplay,
-                                                          )}</div></h4>
-                                                  </div>
-                                              </td>
-                                              <td colspan="3">
-                                                  <div style="float:left; margin-left: -15px; padding-top:5px;">
-                                                      <h4 style="
-                                                      margin:0;
-                                                      text-align: right;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                      ">
-                                                          <div>Sub-Total </div></h4>
-                                                  </div>
-                                                  <div style="float:left; margin-left:5px;">
-                                                      <h4 style="
-                                                        margin:0;
-                                                        text-align:right;
-                                                        font-size: 12px;
-                                                        font-weight: 400;
-                                                      ">
-                                                          <div><input
-                                                              type="text"
-                                                              value="${removeCurrencyAndDecimalFromPrice(
-                                                                saleData?.taxable_amount,
-                                                              )}"
-                                                              style="width:
-                                                              80px;"></div></h4>
-                                                  </div>
-                                              </td>
-                                          </tr>`;
-
-  if (saleData.is_same_state_trnx) {
-    html += `                                 <tr style="
-                                            vertical-align: top;">
-                                            <td colspan="8"
-                                                style="
-                                                border:none; padding: 0;">
-                                            </td>
-                                            <td colspan="3">
-                                                <div style="float:left; margin-left: -15px; padding-top:5px;">
-                                                    <h4 style="
-                                                    margin:0;
-                                                    text-align: right;
-                                                    font-size: 12px;
-                                                    font-weight: 400;
-                                                    ">
-                                                        <div>CGST Amt </div></h4>
-                                                </div>
-                                                <div style="float:left; margin-left:5px;">
-                                                    <h4 style="
-                                                      margin:0;
-                                                      text-align:right;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                    ">
-                                                        <div><input
-                                                            type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.cgst_tax,
-                                                            )}"
-                                                            style="width:
-                                                            80px;"></div></h4>
-                                                </div>
-                                            </td>
-                                          </tr>
-                                          <tr style="
-                                            vertical-align: top;">
-                                            <td colspan="8"
-                                                style="
-                                                border:none; padding: 0;">
-                                            </td>
-                                            <td colspan="3">
-                                                <div style="float:left; margin-left: -15px; padding-top:5px;">
-                                                    <h4 style="
-                                                    margin:0;
-                                                    text-align: right;
-                                                    font-size: 12px;
-                                                    font-weight: 400;
-                                                    ">
-                                                        <div>SGST Amt </div></h4>
-                                                </div>
-                                                <div style="float:left; margin-left:5px;">
-                                                    <h4 style="
-                                                      margin:0;
-                                                      text-align:right;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                    ">
-                                                        <div><input
-                                                            type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.sgst_tax,
-                                                            )}"
-                                                            style="width:
-                                                            80px;"></div></h4>
-                                                </div>
-                                            </td>
-                                          </tr>`;
-  } else {
-    html += `                                 <tr style="
-                                            vertical-align: top;">
-                                            <td colspan="8"
-                                                style="
-                                                border:none; padding: 0;">
-                                            </td>
-                                            <td colspan="3">
-                                                <div style="float:left; margin-left: -15px; padding-top:5px;">
-                                                    <h4 style="
-                                                    margin:0;
-                                                    text-align: right;
-                                                    font-size: 12px;
-                                                    font-weight: 400;
-                                                    ">
-                                                        <div>IGST Amt </div></h4>
-                                                </div>
-                                                <div style="float:left; margin-left:5px;">
-                                                    <h4 style="
-                                                      margin:0;
-                                                      text-align:right;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                    ">
-                                                        <div><input
-                                                            type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.igst_tax,
-                                                            )}"
-                                                            style="width:
-                                                            80px;"></div></h4>
-                                                </div>
-                                            </td>
-                                          </tr>`;
+  /* summary rows: the report charge with its own GST, then the Total -
+     taxable before tax, and with all the tax (products' GST + report's) */
+  const billedSubCats = (saleData.subCatItems || []).filter((r) => !r.is_return);
+  let sumTaxable = 0,
+    sumTax = 0;
+  billedSubCats.forEach((item) => {
+    const taxable = parseFloat(item.taxableAmount) || 0;
+    sumTaxable += taxable;
+    sumTax += (taxable * (parseFloat(item.tax) || 0)) / 100;
+  });
+  const reportPct = parseFloat(saleData.report_tax_percentage) || 0;
+  const reportTax = (itemReportAmt * reportPct) / 100;
+  const sumCell = "font-size: 11px; padding: 4px; white-space: nowrap; border-bottom: 1px solid #eeeeee;";
+  html += `<tr><td colspan="11" style="border:none; padding: 4px;"></td></tr>`;
+  const chargeRow = (label, amount, pct, withTax) => `<tr>
+              <td colspan="8" style="${sumCell} font-weight: 700; color: #555;">${label}</td>
+              <td style="${sumCell} font-weight: 700; color: #555; text-align: right;">${amount.toFixed(2)}</td>
+              <td style="${sumCell} font-weight: 700; color: #555; text-align: center;">${pct}</td>
+              <td style="${sumCell} font-weight: 700; color: #555; text-align: right;">${withTax.toFixed(2)}</td>
+          </tr>`;
+  if (itemReportAmt > 0) {
+    html += chargeRow(
+      `Report Charge (${parseInt(saleData.report_qty) || 0} pcs x ${(parseFloat(saleData.report_charge) || 0).toFixed(2)})`,
+      itemReportAmt,
+      `x ${reportPct}%`,
+      itemReportAmt + reportTax,
+    );
   }
+  const sumBeforeTax = sumTaxable + itemReportAmt;
+  const sumAllTax = sumTax + reportTax;
+  const totalCell = "font-size: 12px; font-weight: 700; color: #1E2746; padding: 4px; white-space: nowrap; border-top: 2px solid #90caf9; border-bottom: none;";
+  html += `<tr>
+              <td colspan="8" style="${totalCell}">Total</td>
+              <td style="${totalCell} text-align: right;">${sumBeforeTax.toFixed(2)}</td>
+              <td style="${totalCell}"></td>
+              <td style="${totalCell} text-align: right;">${(sumBeforeTax + sumAllTax).toFixed(2)}</td>
+          </tr>`;
 
-  html += `                                 <tr style="
-                                            vertical-align: top;">
-                                            <td colspan="8"
-                                                style="
-                                                border:none; padding: 0;">
-                                            </td>
-                                            <td colspan="3">
-                                                <div style="float:left; margin-left: -15px; padding-top:5px;">
-                                                    <h4 style="
-                                                    margin:0;
-                                                    text-align: right;
-                                                    font-size: 12px;
-                                                    font-weight: 400;
-                                                    ">
-                                                        <div>Total Amt </div></h4>
-                                                </div>
-                                                <div style="float:left; margin-left:5px;">
-                                                    <h4 style="
-                                                      margin:0;
-                                                      text-align:right;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                    ">
-                                                        <div><input
-                                                            type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.total_amount,
-                                                            )}"
-                                                            style="width:
-                                                            80px;"></div></h4>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        <tr style="
-                                            vertical-align: top;">
-                                            <td colspan="8"
-                                                style="
-                                                border:none; padding: 0;">
-                                            </td>
-                                            <td colspan="3">
-                                                <div style="float:left; margin-left: -15px; padding-top:5px;">
-                                                    <h4 style="
-                                                    margin:0;
-                                                    text-align: right;
-                                                    font-size: 12px;
-                                                    font-weight: 400;
-                                                    ">
-                                                        <div>Cash Dist </div></h4>
-                                                </div>
-                                                <div style="float:left; margin-left:5px;">
-                                                    <h4 style="
-                                                      margin:0;
-                                                      text-align:right;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                    ">
-                                                        <div><input
-                                                            type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.discount,
-                                                            )}"
-                                                            style="width:
-                                                            80px;"></div></h4>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        <tr style="
-                                            vertical-align: top;">
-                                            <td colspan="8"
-                                                style="
-                                                border:none; padding: 0;">
-                                            </td>
-                                            <td colspan="3">
-                                                <div style="float:left; margin-left: -38px; padding-top:5px;">
-                                                    <h4 style="
-                                                    margin:0;
-                                                    text-align: right;
-                                                    font-size: 12px;
-                                                    font-weight: 400;
-                                                    ">
-                                                        <div>Total Payable </div></h4>
-                                                </div>
-                                                <div style="float:left; margin-left:5px;">
-                                                    <h4 style="
-                                                      margin:0;
-                                                      text-align:right;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                    ">
-                                                        <div><input
-                                                            type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.total_payable,
-                                                            )}"
-                                                            style="width:
-                                                            80px;"></div></h4>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        <tr style="
-                                            vertical-align: top;">
-                                            <td colspan="8"
-                                                style="
-                                                border:none; padding: 0;">
-                                            </td>
-                                            <td colspan="3">
-                                                <div style="float:left; margin-left: -48px; padding-top:5px;">
-                                                    <h4 style="
-                                                    margin:0;
-                                                    text-align: right;
-                                                    font-size: 12px;
-                                                    font-weight: 400;
-                                                    ">
-                                                        <div>Payment Mode </div></h4>
-                                                </div>
-                                                <div style="float:left; margin-left:5px;">
-                                                    <h4 style="
-                                                      margin:0;
-                                                      text-align:right;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                    ">
-                                                        <div><input
-                                                            type="text"
-                                                            value="${
-                                                              saleData?.payment_mode
-                                                            }"
-                                                            style="width:
-                                                            80px;"></div></h4>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        <tr style="
-                                            vertical-align: top;">
-                                            <td colspan="8"
-                                                style="
-                                                border:none; padding: 0;">
-                                                <div style="float:left; ">
-                                                    <h4 style="
-                                                      margin:0;
-                                                      text-align:left;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                    ">
-                                                        <div><input
-                                                            type="text"
-                                                            value="${
-                                                              saleData?.due_date
-                                                            }"
-                                                            style="width:
-                                                            120px;"></div></h4>
-                                                </div>
-                                                <div style="float:left; margin-left:5px; padding-top:5px;">
-                                                    <h4 style="
-                                                    margin:0;
-                                                    text-align: left;
-                                                    font-size: 12px;
-                                                    font-weight: 400;
-                                                    ">
-                                                        <div>Due Date </div></h4>
-                                                </div>
-                                            </td>
-                                            <td colspan="3">
-                                                <div style="float:left; margin-left: -35px; padding-top:5px;">
-                                                    <h4 style="
-                                                    margin:0;
-                                                    text-align: right;
-                                                    font-size: 12px;
-                                                    font-weight: 400;
-                                                    ">
-                                                        <div>Paid Amount </div></h4>
-                                                </div>
-                                                <div style="float:left; margin-left:5px;">
-                                                    <h4 style="
-                                                      margin:0;
-                                                      text-align:right;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                    ">
-                                                        <div><input
-                                                            type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.paid_amount_display,
-                                                            )}"
-                                                            style="width:
-                                                            80px;"></div></h4>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        <tr style="
-                                            vertical-align: top;">
-                                            <td colspan="8"
-                                                style="
-                                                border:none; padding-top: 5px;">
-                                                <div style="float:left; margin-left:-5px;">
-                                                    <h4 style="
-                                                      margin:0;
-                                                      text-align:left;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                    ">
-                                                        <div><input
-                                                            type="text"
-                                                            value=""
-                                                            style="width:
-                                                            120px;"></div></h4>
-                                                </div>
-                                                <div style="float:left; margin-left:5px; padding-top:5px;">
-                                                    <h4 style="
-                                                    margin:0;
-                                                    text-align: left;
-                                                    font-size: 12px;
-                                                    font-weight: 400;
-                                                    ">
-                                                        <div>Settlement Date </div></h4>
-                                                </div>
-                                            </td>
-                                            <td colspan="3">
-                                                <div style="float:left; margin-left: -65px; padding-top:5px;">
-                                                    <h4 style="
-                                                    margin:0;
-                                                    text-align: right;
-                                                    font-size: 12px;
-                                                    font-weight: 400;
-                                                    ">
-                                                        <div>Rest Due Amount </div></h4>
-                                                </div>
-                                                <div style="float:left; margin-left:5px;">
-                                                    <h4 style="
-                                                      margin:0;
-                                                      text-align:right;
-                                                      font-size: 12px;
-                                                      font-weight: 400;
-                                                    ">
-                                                        <div><input
-                                                            type="text"
-                                                            value="${removeCurrencyAndDecimalFromPrice(
-                                                              saleData?.due_amount_display,
-                                                            )}"
-                                                            style="width:
-                                                            80px;"></div></h4>
-                                                </div>
-                                            </td>
-                                        </tr>`;
+  /* totals box like the sale invoice, Due / Settlement Date on the left */
+  const boxRow = (label, value, bold = false) => `<tr>
+      <td style="width: 54%; font-size: 12px; font-weight: ${bold ? "600" : "400"}; text-align: right; padding: 3px 6px 3px 0; white-space: nowrap; border: none;">${label}</td>
+      <td style="width: 46%; padding: 3px 0; border: none;"><input type="text" value="${value}" style="display: block; width: 100%; box-sizing: border-box; font-size: 12px; font-weight: ${bold ? "600" : "400"}; text-align: right; padding: 2px 4px;"></td>
+    </tr>`;
+  let box = boxRow("Total", saleData.taxable_amount, true);
+  box += boxRow(
+    "Tax Amount",
+    displayAmount(
+      (parseFloat(saleData.cgst_tax) || 0) +
+        (parseFloat(saleData.sgst_tax) || 0) +
+        (parseFloat(saleData.igst_tax) || 0),
+    ),
+  );
+  box += boxRow("Sub Total", saleData.total_amount);
+  box += boxRow("Cash Dist", saleData.discount);
+  box += boxRow("Total Payable", saleData.bill_amount, true);
+  box += boxRow("Paid Amount", saleData.paid_amount);
+  if (saleData.return_amount) box += boxRow("Return Amount", saleData.return_amount);
+  box += boxRow("Rest Due Amt", saleData.due_amount_display);
+  const dateField = (label, value) => `<tr>
+      <td style="font-size: 12px; padding: 3px 6px 3px 0; white-space: nowrap; border: none;">${label}</td>
+      <td style="padding: 3px 0; border: none;"><input type="text" value="${value || ""}" style="width: 120px; font-size: 12px; padding: 2px 4px;"></td>
+    </tr>`;
+  /* pinned to the page bottom with the signature row, like the sale invoice */
+  const footerTotals = `<table cellspacing="0" cellpadding="0" width="100%" style="border-collapse: collapse;"><tr style="vertical-align: bottom;">
+              <td style="width: 45%; border:none; padding: 0;">
+                <table cellspacing="0" cellpadding="0" style="border-collapse: collapse;">
+                  ${dateField("Due Date :", saleData.due_date)}
+                  ${dateField("Settlement Date :", saleData.settlement_date)}
+                </table>
+              </td>
+              <td style="width: 55%; border:none; padding: 0;">
+                <table cellspacing="0" cellpadding="0" width="100%" style="border-collapse: collapse; table-layout: fixed;">${box}</table>
+              </td>
+          </tr></table>`;
 
-  html += ` <tr style="
-                                                    vertical-align: top;">
-                                                    
-                                                    <td colspan="11"
-                                                          style="
-                                                          border:none; padding: 0;">
-                                                          ${footerhtml}
-                                                      </td>
-                                                      
-  
-                                                  </tr>
+  html += `
                                               </tbody>
                                           </table>
-
-                                          
-                                          <!-- Footer -->
-                                          
-                                          
                                       </td>
                                   </tr>
-  
                               </tbody>
                           </table>
+                          <!-- room for the fixed footer, so the last rows never sit under it -->
+                          <div style="height: 300px;"></div>
+                      </div>
+                      <div style="position: fixed; bottom: 0; left: 0; right: 0; background-color: #f9f9f9; padding: 6px 15px 4px 15px; border-top: 2px solid #1E2746;">
+                          ${footerTotals}
+                          ${footerhtml}
                       </div>
                   </body>
               </html>`;
